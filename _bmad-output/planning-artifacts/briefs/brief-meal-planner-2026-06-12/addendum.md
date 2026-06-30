@@ -59,7 +59,7 @@ note: |
 ### Implications produit supplémentaires *(toutes arbitrées en séance Discovery — voir `.decision-log.md` D1-D6)*
 
 - **Modèle "convives × repas"** → `1..N recettes par repas`, chacune avec ses convives *(D1)*.
-- **Repas-gamelle d'Aurélie** → recette dédiée du catalogue (B1) OU slot libre (B4), au choix *(D2 + D2bis)*.
+- **Repas-gamelle d'Aurélie** → Slot gamelle pré-rempli, **libre par défaut**, avec possibilité d'associer manuellement n'importe quelle recette du catalogue *(D2 + D2bis révisé par U21 du PRD le 2026-06-17 : plus de sous-pool typé « format gamelle »)*.
 - **Liste de courses face aux indispos** → hors-MVP côté drive (pas d'API publique). Adressé indirectement via la liste secondaire physique *(D4)*.
 - **Liste de courses physiques résiduelles** → liste secondaire dédiée, cochable, accessible mobile *(D4)*.
 
@@ -68,7 +68,7 @@ note: |
 | Sujet | Décision MVP |
 |---|---|
 | Convives × recettes par repas | `1..N recettes par repas`, chacune avec ses convives |
-| Gamelle Aurélie les nuits | Recette dédiée du catalogue (B1) OU slot libre (B4) — choix au moment de planifier |
+| Gamelle Aurélie les nuits | Slot gamelle pré-rempli, par défaut **libre** ; possibilité d'y associer manuellement une recette du catalogue *(sans sous-pool typé — révision PRD U21 du 2026-06-17, voir `.decision-log.md` du brief)* |
 | Horizon planification | Fenêtre paramétrable 7-14 jours (défaut 14) |
 | Cascade item indispo | Liste de courses principale + liste secondaire physique (toggle sur chaque item) |
 | Form-factor | Mobile exclusivement (foyer iPhone) |
