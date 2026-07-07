@@ -1,0 +1,389 @@
+<!--
+  Mock 2 — Menu draft 14 jours, édition en cours
+  Surface : Modal plein écran Menu draft, UJ-1 (Flow 1 — Aurélie planifie le menu)
+  Spine refs :
+    EXPERIENCE.md Flow 1, étapes 4-7
+    EXPERIENCE.md Component Patterns — Ligne Repas, Cellule Slot, Bouton « Valider le menu »
+    EXPERIENCE.md State Patterns — "Catalogue < 14 Recettes" (pill ocre)
+    DESIGN.md Components — menu-repas-row, slot-cell, primary-button, ghost-button
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Menu draft — 14 jours</title>
+<style>
+  :root {
+    --surface-base: #FAF6EE;
+    --surface-raised: #FFFFFF;
+    --surface-sunken: #F3EDDF;
+    --ink-primary: #1F1B16;
+    --ink-secondary: #6F6557;
+    --ink-disabled: #B8AFA0;
+    --accent-primary: #B83F2C;
+    --accent-secondary: #5C7E5A;
+    --accent-warm: #C8843C;
+    --hairline: #ECE4D7;
+    --serif: 'New York', 'New York Medium', Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --mono: 'SF Mono', ui-monospace, 'Menlo', monospace;
+  }
+  html, body { margin: 0; padding: 0; }
+  html { background: #2a2620; min-height: 100vh; }
+  body {
+    width: 390px;
+    height: 844px;
+    margin: 24px auto;
+    background: var(--surface-base);
+    color: var(--ink-primary);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.4;
+    position: relative;
+    overflow: hidden;
+    border-radius: 40px;
+    box-shadow: 0 0 0 8px #0d0d0d, 0 24px 80px rgba(0,0,0,.4);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Status bar */
+  .statusbar {
+    height: 47px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .statusbar .right { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  /* Modal header */
+  .modal-header {
+    padding: 12px 20px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface-base);
+  }
+  .modal-header .title {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--ink-primary);
+    flex: 1;
+    text-align: center;
+  }
+  .modal-header .cancel {
+    font-size: 15px;
+    color: var(--ink-primary);
+    width: 64px;
+  }
+  .modal-header .spacer { width: 64px; }
+
+  /* Window selector */
+  .window-selector {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 12px;
+    background: var(--surface-base);
+  }
+  .window-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--surface-sunken);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--ink-primary);
+  }
+  .window-pill .chev { color: var(--ink-secondary); font-size: 10px; margin-left: 2px; }
+  .window-range {
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+
+  /* Catalogue pill (warning) */
+  .catalogue-pill {
+    margin: 4px 20px 16px;
+    padding: 10px 14px;
+    background: var(--surface-sunken);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--ink-primary);
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .catalogue-pill .dot-warm {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-warm);
+    flex-shrink: 0;
+  }
+  .catalogue-pill .text { flex: 1; }
+  .catalogue-pill .link { color: var(--accent-warm); font-weight: 500; white-space: nowrap; }
+
+  /* Scrollable content */
+  .content {
+    position: absolute;
+    top: 130px;
+    left: 0;
+    right: 0;
+    bottom: 88px;
+    overflow: hidden;
+  }
+
+  /* Repas */
+  .repas {
+    margin: 0 16px 14px;
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .repas-header {
+    padding: 14px 16px 10px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .repas-day {
+    font-family: var(--serif);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--ink-primary);
+  }
+  .repas-date {
+    font-size: 12px;
+    color: var(--ink-secondary);
+  }
+
+  .slot {
+    padding: 12px 16px;
+    border-top: 1px solid var(--hairline);
+  }
+  .slot-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    justify-content: space-between;
+  }
+  .slot-name {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--ink-primary);
+    line-height: 1.3;
+    flex: 1;
+  }
+  .slot-name.libre {
+    font-family: var(--sans);
+    font-style: italic;
+    color: var(--ink-secondary);
+    font-size: 15px;
+  }
+  .badge-gamelle {
+    display: inline-block;
+    background: transparent;
+    color: var(--accent-warm);
+    border: 1px solid var(--accent-warm);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.3px;
+  }
+  .initials {
+    display: flex;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .initial {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--surface-sunken);
+    color: var(--ink-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .slot-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .mini-ghost {
+    padding: 5px 10px;
+    border: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--ink-primary);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .add-slot {
+    padding: 12px 16px;
+    border-top: 1px solid var(--hairline);
+    display: flex;
+    justify-content: center;
+  }
+  .add-slot .ghost {
+    padding: 6px 14px;
+    border: 1px dashed var(--hairline);
+    color: var(--ink-secondary);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  /* Footer */
+  .footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px 28px;
+    background: var(--surface-base);
+    border-top: 1px solid var(--hairline);
+  }
+  .primary-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background: var(--accent-primary);
+    color: var(--surface-base);
+    border: none;
+    border-radius: 12px;
+    font-family: var(--sans);
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    box-sizing: border-box;
+  }
+</style>
+</head>
+<body>
+
+  <div class="statusbar">
+    <span>10:14</span>
+    <span class="right"><span>•••</span><span>📶</span><span>🔋</span></span>
+  </div>
+
+  <div class="modal-header">
+    <div class="cancel">Annuler</div>
+    <div class="title">Menu draft</div>
+    <div class="spacer"></div>
+  </div>
+
+  <div class="window-selector">
+    <div class="window-pill">
+      Fenêtre : 14 jours <span class="chev">▾</span>
+    </div>
+    <div class="window-range">sam 4 juil → ven 17 juil</div>
+  </div>
+
+  <div class="catalogue-pill">
+    <div class="dot-warm"></div>
+    <div class="text">Catalogue de 11 Recettes — quelques répétitions sur la quinzaine.</div>
+    <div class="link">Enrichir</div>
+  </div>
+
+  <div class="content">
+
+    <div class="repas">
+      <div class="repas-header">
+        <div class="repas-day">Mardi soir</div>
+        <div class="repas-date">7 juil — 3 Slots</div>
+      </div>
+
+      <div class="slot">
+        <div class="slot-row">
+          <div class="slot-name">
+            Gamelle Aurélie
+            <span class="badge-gamelle">gamelle</span>
+            <div style="font-family: var(--sans); font-style: italic; color: var(--ink-secondary); font-size: 14px; margin-top: 4px;">Slot libre — improvise</div>
+          </div>
+          <div class="initials"><div class="initial">A</div></div>
+        </div>
+      </div>
+
+      <div class="slot">
+        <div class="slot-row">
+          <div class="slot-name">Croque-monsieur jambon comté</div>
+          <div class="initials"><div class="initial">R</div></div>
+        </div>
+      </div>
+
+      <div class="slot">
+        <div class="slot-row">
+          <div class="slot-name">Pâtes au pesto rouge<br>+ salade verte</div>
+          <div class="initials"><div class="initial">L</div></div>
+        </div>
+        <div class="slot-actions">
+          <div class="mini-ghost">Régénère</div>
+          <div class="mini-ghost">Choisir…</div>
+        </div>
+      </div>
+
+      <div class="add-slot">
+        <div class="ghost">+ Ajouter un Slot</div>
+      </div>
+    </div>
+
+    <div class="repas">
+      <div class="repas-header">
+        <div class="repas-day">Mercredi midi</div>
+        <div class="repas-date">8 juil — 1 Slot</div>
+      </div>
+
+      <div class="slot">
+        <div class="slot-row">
+          <div class="slot-name">Quiche lorraine maison</div>
+          <div class="initials">
+            <div class="initial">A</div>
+            <div class="initial">L</div>
+            <div class="initial">R</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="repas">
+      <div class="repas-header">
+        <div class="repas-day">Mercredi soir</div>
+        <div class="repas-date">8 juil — 1 Slot</div>
+      </div>
+
+      <div class="slot">
+        <div class="slot-row">
+          <div class="slot-name libre">Slot libre</div>
+          <div class="initials">
+            <div class="initial">A</div>
+            <div class="initial">L</div>
+            <div class="initial">R</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <button class="primary-btn">Valider le menu</button>
+  </div>
+
+</body>
+</html>

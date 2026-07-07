@@ -1,0 +1,328 @@
+<!--
+  Mock 3 — Recette détail "Bo bun au porc grillé"
+  Surface : Recette en consultation (modale plein écran pushed)
+  Spine refs :
+    EXPERIENCE.md IA — surface "Recette — détail"
+    EXPERIENCE.md Flow 5 (UJ-5c) — édition de note manuscrite
+    DESIGN.md Components — recette-card (photo héro 16:9, Title 1 serif, ingrédients body + quantités mono, notes italique meta dans surface-sunken)
+    DESIGN.md Brand & Style — registre éditorial NYT Cooking
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Bo bun au porc grillé</title>
+<style>
+  :root {
+    --surface-base: #FAF6EE;
+    --surface-raised: #FFFFFF;
+    --surface-sunken: #F3EDDF;
+    --ink-primary: #1F1B16;
+    --ink-secondary: #6F6557;
+    --ink-disabled: #B8AFA0;
+    --accent-primary: #B83F2C;
+    --accent-secondary: #5C7E5A;
+    --accent-warm: #C8843C;
+    --hairline: #ECE4D7;
+    --serif: 'New York', 'New York Medium', Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --mono: 'SF Mono', ui-monospace, 'Menlo', monospace;
+  }
+  html, body { margin: 0; padding: 0; }
+  html { background: #2a2620; min-height: 100vh; }
+  body {
+    width: 390px;
+    height: 844px;
+    margin: 24px auto;
+    background: var(--surface-base);
+    color: var(--ink-primary);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.45;
+    position: relative;
+    overflow: hidden;
+    border-radius: 40px;
+    box-shadow: 0 0 0 8px #0d0d0d, 0 24px 80px rgba(0,0,0,.4);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Status bar */
+  .statusbar {
+    height: 47px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+    position: relative;
+    z-index: 3;
+    background: var(--surface-base);
+  }
+  .statusbar .right { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  /* Header floating over photo */
+  .header {
+    position: absolute;
+    top: 47px;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-btn {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .header-btn.circle {
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  /* Scrollable content area */
+  .scroll {
+    position: absolute;
+    top: 47px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    overflow: hidden;
+  }
+
+  /* Hero photo */
+  .hero {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    height: 219px;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(255,255,255,0.15), transparent 50%),
+      linear-gradient(135deg, #C8843C 0%, #B83F2C 55%, #6b3a2d 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(92,126,90,0.35), transparent 45%),
+      radial-gradient(ellipse at 80% 30%, rgba(250,246,238,0.18), transparent 40%);
+  }
+
+  /* Recipe body */
+  .body-wrap {
+    padding: 24px 24px 80px;
+  }
+
+  .title {
+    font-family: var(--serif);
+    font-size: 34px;
+    line-height: 1.1;
+    font-weight: 400;
+    letter-spacing: -0.4px;
+    color: var(--ink-primary);
+    margin: 0 0 12px;
+  }
+  .meta-line {
+    font-size: 13px;
+    color: var(--ink-secondary);
+    margin-bottom: 4px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .meta-line .dot { color: var(--ink-disabled); }
+  .source {
+    font-size: 12px;
+    color: var(--ink-secondary);
+    margin-bottom: 24px;
+    text-decoration: underline;
+    text-decoration-color: var(--hairline);
+    text-underline-offset: 3px;
+  }
+
+  hr.thin {
+    border: none;
+    border-top: 1px solid var(--hairline);
+    margin: 16px 0 20px;
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--ink-primary);
+    margin: 0 0 12px;
+    letter-spacing: -0.2px;
+  }
+
+  /* Ingredients */
+  .ing-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .ing-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 15px;
+  }
+  .ing-list li:last-child { border-bottom: none; }
+  .ing-name { color: var(--ink-primary); }
+  .ing-qty {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-secondary);
+    text-align: right;
+    white-space: nowrap;
+    margin-left: 12px;
+  }
+
+  /* Steps */
+  .step-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: step;
+  }
+  .step-list li {
+    counter-increment: step;
+    padding: 12px 0 12px 36px;
+    position: relative;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-primary);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .step-list li:last-child { border-bottom: none; }
+  .step-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 12px;
+    font-family: var(--serif);
+    font-size: 18px;
+    color: var(--accent-warm);
+    font-weight: 500;
+    width: 24px;
+    text-align: left;
+  }
+
+  /* Notes */
+  .notes-block {
+    margin-top: 20px;
+    padding: 16px 18px;
+    background: var(--surface-sunken);
+    border-radius: 12px;
+  }
+  .notes-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--ink-secondary);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .notes-text {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink-primary);
+    line-height: 1.5;
+  }
+  .notes-sig {
+    margin-top: 6px;
+    font-family: var(--sans);
+    font-style: normal;
+    font-size: 12px;
+    color: var(--ink-secondary);
+  }
+</style>
+</head>
+<body>
+
+  <div class="statusbar">
+    <span>21:42</span>
+    <span class="right"><span>•••</span><span>📶</span><span>🔋</span></span>
+  </div>
+
+  <div class="header">
+    <div class="header-btn circle">‹</div>
+    <div class="header-btn">Modifier</div>
+  </div>
+
+  <div class="scroll">
+
+    <div class="hero"></div>
+
+    <div class="body-wrap">
+
+      <h1 class="title">Bo bun au porc<br>grillé</h1>
+      <div class="meta-line">
+        <span>45 min</span>
+        <span class="dot">·</span>
+        <span>4 Convives</span>
+      </div>
+      <div class="source">marmiton.org/recettes/bo-bun-porc</div>
+
+      <hr class="thin">
+
+      <h2 class="section-title">Ingrédients</h2>
+      <ul class="ing-list">
+        <li><span class="ing-name">Filet mignon de porc</span><span class="ing-qty">600 g</span></li>
+        <li><span class="ing-name">Vermicelles de riz</span><span class="ing-qty">300 g</span></li>
+        <li><span class="ing-name">Salade batavia</span><span class="ing-qty">1 pièce</span></li>
+        <li><span class="ing-name">Carottes râpées</span><span class="ing-qty">200 g</span></li>
+        <li><span class="ing-name">Concombre</span><span class="ing-qty">1 pièce</span></li>
+        <li><span class="ing-name">Cacahuètes grillées</span><span class="ing-qty">80 g</span></li>
+        <li><span class="ing-name">Menthe fraîche</span><span class="ing-qty">1 botte</span></li>
+        <li><span class="ing-name">Coriandre</span><span class="ing-qty">1 botte</span></li>
+        <li><span class="ing-name">Sauce nuoc-mâm</span><span class="ing-qty">4 c.s.</span></li>
+        <li><span class="ing-name">Sucre roux</span><span class="ing-qty">2 c.c.</span></li>
+        <li><span class="ing-name">Citron vert</span><span class="ing-qty">2 pièces</span></li>
+      </ul>
+
+      <hr class="thin">
+
+      <h2 class="section-title">Étapes</h2>
+      <ol class="step-list">
+        <li>Tailler le porc en lamelles fines, le mariner 20 min avec nuoc-mâm, sucre et ail haché.</li>
+        <li>Cuire les vermicelles selon les indications du paquet, rincer à l'eau froide et réserver.</li>
+        <li>Préparer la sauce : nuoc-mâm, jus de citron vert, sucre, eau, piment si désiré.</li>
+        <li>Saisir le porc 3 min à feu vif dans une poêle bien chaude.</li>
+        <li>Dresser dans des bols : salade, vermicelles, crudités, porc, herbes, cacahuètes. Verser la sauce au moment de servir.</li>
+      </ol>
+
+      <div class="notes-block">
+        <div class="notes-label">Notes</div>
+        <div class="notes-text">
+          j'ai mis moins de sucre — la sauce reste équilibrée avec un demi-citron vert en plus.
+          <div class="notes-sig">— Lionel, mai 2026</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</body>
+</html>

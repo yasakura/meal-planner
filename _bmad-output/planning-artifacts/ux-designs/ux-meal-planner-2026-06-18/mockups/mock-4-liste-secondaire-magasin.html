@@ -1,0 +1,328 @@
+<!--
+  Mock 4 — Liste secondaire, en magasin (offline, sans bannière)
+  Surface : Tab "Listes" → onglet Secondaire, Flow 4 / UJ-4 climax
+  Spine refs :
+    EXPERIENCE.md Flow 4 — Aurélie en magasin, coches sauge + pill ocre "coché 24h"
+    EXPERIENCE.md State Patterns — "Offline — Liste secondaire en magasin" (PAS de bannière, intentionnel)
+    EXPERIENCE.md Component Patterns — Item Liste secondaire (tap indicateur, soft-delete 24h)
+    DESIGN.md Components — liste-secondaire-item, bottom-tab-bar
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Listes — Secondaire</title>
+<style>
+  :root {
+    --surface-base: #FAF6EE;
+    --surface-raised: #FFFFFF;
+    --surface-sunken: #F3EDDF;
+    --ink-primary: #1F1B16;
+    --ink-secondary: #6F6557;
+    --ink-disabled: #B8AFA0;
+    --accent-primary: #B83F2C;
+    --accent-secondary: #5C7E5A;
+    --accent-warm: #C8843C;
+    --hairline: #ECE4D7;
+    --serif: 'New York', 'New York Medium', Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --mono: 'SF Mono', ui-monospace, 'Menlo', monospace;
+  }
+  html, body { margin: 0; padding: 0; }
+  html { background: #2a2620; min-height: 100vh; }
+  body {
+    width: 390px;
+    height: 844px;
+    margin: 24px auto;
+    background: var(--surface-base);
+    color: var(--ink-primary);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.4;
+    position: relative;
+    overflow: hidden;
+    border-radius: 40px;
+    box-shadow: 0 0 0 8px #0d0d0d, 0 24px 80px rgba(0,0,0,.4);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Status bar */
+  .statusbar {
+    height: 47px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .statusbar .right { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  /* Header */
+  .header {
+    padding: 8px 24px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 34px;
+    letter-spacing: -0.5px;
+    margin: 0;
+  }
+  .header .vider {
+    font-size: 15px;
+    color: var(--ink-primary);
+    padding: 6px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    background: transparent;
+  }
+
+  .sub-meta {
+    padding: 2px 24px 12px;
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+
+  /* Segmented toggle */
+  .segmented {
+    margin: 12px 16px 8px;
+    background: var(--surface-sunken);
+    border-radius: 8px;
+    padding: 3px;
+    display: flex;
+  }
+  .seg {
+    flex: 1;
+    text-align: center;
+    padding: 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-secondary);
+    border-radius: 6px;
+  }
+  .seg.active {
+    background: var(--surface-raised);
+    color: var(--ink-primary);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  /* Count summary */
+  .count-row {
+    padding: 12px 24px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+
+  /* List */
+  .list {
+    margin: 0 16px;
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .item:last-child { border-bottom: none; }
+
+  .indicator {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1.5px solid var(--hairline);
+    background: transparent;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .indicator.checked {
+    background: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+    color: white;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .indicator.checked::after { content: "✓"; }
+
+  .item-body { flex: 1; min-width: 0; }
+  .item-name {
+    font-size: 16px;
+    color: var(--ink-primary);
+    line-height: 1.3;
+  }
+  .item-sub {
+    font-size: 12px;
+    color: var(--ink-secondary);
+    margin-top: 3px;
+  }
+  .item-qty {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink-secondary);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Checked state */
+  .item.checked .item-name {
+    font-style: italic;
+    color: var(--ink-disabled);
+  }
+  .item.checked .item-qty {
+    color: var(--ink-disabled);
+  }
+  .pill-24h {
+    display: inline-block;
+    background: var(--surface-sunken);
+    color: var(--accent-warm);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    font-style: normal;
+    margin-top: 4px;
+    font-family: var(--sans);
+  }
+
+  /* Bottom tab bar */
+  .tabbar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 83px;
+    background: var(--surface-raised);
+    border-top: 1px solid var(--hairline);
+    display: flex;
+    padding-bottom: 22px;
+  }
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--ink-secondary);
+    font-size: 11px;
+    padding-top: 8px;
+  }
+  .tab .icon { font-size: 22px; line-height: 1; }
+  .tab.active { color: var(--accent-primary); }
+</style>
+</head>
+<body>
+
+  <div class="statusbar">
+    <span>17:33</span>
+    <span class="right"><span>•••</span><span>📶</span><span>🔋</span></span>
+  </div>
+
+  <div class="header">
+    <h1>Listes</h1>
+    <div class="vider">Vider</div>
+  </div>
+  <div class="sub-meta">Monoprix · soft-delete 24h</div>
+
+  <div class="segmented">
+    <div class="seg">Principale</div>
+    <div class="seg active">Secondaire</div>
+  </div>
+
+  <div class="count-row">
+    <span>6 items · 2 cochés</span>
+    <span>maj. 17:31</span>
+  </div>
+
+  <div class="list">
+
+    <div class="item">
+      <div class="indicator"></div>
+      <div class="item-body">
+        <div class="item-name">Coriandre fraîche</div>
+        <div class="item-sub">Légumes</div>
+      </div>
+      <div class="item-qty">1 botte</div>
+    </div>
+
+    <div class="item checked">
+      <div class="indicator checked"></div>
+      <div class="item-body">
+        <div class="item-name">Yaourts nature bio</div>
+        <div class="pill-24h">coché 24h</div>
+      </div>
+      <div class="item-qty">×8</div>
+    </div>
+
+    <div class="item">
+      <div class="indicator"></div>
+      <div class="item-body">
+        <div class="item-name">Pain de mie complet</div>
+        <div class="item-sub">Boulangerie</div>
+      </div>
+      <div class="item-qty">1 paquet</div>
+    </div>
+
+    <div class="item">
+      <div class="indicator"></div>
+      <div class="item-body">
+        <div class="item-name">Fromage râpé emmental</div>
+        <div class="item-sub">Produits laitiers</div>
+      </div>
+      <div class="item-qty">200 g</div>
+    </div>
+
+    <div class="item checked">
+      <div class="indicator checked"></div>
+      <div class="item-body">
+        <div class="item-name">Citrons verts</div>
+        <div class="pill-24h">coché 24h</div>
+      </div>
+      <div class="item-qty">×3</div>
+    </div>
+
+    <div class="item">
+      <div class="indicator"></div>
+      <div class="item-body">
+        <div class="item-name">Cacahuètes grillées</div>
+        <div class="item-sub">Épicerie sèche</div>
+      </div>
+      <div class="item-qty">100 g</div>
+    </div>
+
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">
+      <div class="icon">☀</div>
+      <div>Aujourd'hui</div>
+    </div>
+    <div class="tab">
+      <div class="icon">📅</div>
+      <div>Menu</div>
+    </div>
+    <div class="tab active">
+      <div class="icon">≡</div>
+      <div>Listes</div>
+    </div>
+    <div class="tab">
+      <div class="icon">📖</div>
+      <div>Catalogue</div>
+    </div>
+  </div>
+
+</body>
+</html>

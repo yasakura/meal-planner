@@ -1,0 +1,306 @@
+<!--
+  Mock 1 — Aujourd'hui, mardi soir-nuit, 19h15
+  Surface : Tab "Aujourd'hui", climax UJ-2 (Flow 2 — Lionel cuisine pour Rory et lui)
+  Spine refs :
+    EXPERIENCE.md Flow 2 — climax beat
+    EXPERIENCE.md State Patterns — "Cold open — Menu validé en cours" (tabs secondaires)
+    EXPERIENCE.md Component Patterns — Tab bar bas, Cellule Slot
+    DESIGN.md Components — bottom-tab-bar, slot-cell, ghost-button
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Aujourd'hui — Mardi soir-nuit</title>
+<style>
+  :root {
+    --surface-base: #FAF6EE;
+    --surface-raised: #FFFFFF;
+    --surface-sunken: #F3EDDF;
+    --ink-primary: #1F1B16;
+    --ink-secondary: #6F6557;
+    --ink-disabled: #B8AFA0;
+    --accent-primary: #B83F2C;
+    --accent-secondary: #5C7E5A;
+    --accent-warm: #C8843C;
+    --hairline: #ECE4D7;
+    --serif: 'New York', 'New York Medium', Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --mono: 'SF Mono', ui-monospace, 'Menlo', monospace;
+  }
+  html, body { margin: 0; padding: 0; }
+  html { background: #2a2620; min-height: 100vh; }
+  body {
+    width: 390px;
+    height: 844px;
+    margin: 24px auto;
+    background: var(--surface-base);
+    color: var(--ink-primary);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.4;
+    position: relative;
+    overflow: hidden;
+    border-radius: 40px;
+    box-shadow: 0 0 0 8px #0d0d0d, 0 24px 80px rgba(0,0,0,.4);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Status bar */
+  .statusbar {
+    height: 47px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-primary);
+  }
+  .statusbar .right { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  /* Header */
+  .header {
+    padding: 8px 24px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 34px;
+    letter-spacing: -0.5px;
+    margin: 0;
+    color: var(--ink-primary);
+  }
+  .header .gear {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-secondary);
+    font-size: 22px;
+  }
+
+  .date-meta {
+    padding: 0 24px;
+    font-size: 13px;
+    color: var(--ink-secondary);
+    margin-top: 2px;
+  }
+
+  /* Section header */
+  .section-label {
+    margin-top: 28px;
+    padding: 0 24px;
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--ink-primary);
+  }
+  .section-sub {
+    padding: 2px 24px 0;
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+
+  /* Secondary tabs */
+  .subtabs {
+    display: flex;
+    gap: 8px;
+    margin: 20px 24px 16px;
+    padding-bottom: 2px;
+  }
+  .subtab {
+    padding: 7px 14px;
+    font-size: 14px;
+    color: var(--ink-secondary);
+    border-radius: 999px;
+    background: transparent;
+    border: 1px solid var(--hairline);
+    white-space: nowrap;
+  }
+  .subtab.active {
+    color: var(--surface-base);
+    background: var(--ink-primary);
+    border-color: var(--ink-primary);
+    font-weight: 500;
+  }
+
+  /* Recipe card / slot content */
+  .slot-card {
+    margin: 0 16px;
+    padding: 24px 20px 20px;
+    background: var(--surface-raised);
+    border-radius: 12px;
+    border: 1px solid var(--hairline);
+  }
+  .slot-title {
+    font-family: var(--serif);
+    font-size: 26px;
+    line-height: 1.18;
+    font-weight: 400;
+    color: var(--ink-primary);
+    margin: 0 0 10px;
+    letter-spacing: -0.3px;
+  }
+  .slot-meta {
+    font-size: 13px;
+    color: var(--ink-secondary);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .slot-meta .dot { color: var(--ink-disabled); }
+  .pill-warm {
+    display: inline-block;
+    background: var(--surface-sunken);
+    color: var(--accent-warm);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .ingredients-preview {
+    font-size: 15px;
+    color: var(--ink-secondary);
+    line-height: 1.55;
+    margin-bottom: 20px;
+  }
+  .ingredients-preview .ing { color: var(--ink-primary); }
+  .convives-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .convives-row .label {
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+  .initial {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--surface-sunken);
+    color: var(--ink-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .ghost-btn {
+    display: block;
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--ink-primary);
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  /* Bottom tab bar */
+  .tabbar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 83px;
+    background: var(--surface-raised);
+    border-top: 1px solid var(--hairline);
+    display: flex;
+    padding-bottom: 22px;
+  }
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--ink-secondary);
+    font-size: 11px;
+    padding-top: 8px;
+  }
+  .tab .icon { font-size: 22px; line-height: 1; }
+  .tab.active { color: var(--accent-primary); }
+</style>
+</head>
+<body>
+
+  <div class="statusbar">
+    <span>19:15</span>
+    <span class="right">
+      <span>•••</span><span>📶</span><span>🔋</span>
+    </span>
+  </div>
+
+  <div class="header">
+    <h1>Aujourd'hui</h1>
+    <div class="gear">⚙</div>
+  </div>
+  <div class="date-meta">mardi 30 juin</div>
+
+  <div class="section-label">Soir</div>
+  <div class="section-sub">Aurélie travaille — 3 Slots</div>
+
+  <div class="subtabs">
+    <div class="subtab active">Lionel</div>
+    <div class="subtab">Rory</div>
+    <div class="subtab">Gamelle Aurélie</div>
+  </div>
+
+  <div class="slot-card">
+    <div class="slot-title">Ratatouille en boîte<br>+ falafels airfryer</div>
+    <div class="slot-meta">
+      <span>20 min</span>
+      <span class="dot">·</span>
+      <span class="pill-warm">Ultra-simple</span>
+    </div>
+
+    <div class="ingredients-preview">
+      <span class="ing">Ratatouille</span> conserve · <span class="ing">falafels</span> surgelés · <span class="ing">huile d'olive</span>
+    </div>
+
+    <div class="convives-row">
+      <span class="label">Pour</span>
+      <div class="initial">L</div>
+      <div class="initial">R</div>
+    </div>
+
+    <div class="ghost-btn">Voir la Recette</div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab active">
+      <div class="icon">☀</div>
+      <div>Aujourd'hui</div>
+    </div>
+    <div class="tab">
+      <div class="icon">📅</div>
+      <div>Menu</div>
+    </div>
+    <div class="tab">
+      <div class="icon">≡</div>
+      <div>Listes</div>
+    </div>
+    <div class="tab">
+      <div class="icon">📖</div>
+      <div>Catalogue</div>
+    </div>
+  </div>
+
+</body>
+</html>
