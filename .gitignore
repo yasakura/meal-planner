@@ -1,0 +1,25 @@
+node_modules/
+dist/
+coverage/
+.stryker-tmp/
+reports/
+.tdd-baseline.json
+
+# Vite
+*.local
+.vite/
+
+# Env
+.env
+.env.*.local
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Build artifacts
+*.tsbuildinfo
+.tsbuild/
