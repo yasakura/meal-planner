@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: Lint + Test + Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint + boundaries)
+        run: npm run lint
+
+      - name: Tests (Vitest + architecture)
+        run: npm run test
+
+      - name: Build (TypeScript + Vite + PWA)
+        run: npm run build
+
+  mutation:
+    name: Mutation testing (Stryker)
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'mutation') || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stryker
+        run: npm run test:mutation
