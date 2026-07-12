@@ -15,9 +15,6 @@ export type IngredientProps = {
 };
 
 export function createIngredient(props: IngredientProps): Ingredient {
-  if (typeof props.name !== 'string') {
-    throw new Error("Le nom de l'ingrédient est obligatoire");
-  }
   const name = props.name.trim();
   if (name === '') {
     throw new Error("Le nom de l'ingrédient est obligatoire");

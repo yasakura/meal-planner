@@ -27,18 +27,6 @@ describe('Ingredient', () => {
     );
   });
 
-  it('rejette un name undefined avec le message domaine (pas un TypeError)', () => {
-    expect(() => IngredientBuilder.anIngredient().withRawName(undefined).build()).toThrow(
-      "Le nom de l'ingrédient est obligatoire",
-    );
-  });
-
-  it('rejette un name null avec le message domaine (pas un TypeError)', () => {
-    expect(() => IngredientBuilder.anIngredient().withRawName(null).build()).toThrow(
-      "Le nom de l'ingrédient est obligatoire",
-    );
-  });
-
   it('stocke le name trimé en préservant la casse', () => {
     const ingredient = IngredientBuilder.anIngredient().withName('  Tomates  ').build();
 

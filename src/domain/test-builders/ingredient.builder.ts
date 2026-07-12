@@ -27,12 +27,6 @@ export class IngredientBuilder {
     return this.withName('');
   }
 
-  // Force une valeur non-string (ex. reconstruction depuis un doc Firestore non typé).
-  // Cast interne assumé : contourne le typage pour exercer la validation runtime de la factory.
-  withRawName(name: unknown): IngredientBuilder {
-    return new IngredientBuilder(name as string, this.quantity, this.unit);
-  }
-
   withoutQuantity(): IngredientBuilder {
     return this.withQuantity(0);
   }
