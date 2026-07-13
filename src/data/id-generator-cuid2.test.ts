@@ -4,7 +4,7 @@ import { IdGeneratorCuid2 } from './id-generator-cuid2';
 
 describe('IdGeneratorCuid2', () => {
   it('generate() retourne une string non vide', () => {
-    const generator = new IdGeneratorCuid2();
+    const generator = IdGeneratorCuid2.create();
 
     const id = generator.generate();
 
@@ -13,7 +13,7 @@ describe('IdGeneratorCuid2', () => {
   });
 
   it('deux appels successifs retournent des ids differents', () => {
-    const generator = new IdGeneratorCuid2();
+    const generator = IdGeneratorCuid2.create();
 
     const first = generator.generate();
     const second = generator.generate();
@@ -22,7 +22,7 @@ describe('IdGeneratorCuid2', () => {
   });
 
   it('retourne un id au format cuid2 valide', () => {
-    const generator = new IdGeneratorCuid2();
+    const generator = IdGeneratorCuid2.create();
 
     const id = generator.generate();
 

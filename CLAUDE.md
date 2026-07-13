@@ -59,6 +59,14 @@ Les décisions de design prises pour passer au vert (où placer une abstraction,
 - **Dépendances entre couches ajoutées**, chacune justifiée (ou « aucune »).
 - Tout nouveau **port**, dossier, ou convention introduit.
 
+## Convention de construction
+
+Toute classe exportée constructible expose une **factory statique** comme unique point d'entrée, et rend son **constructeur privé** pour forcer son usage (pas de `new X()` sur les classes du projet) :
+
+- Factory `create()` par défaut, ou **nommée** quand elle porte du sens : `StubIdGenerator.returning(id)`, `ThrowingRecipeRepository.rejectingWith(msg)`, `RecipeBuilder.aRecipe()`.
+- Vaut pour les adapters `data/`, les test-doubles et les builders.
+- Le constructeur privé n'est pas de la cérémonie : il garantit que si la factory gagne un jour de la logique (validation, wiring), aucun appelant ne la contourne.
+
 ## Convention Test Data Builders
 
 Pas de littéraux verbeux dans les tests. Un builder par entity, chaînable, avec une base valide par défaut :
@@ -96,6 +104,17 @@ Le bug est une **spec absente**, pas un accident. Cycle de recovery obligatoire 
 
 La checklist DoD n'est **pas** un état figé au moment du 1er cycle : c'est un état vivant qui reflète l'itération courante. Si Chrome décoche sa case, la feature est ré-ouverte et les cases précédentes doivent être re-visitées sur le nouveau code.
 
+## Revue de code indépendante (AVANT chaque commit)
+
+Quand le travail semble fini et que **tous les checks passent** (lint / test / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
+
+1. Lancer un **sous-agent de code review INDÉPENDANT** — contexte frais, **pas** l'agent (ni un fork de l'agent) qui a orchestré le code — sur le diff.
+2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles.
+3. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
+4. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
+5. **Re-vérifier** (lint / test / mutation) après corrections.
+6. **Seulement ensuite : commit.**
+
 ## Commits
 
 Conventional Commits : `feat:`, `fix:`, `test:`, `refactor:`, `chore:`, `docs:`.
@@ -112,5 +131,6 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] `npm run test:mutation` OK (seuil `break: 80` tenu — gate bloquant, pas décoratif)
 - [ ] **Si use-case / logique métier** : intention validée au **rouge** avant implémentation (point de contrôle « rouge »)
 - [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
+- [ ] **Revue de code indépendante** passée AVANT commit (findings pertinents traités, non-pertinents justifiés)
 - [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement)
 - [ ] Commit conforme aux Conventional Commits

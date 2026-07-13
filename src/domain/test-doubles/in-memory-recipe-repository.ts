@@ -5,6 +5,8 @@ export class InMemoryRecipeRepository implements RecipeRepository {
   public saveCount = 0;
   private readonly recipes = new Map<string, Recipe>();
 
+  private constructor() {}
+
   static create(): InMemoryRecipeRepository {
     return new InMemoryRecipeRepository();
   }
