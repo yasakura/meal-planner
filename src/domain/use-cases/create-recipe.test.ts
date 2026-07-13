@@ -21,6 +21,9 @@ describe('createRecipeUseCase', () => {
     expect(recipe.id).toBe('id-connu-42');
   });
 
+  // Guard (green-on-arrival assumé) : une fois `const id = generate()` posé (piloté par le
+  // test « attribue l'id »), callCount === 1 est automatique. Tue un mutant qui n'appellerait
+  // pas generate() ou l'appellerait plusieurs fois.
   it('appelle generate() exactement une fois', async () => {
     const idGenerator = StubIdGenerator.returning('id-connu-42');
     const createRecipe = createRecipeUseCase({
@@ -81,29 +84,13 @@ describe('createRecipeUseCase', () => {
       recipeRepository,
     });
 
-    await createRecipe({
-      title: 'Poulet rôti',
-      ingredients: [IngredientBuilder.anIngredient().build()],
-    });
-
-    expect(recipeRepository.findById('id-connu-42')).toBeDefined();
-  });
-
-  // Guard (green-on-arrival assumé) : verrouille qu'on persiste l'entité RETOURNÉE
-  // (mêmes id/title/ingredients), pas une copie divergente. Tue un mutant qui
-  // persisterait un objet reconstruit autrement.
-  it("persiste l'entité effectivement retournée par le use case", async () => {
-    const recipeRepository = InMemoryRecipeRepository.create();
-    const createRecipe = createRecipeUseCase({
-      idGenerator: StubIdGenerator.returning('id-connu-42'),
-      recipeRepository,
-    });
-
     const recipe = await createRecipe({
       title: 'Poulet rôti',
       ingredients: [IngredientBuilder.anIngredient().build()],
     });
 
+    // Assertion forte : l'entité persistée EST celle retournée (identité de référence),
+    // pas seulement « quelque chose existe » sous cet id.
     expect(recipeRepository.findById('id-connu-42')).toBe(recipe);
   });
 
@@ -155,8 +142,8 @@ describe('createRecipeUseCase', () => {
   });
 
   // Guard (green-on-arrival assumé) : la factory throw AVANT le save, donc un input
-  // invalide n'est jamais persisté. Verrouille l'ordre construire→save : tue un mutant
-  // qui persisterait avant de valider.
+  // invalide n'est jamais persisté. Tue un mutant qui envelopperait createRecipe dans un
+  // try/catch avalant l'erreur et poursuivrait jusqu'au save.
   it('ne persiste rien quand le input est invalide', async () => {
     const recipeRepository = InMemoryRecipeRepository.create();
     const createRecipe = createRecipeUseCase({
