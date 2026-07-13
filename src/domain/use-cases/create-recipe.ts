@@ -1,6 +1,7 @@
 import { createRecipe, type Recipe } from '../entities/recipe';
 import { type Ingredient } from '../entities/ingredient';
 import { type IdGenerator } from '../ports/id-generator';
+import { type RecipeRepository } from '../ports/recipe-repository';
 
 export type CreateRecipeInput = {
   title: string;
@@ -10,9 +11,12 @@ export type CreateRecipeInput = {
 
 export function createRecipeUseCase(deps: {
   idGenerator: IdGenerator;
-}): (input: CreateRecipeInput) => Recipe {
-  return (input) => {
+  recipeRepository: RecipeRepository;
+}): (input: CreateRecipeInput) => Promise<Recipe> {
+  return async (input) => {
     const id = deps.idGenerator.generate();
-    return createRecipe({ id, ...input });
+    const recipe = createRecipe({ id, ...input });
+    await deps.recipeRepository.save(recipe);
+    return recipe;
   };
 }
