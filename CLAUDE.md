@@ -17,6 +17,19 @@ Tout contrat entre couches passe par un port dans `domain/ports/`. Le "M" du MVC
 - Pour toute écriture ou modification de code productif dans `src/`, **DÉLÉGUER au sous-agent `tdd-clean-coder`** (`~/.claude/agents/`) ou utiliser la slash command `/tdd <tâche>`.
 - Interdit : green-on-arrival (un test qui passe dès l'écriture ne teste rien).
 
+## Point de contrôle « rouge » (use-cases & logique métier)
+
+La mutation prouve que les tests sont **serrés**, pas qu'ils testent la **bonne chose** : un test peut tuer tous les mutants et verrouiller une règle métier fausse. Le contrôle le plus rentable est donc de valider **l'intention au rouge**, pas de la découvrir au vert.
+
+Pour tout **use-case** ou toute **logique métier** (agrégation, prorata FR-15, règles de calcul/décision) — **PAS** pour les value objects/entities à invariants de forme triviaux :
+
+1. `tdd-clean-coder` écrit le(s) test(s) rouge(s), **OBSERVE le rouge, puis S'ARRÊTE sans implémenter**.
+2. Il rapporte : les tests rouges + **en une phrase chacun, la règle métier qu'ils valident**.
+3. L'agent principal présente cette intention à l'utilisateur pour **validation AVANT implémentation**.
+4. Après accord seulement : seconde délégation → implémentation → vert → refactor.
+
+Pour un value object trivial (non-vide, borne, type, immuabilité), le cycle complet rouge → vert → refactor en une passe reste autorisé — mutation + revue au vert suffisent.
+
 ## Anti test-tampering
 
 Un test qui passe de vert à rouge suite à une modif de code productif n'est **JAMAIS** modifié dans la même étape. Cycle obligatoire :
@@ -34,9 +47,25 @@ Toute modification d'un test hors périmètre requiert une justification explici
 - **cuid2** (IDs générés dans `domain/` via port `IdGenerator`), **date-fns** (timezone `Europe/Paris`) via port `Clock`. Pas de `new Date()` direct dans `domain/`.
 - Tests par couche :
   - `domain/` : Vitest + adapters in-memory + Test Data Builders.
-  - `data/` : Vitest + émulateur Firebase (Auth + Firestore) + Firebase Rules Test SDK pour les Security Rules.
+  - `data/` : **pas d'émulateur Java** (projet front — décision 2026-07-14). Pattern **humble object** : le mapping pur entité ↔ document Firestore vit dans un module pur, testé à 100 % en Vitest (aucune infra) ; les adapters Firestore sont des wrappers minces (I/O only), au plus un test léger avec SDK mocké. Le **round-trip réel** et les **Security Rules** ne sont **pas** testés automatiquement pour l'instant — à revisiter via un émulateur Docker si le besoin se confirme.
   - `ui/` containers : RTL + store Redux réel + ports mockés.
-- **Mutation score `domain/` ≥ 80 %**.
+- **Mutation testing sur le code de PRODUCTION** : `domain/`, `data/`, et la **logique UI** (`src/ui/features/**/*.ts` — slices/thunks). **Exclus du `mutate`** : les fichiers de test ET l'**infra de test** (`domain/test-doubles/**`, `domain/test-builders/**`) — sinon elle pollue le score avec des mutants équivalents. Gate **bloquant global** `break: 80` (`stryker.conf.mjs`). Les mutants équivalents de boilerplate RTK (nom du type d'action, `name` de slice, objet de config `createSlice`) sont tolérés dès lors que **toute la logique de transition est couverte** — le seuil étant global, ils ne fragilisent pas le gate.
+
+## Diff d'architecture (fin de cycle)
+
+Les décisions de design prises pour passer au vert (où placer une abstraction, port vs adapter, nommage, découpage de dossiers) ne « cassent » rien → elles ne déclenchent aucun garde-fou et restent invisibles. Pour les rendre visibles sans relire tout le code, le rapport de fin de cycle inclut un **diff d'architecture** :
+
+- **Par couche** (`domain/` / `data/` / `ui/`) : fichiers créés / déplacés.
+- **Dépendances entre couches ajoutées**, chacune justifiée (ou « aucune »).
+- Tout nouveau **port**, dossier, ou convention introduit.
+
+## Convention de construction
+
+Toute classe exportée constructible expose une **factory statique** comme unique point d'entrée, et rend son **constructeur privé** pour forcer son usage (pas de `new X()` sur les classes du projet) :
+
+- Factory `create()` par défaut, ou **nommée** quand elle porte du sens : `StubIdGenerator.returning(id)`, `ThrowingRecipeRepository.rejectingWith(msg)`, `RecipeBuilder.aRecipe()`.
+- Vaut pour les adapters `data/`, les test-doubles et les builders.
+- Le constructeur privé n'est pas de la cérémonie : il garantit que si la factory gagne un jour de la logique (validation, wiring), aucun appelant ne la contourne.
 
 ## Convention Test Data Builders
 
@@ -57,7 +86,8 @@ Pour toute feature qui touche `src/ui/`, après le cycle TDD, l'agent principal 
 3. `mcp__chrome-devtools__take_screenshot` (résolution iPhone 393×852 portrait — l'app est mobile-only).
 4. `mcp__chrome-devtools__list_console_messages` — aucune erreur autre que HMR/Vite.
 5. Si interaction requise : `click`, `fill`, `press_key` puis re-screenshot pour valider l'état après.
-6. Screenshot final joint au report utilisateur.
+6. **États non-nominaux** : le screenshot du seul chemin nominal ne suffit pas. Vérifier explicitement les états pertinents pour l'écran — **vide** (liste/collection sans données), **erreur** (échec de chargement/validation), **chargement** (spinner/skeleton). Un état non pertinent est écarté explicitement, pas oublié.
+7. Screenshot final joint au report utilisateur.
 
 Alternative à la demande : slash command **`/verify <route>`**.
 
@@ -74,6 +104,17 @@ Le bug est une **spec absente**, pas un accident. Cycle de recovery obligatoire 
 
 La checklist DoD n'est **pas** un état figé au moment du 1er cycle : c'est un état vivant qui reflète l'itération courante. Si Chrome décoche sa case, la feature est ré-ouverte et les cases précédentes doivent être re-visitées sur le nouveau code.
 
+## Revue de code indépendante (AVANT chaque commit)
+
+Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
+
+1. Lancer un **sous-agent de code review INDÉPENDANT** — contexte frais, **pas** l'agent (ni un fork de l'agent) qui a orchestré le code — sur le diff.
+2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles.
+3. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
+4. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
+5. **Re-vérifier** (lint / test / mutation) après corrections.
+6. **Seulement ensuite : commit.**
+
 ## Commits
 
 Conventional Commits : `feat:`, `fix:`, `test:`, `refactor:`, `chore:`, `docs:`.
@@ -87,6 +128,10 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] Refactor si utile, suite toujours verte
 - [ ] `npm run lint` OK (boundaries respectées)
 - [ ] `npm run test` OK (seuils coverage tenus)
-- [ ] `npm run test:mutation` OK (seuil mutation tenu)
-- [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console messages check + interactions user validées)
+- [ ] `npm run build` OK (`tsc -b` — Vitest ne typecheck PAS ; seul le build attrape les erreurs de types, y compris dans les fichiers de test)
+- [ ] `npm run test:mutation` OK (seuil `break: 80` tenu — gate bloquant, pas décoratif)
+- [ ] **Si use-case / logique métier** : intention validée au **rouge** avant implémentation (point de contrôle « rouge »)
+- [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
+- [ ] **Revue de code indépendante** passée AVANT commit (findings pertinents traités, non-pertinents justifiés)
+- [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement)
 - [ ] Commit conforme aux Conventional Commits
