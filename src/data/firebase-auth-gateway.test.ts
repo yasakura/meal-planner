@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type Auth, onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  type Auth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+} from 'firebase/auth';
 import { FirebaseAuthGateway } from './firebase-auth-gateway';
 
 vi.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: vi.fn(),
   onAuthStateChanged: vi.fn(),
+  signOut: vi.fn(),
 }));
 
 const mockedSignIn = vi.mocked(signInWithEmailAndPassword);
 const mockedOnAuthStateChanged = vi.mocked(onAuthStateChanged);
+const mockedSignOut = vi.mocked(firebaseSignOut);
 
 describe('FirebaseAuthGateway', () => {
   const auth = { marker: 'auth-sentinel' } as unknown as Auth;
@@ -16,6 +23,7 @@ describe('FirebaseAuthGateway', () => {
   beforeEach(() => {
     mockedSignIn.mockReset();
     mockedOnAuthStateChanged.mockReset();
+    mockedSignOut.mockReset();
   });
 
   it('mappe le UserCredential Firebase vers un Account et forwarde (auth, email, password)', async () => {
@@ -124,5 +132,21 @@ describe('FirebaseAuthGateway', () => {
     const unsubscribe = gateway.observeAuthState(() => {});
 
     expect(unsubscribe).toBe(unsub);
+  });
+
+  it("signOut délègue à Firebase avec l'auth injecté", async () => {
+    mockedSignOut.mockResolvedValue(undefined);
+    const gateway = FirebaseAuthGateway.create(auth);
+
+    await gateway.signOut();
+
+    expect(mockedSignOut).toHaveBeenCalledWith(auth);
+  });
+
+  it("signOut propage l'erreur Firebase sans l'avaler", async () => {
+    mockedSignOut.mockRejectedValue(new Error('auth/network-request-failed'));
+    const gateway = FirebaseAuthGateway.create(auth);
+
+    await expect(gateway.signOut()).rejects.toThrow('auth/network-request-failed');
   });
 });

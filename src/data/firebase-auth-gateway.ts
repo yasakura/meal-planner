@@ -3,6 +3,7 @@ import {
   type User,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
 } from 'firebase/auth';
 
 import { type AuthGateway, type Unsubscribe } from '../domain/ports/auth-gateway';
@@ -22,6 +23,10 @@ export class FirebaseAuthGateway implements AuthGateway {
 
   observeAuthState(listener: (account: Account | null) => void): Unsubscribe {
     return onAuthStateChanged(this.auth, (user) => listener(this.toAccount(user)));
+  }
+
+  async signOut(): Promise<void> {
+    await firebaseSignOut(this.auth);
   }
 
   private toAccount(user: User | null): Account | null {

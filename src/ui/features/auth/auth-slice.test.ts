@@ -8,6 +8,7 @@ import {
   authStateChanged,
   observeAuthState,
   signIn,
+  signOut,
   selectAuth,
   type AuthState,
 } from './auth-slice';
@@ -163,6 +164,42 @@ describe('auth slice', () => {
     unsubscribe();
 
     expect(gateway.unsubscribed).toBe(true);
+  });
+
+  it('signOut rappelle le listener de session avec null → le store repasse unauthenticated', async () => {
+    const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
+    const gateway = StubAuthGateway.withSession(account);
+    const store = createStore({ authGateway: gateway });
+
+    store.dispatch(observeAuthState());
+    expect(selectAuth(store.getState()).status).toBe('authenticated');
+
+    await store.dispatch(signOut());
+
+    expect(gateway.signOutCalled).toBe(true);
+    expect(selectAuth(store.getState())).toEqual({
+      account: null,
+      status: 'unauthenticated',
+      error: null,
+    });
+  });
+
+  it('signOut échoué ne rejette pas au caller et ne déconnecte pas (statut reste authenticated)', async () => {
+    const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
+    const gateway = StubAuthGateway.withSession(account).failingSignOut('offline');
+    const store = createStore({ authGateway: gateway });
+
+    store.dispatch(observeAuthState());
+    expect(selectAuth(store.getState()).status).toBe('authenticated');
+
+    await expect(store.dispatch(signOut())).resolves.toBeUndefined();
+
+    expect(gateway.signOutCalled).toBe(true);
+    expect(selectAuth(store.getState())).toEqual({
+      account,
+      status: 'authenticated',
+      error: null,
+    });
   });
 
   // [guard] loading observé sur le FLUX RÉEL (dispatch via store, pas le reducer isolé).
