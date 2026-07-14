@@ -10,6 +10,9 @@ export class StubAuthGateway implements AuthGateway {
   public lastEmail: string | null = null;
   public lastPassword: string | null = null;
   public unsubscribed = false;
+  public signOutCalled = false;
+  private listener: ((account: Account | null) => void) | null = null;
+  private signOutFailureMessage: string | null = null;
 
   private constructor(
     private readonly behaviour: StubBehaviour,
@@ -54,11 +57,27 @@ export class StubAuthGateway implements AuthGateway {
   }
 
   observeAuthState(listener: (account: Account | null) => void): Unsubscribe {
+    this.listener = listener;
     if (this.emitsSession) {
       listener(this.session);
     }
     return () => {
       this.unsubscribed = true;
     };
+  }
+
+  failingSignOut(message: string): this {
+    this.signOutFailureMessage = message;
+    return this;
+  }
+
+  signOut(): Promise<void> {
+    this.signOutCalled = true;
+    if (this.signOutFailureMessage !== null) {
+      // Comme Firebase en cas d'échec : le rejet remonte et onAuthStateChanged ne fire pas.
+      return Promise.reject(new Error(this.signOutFailureMessage));
+    }
+    this.listener?.(null);
+    return Promise.resolve();
   }
 }

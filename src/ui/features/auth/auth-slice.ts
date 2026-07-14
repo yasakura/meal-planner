@@ -74,4 +74,20 @@ export const observeAuthState =
   (dispatch: AppDispatch, _getState: () => RootState, extra: AppDependencies): Unsubscribe =>
     extra.authGateway.observeAuthState((account) => dispatch(authStateChanged(account)));
 
+export const signOut =
+  () =>
+  async (
+    _dispatch: AppDispatch,
+    _getState: () => RootState,
+    extra: AppDependencies,
+  ): Promise<void> => {
+    try {
+      await extra.authGateway.signOut();
+    } catch {
+      // signOut échoué (réseau, rare) : Firebase ne déclenche pas onAuthStateChanged,
+      // le statut reste authenticated. On avale pour éviter une unhandled rejection ;
+      // feedback d'erreur volontairement hors périmètre F.
+    }
+  };
+
 export const selectAuth = (state: RootState): AuthState => state.auth;
