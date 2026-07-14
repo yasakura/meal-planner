@@ -49,7 +49,7 @@ Toute modification d'un test hors périmètre requiert une justification explici
   - `domain/` : Vitest + adapters in-memory + Test Data Builders.
   - `data/` : **pas d'émulateur Java** (projet front — décision 2026-07-14). Pattern **humble object** : le mapping pur entité ↔ document Firestore vit dans un module pur, testé à 100 % en Vitest (aucune infra) ; les adapters Firestore sont des wrappers minces (I/O only), au plus un test léger avec SDK mocké. Le **round-trip réel** et les **Security Rules** ne sont **pas** testés automatiquement pour l'instant — à revisiter via un émulateur Docker si le besoin se confirme.
   - `ui/` containers : RTL + store Redux réel + ports mockés.
-- **Mutation score `domain/` ≥ 80 %** — gate **bloquant** (`stryker.conf.mjs`, `break: 80`), pas seulement exécuté. Tant que seul `domain/` est muté, le seuil global applique la règle. Quand `data/` grossira, si `data/` doit avoir un seuil distinct, scinder en configs par dossier (une passe Stryker scopée `domain/` à 80, une passe `data/` à son propre seuil).
+- **Mutation testing sur le code de PRODUCTION** : `domain/`, `data/`, et la **logique UI** (`src/ui/features/**/*.ts` — slices/thunks). **Exclus du `mutate`** : les fichiers de test ET l'**infra de test** (`domain/test-doubles/**`, `domain/test-builders/**`) — sinon elle pollue le score avec des mutants équivalents. Gate **bloquant global** `break: 80` (`stryker.conf.mjs`). Les mutants équivalents de boilerplate RTK (nom du type d'action, `name` de slice, objet de config `createSlice`) sont tolérés dès lors que **toute la logique de transition est couverte** — le seuil étant global, ils ne fragilisent pas le gate.
 
 ## Diff d'architecture (fin de cycle)
 
