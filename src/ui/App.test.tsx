@@ -37,4 +37,9 @@ describe('App', () => {
     renderApp();
     expect(screen.getByText(/Firebase : non configuré/)).toBeInTheDocument();
   });
+
+  it('rend l’écran de création de recette', () => {
+    renderApp();
+    expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
+  });
 });
