@@ -14,6 +14,7 @@ export class StubAuthGateway implements AuthGateway {
   private constructor(
     private readonly behaviour: StubBehaviour,
     private readonly session: Account | null = null,
+    private readonly emitsSession: boolean = true,
   ) {}
 
   static resolvingWith(account: Account): StubAuthGateway {
@@ -36,6 +37,10 @@ export class StubAuthGateway implements AuthGateway {
     return new StubAuthGateway({ kind: 'pending' }, null);
   }
 
+  static withPendingSession(): StubAuthGateway {
+    return new StubAuthGateway({ kind: 'pending' }, null, false);
+  }
+
   signIn(email: string, password: string): Promise<Account> {
     this.lastEmail = email;
     this.lastPassword = password;
@@ -49,7 +54,9 @@ export class StubAuthGateway implements AuthGateway {
   }
 
   observeAuthState(listener: (account: Account | null) => void): Unsubscribe {
-    listener(this.session);
+    if (this.emitsSession) {
+      listener(this.session);
+    }
     return () => {
       this.unsubscribed = true;
     };
