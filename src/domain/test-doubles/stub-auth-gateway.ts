@@ -1,4 +1,4 @@
-import { type AuthGateway } from '../ports/auth-gateway';
+import { type AuthGateway, type Unsubscribe } from '../ports/auth-gateway';
 import { type Account } from '../entities/account';
 
 type StubBehaviour =
@@ -9,8 +9,12 @@ type StubBehaviour =
 export class StubAuthGateway implements AuthGateway {
   public lastEmail: string | null = null;
   public lastPassword: string | null = null;
+  public unsubscribed = false;
 
-  private constructor(private readonly behaviour: StubBehaviour) {}
+  private constructor(
+    private readonly behaviour: StubBehaviour,
+    private readonly session: Account | null = null,
+  ) {}
 
   static resolvingWith(account: Account): StubAuthGateway {
     return new StubAuthGateway({ kind: 'resolve', account });
@@ -24,6 +28,14 @@ export class StubAuthGateway implements AuthGateway {
     return new StubAuthGateway({ kind: 'pending' });
   }
 
+  static withSession(account: Account): StubAuthGateway {
+    return new StubAuthGateway({ kind: 'pending' }, account);
+  }
+
+  static withoutSession(): StubAuthGateway {
+    return new StubAuthGateway({ kind: 'pending' }, null);
+  }
+
   signIn(email: string, password: string): Promise<Account> {
     this.lastEmail = email;
     this.lastPassword = password;
@@ -34,5 +46,12 @@ export class StubAuthGateway implements AuthGateway {
       return new Promise<Account>(() => {});
     }
     return Promise.resolve(this.behaviour.account);
+  }
+
+  observeAuthState(listener: (account: Account | null) => void): Unsubscribe {
+    listener(this.session);
+    return () => {
+      this.unsubscribed = true;
+    };
   }
 }

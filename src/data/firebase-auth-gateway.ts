@@ -1,6 +1,11 @@
-import { type Auth, signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  type Auth,
+  type User,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+} from 'firebase/auth';
 
-import { type AuthGateway } from '../domain/ports/auth-gateway';
+import { type AuthGateway, type Unsubscribe } from '../domain/ports/auth-gateway';
 import { createAccount, type Account } from '../domain/entities/account';
 
 export class FirebaseAuthGateway implements AuthGateway {
@@ -13,5 +18,18 @@ export class FirebaseAuthGateway implements AuthGateway {
   async signIn(email: string, password: string): Promise<Account> {
     const credential = await signInWithEmailAndPassword(this.auth, email, password);
     return createAccount({ id: credential.user.uid, email: credential.user.email ?? '' });
+  }
+
+  observeAuthState(listener: (account: Account | null) => void): Unsubscribe {
+    return onAuthStateChanged(this.auth, (user) => listener(this.toAccount(user)));
+  }
+
+  private toAccount(user: User | null): Account | null {
+    if (!user) return null;
+    try {
+      return createAccount({ id: user.uid, email: user.email ?? '' });
+    } catch {
+      return null; // user Firebase incomplet (email/uid manquant) → pas de session valide
+    }
   }
 }

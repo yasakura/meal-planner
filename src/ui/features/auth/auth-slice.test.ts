@@ -3,17 +3,24 @@ import { describe, it, expect } from 'vitest';
 import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { StubAuthGateway } from '../../../domain/test-doubles/stub-auth-gateway';
 import { createStore } from '../../store/store';
-import { authReducer, signIn, selectAuth, type AuthState } from './auth-slice';
+import {
+  authReducer,
+  authStateChanged,
+  observeAuthState,
+  signIn,
+  selectAuth,
+  type AuthState,
+} from './auth-slice';
 
 describe('auth slice', () => {
-  it('un store neuf est idle, sans compte ni erreur', () => {
+  it('un store neuf est initializing, sans compte ni erreur', () => {
     const store = createStore({
       authGateway: StubAuthGateway.resolvingWith(AccountBuilder.anAccount().build()),
     });
 
     expect(selectAuth(store.getState())).toEqual({
       account: null,
-      status: 'idle',
+      status: 'initializing',
       error: null,
     });
   });
@@ -101,6 +108,61 @@ describe('auth slice', () => {
     expect(next.error).toBeNull();
     expect(next.status).toBe('authenticated');
     expect(next.account).toEqual(account);
+  });
+
+  it('authStateChanged avec un compte passe le store en authenticated', () => {
+    const account = AccountBuilder.anAccount().build();
+    const initializing: AuthState = { account: null, status: 'initializing', error: null };
+
+    const next = authReducer(initializing, authStateChanged(account));
+
+    expect(next).toEqual({ account, status: 'authenticated', error: null });
+  });
+
+  it('authStateChanged sans compte passe le store en unauthenticated', () => {
+    const account = AccountBuilder.anAccount().build();
+    const authenticated: AuthState = { account, status: 'authenticated', error: null };
+
+    const next = authReducer(authenticated, authStateChanged(null));
+
+    expect(next).toEqual({ account: null, status: 'unauthenticated', error: null });
+  });
+
+  it('observeAuthState avec session existante passe le store en authenticated', () => {
+    const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
+    const store = createStore({ authGateway: StubAuthGateway.withSession(account) });
+
+    store.dispatch(observeAuthState());
+
+    expect(selectAuth(store.getState())).toEqual({
+      account,
+      status: 'authenticated',
+      error: null,
+    });
+  });
+
+  it('observeAuthState sans session passe le store en unauthenticated', () => {
+    const store = createStore({ authGateway: StubAuthGateway.withoutSession() });
+
+    store.dispatch(observeAuthState());
+
+    expect(selectAuth(store.getState())).toEqual({
+      account: null,
+      status: 'unauthenticated',
+      error: null,
+    });
+  });
+
+  it("observeAuthState propage l'unsubscribe de la gateway au caller du thunk", () => {
+    const gateway = StubAuthGateway.withoutSession();
+    const store = createStore({ authGateway: gateway });
+
+    const unsubscribe = store.dispatch(observeAuthState());
+    expect(gateway.unsubscribed).toBe(false);
+
+    unsubscribe();
+
+    expect(gateway.unsubscribed).toBe(true);
   });
 
   // [guard] loading observé sur le FLUX RÉEL (dispatch via store, pas le reducer isolé).

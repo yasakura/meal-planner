@@ -1,9 +1,15 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import { type Account } from '../../../domain/entities/account';
-import { type AppThunkApiConfig, type RootState } from '../../store/store';
+import { type Unsubscribe } from '../../../domain/ports/auth-gateway';
+import {
+  type AppDependencies,
+  type AppDispatch,
+  type AppThunkApiConfig,
+  type RootState,
+} from '../../store/store';
 
-export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'error';
+export type AuthStatus = 'initializing' | 'unauthenticated' | 'loading' | 'authenticated' | 'error';
 
 export type AuthState = {
   account: Account | null;
@@ -13,7 +19,7 @@ export type AuthState = {
 
 const initialState: AuthState = {
   account: null,
-  status: 'idle',
+  status: 'initializing',
   error: null,
 };
 
@@ -28,7 +34,18 @@ export const signIn = createAsyncThunk<
 const authSlice = createSlice({
   name: 'auth',
   initialState,
-  reducers: {},
+  reducers: {
+    authStateChanged: (state, action: PayloadAction<Account | null>) => {
+      if (action.payload === null) {
+        state.status = 'unauthenticated';
+        state.account = null;
+      } else {
+        state.status = 'authenticated';
+        state.account = action.payload;
+      }
+      state.error = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(signIn.pending, (state) => {
@@ -49,5 +66,12 @@ const authSlice = createSlice({
 });
 
 export const authReducer = authSlice.reducer;
+
+export const { authStateChanged } = authSlice.actions;
+
+export const observeAuthState =
+  () =>
+  (dispatch: AppDispatch, _getState: () => RootState, extra: AppDependencies): Unsubscribe =>
+    extra.authGateway.observeAuthState((account) => dispatch(authStateChanged(account)));
 
 export const selectAuth = (state: RootState): AuthState => state.auth;
