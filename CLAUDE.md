@@ -47,7 +47,7 @@ Toute modification d'un test hors périmètre requiert une justification explici
 - **cuid2** (IDs générés dans `domain/` via port `IdGenerator`), **date-fns** (timezone `Europe/Paris`) via port `Clock`. Pas de `new Date()` direct dans `domain/`.
 - Tests par couche :
   - `domain/` : Vitest + adapters in-memory + Test Data Builders.
-  - `data/` : Vitest + émulateur Firebase (Auth + Firestore) + Firebase Rules Test SDK pour les Security Rules.
+  - `data/` : **pas d'émulateur Java** (projet front — décision 2026-07-14). Pattern **humble object** : le mapping pur entité ↔ document Firestore vit dans un module pur, testé à 100 % en Vitest (aucune infra) ; les adapters Firestore sont des wrappers minces (I/O only), au plus un test léger avec SDK mocké. Le **round-trip réel** et les **Security Rules** ne sont **pas** testés automatiquement pour l'instant — à revisiter via un émulateur Docker si le besoin se confirme.
   - `ui/` containers : RTL + store Redux réel + ports mockés.
 - **Mutation score `domain/` ≥ 80 %** — gate **bloquant** (`stryker.conf.mjs`, `break: 80`), pas seulement exécuté. Tant que seul `domain/` est muté, le seuil global applique la règle. Quand `data/` grossira, si `data/` doit avoir un seuil distinct, scinder en configs par dossier (une passe Stryker scopée `domain/` à 80, une passe `data/` à son propre seuil).
 
@@ -106,7 +106,7 @@ La checklist DoD n'est **pas** un état figé au moment du 1er cycle : c'est un 
 
 ## Revue de code indépendante (AVANT chaque commit)
 
-Quand le travail semble fini et que **tous les checks passent** (lint / test / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
+Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
 
 1. Lancer un **sous-agent de code review INDÉPENDANT** — contexte frais, **pas** l'agent (ni un fork de l'agent) qui a orchestré le code — sur le diff.
 2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles.
@@ -128,6 +128,7 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] Refactor si utile, suite toujours verte
 - [ ] `npm run lint` OK (boundaries respectées)
 - [ ] `npm run test` OK (seuils coverage tenus)
+- [ ] `npm run build` OK (`tsc -b` — Vitest ne typecheck PAS ; seul le build attrape les erreurs de types, y compris dans les fichiers de test)
 - [ ] `npm run test:mutation` OK (seuil `break: 80` tenu — gate bloquant, pas décoratif)
 - [ ] **Si use-case / logique métier** : intention validée au **rouge** avant implémentation (point de contrôle « rouge »)
 - [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
