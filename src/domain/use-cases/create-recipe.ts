@@ -20,3 +20,5 @@ export function createRecipeUseCase(deps: {
     return recipe;
   };
 }
+
+export type CreateRecipe = ReturnType<typeof createRecipeUseCase>;

@@ -4,11 +4,11 @@ import { describe, it, expect } from 'vitest';
 
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { App } from './App';
-import { createStore } from './store/store';
+import { createTestStore } from './store/create-test-store';
 
 // App câble désormais LogoutButton (useAppDispatch) → montage sous <Provider> requis.
 function renderApp() {
-  const store = createStore({ authGateway: StubAuthGateway.withoutSession() });
+  const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
   return render(
     <Provider store={store}>
       <App />
