@@ -7,6 +7,7 @@ export type CreateRecipeInput = {
   title: string;
   ingredients: Ingredient[];
   convivesReference?: number;
+  instructions?: string;
 };
 
 export function createRecipeUseCase(deps: {
@@ -20,3 +21,5 @@ export function createRecipeUseCase(deps: {
     return recipe;
   };
 }
+
+export type CreateRecipe = ReturnType<typeof createRecipeUseCase>;

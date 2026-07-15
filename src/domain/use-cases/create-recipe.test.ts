@@ -77,6 +77,21 @@ describe('createRecipeUseCase', () => {
     expect(recipe.convivesReference).toBe(4);
   });
 
+  it('forwarde instructions du input vers la recette en préservant les sauts de ligne', async () => {
+    const createRecipe = createRecipeUseCase({
+      idGenerator: StubIdGenerator.create(),
+      recipeRepository: InMemoryRecipeRepository.create(),
+    });
+
+    const recipe = await createRecipe({
+      title: 'Ratatouille',
+      ingredients: [IngredientBuilder.anIngredient().build()],
+      instructions: 'Étape 1\n- couper\n- cuire',
+    });
+
+    expect(recipe.instructions).toBe('Étape 1\n- couper\n- cuire');
+  });
+
   it('persiste la recette créée dans le repository', async () => {
     const recipeRepository = InMemoryRecipeRepository.create();
     const createRecipe = createRecipeUseCase({

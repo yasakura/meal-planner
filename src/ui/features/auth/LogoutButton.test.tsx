@@ -5,13 +5,13 @@ import { describe, it, expect } from 'vitest';
 
 import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { StubAuthGateway } from '../../../domain/test-doubles/stub-auth-gateway';
-import { createStore } from '../../store/store';
+import { createTestStore } from '../../store/create-test-store';
 import { observeAuthState } from './auth-slice';
 import { LogoutButton } from './LogoutButton';
 
 function renderWithSession(account = AccountBuilder.anAccount().build()) {
   const gateway = StubAuthGateway.withSession(account);
-  const store = createStore({ authGateway: gateway });
+  const store = createTestStore({ authGateway: gateway });
   store.dispatch(observeAuthState());
   const view = render(
     <Provider store={store}>

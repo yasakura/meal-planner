@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { StubAuthGateway } from '../../../domain/test-doubles/stub-auth-gateway';
-import { createStore } from '../../store/store';
+import { createTestStore } from '../../store/create-test-store';
 import {
   authReducer,
   authStateChanged,
@@ -15,7 +15,7 @@ import {
 
 describe('auth slice', () => {
   it('un store neuf est initializing, sans compte ni erreur', () => {
-    const store = createStore({
+    const store = createTestStore({
       authGateway: StubAuthGateway.resolvingWith(AccountBuilder.anAccount().build()),
     });
 
@@ -28,7 +28,7 @@ describe('auth slice', () => {
 
   it('signIn réussi passe le store en authenticated avec le compte du gateway', async () => {
     const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
-    const store = createStore({ authGateway: StubAuthGateway.resolvingWith(account) });
+    const store = createTestStore({ authGateway: StubAuthGateway.resolvingWith(account) });
 
     await store.dispatch(signIn({ email: 'aurelie@foyer.test', password: 'secret' }));
 
@@ -56,7 +56,7 @@ describe('auth slice', () => {
   });
 
   it('signIn en échec passe en error avec le message du gateway, sans compte', async () => {
-    const store = createStore({
+    const store = createTestStore({
       authGateway: StubAuthGateway.rejectingWith('Identifiants invalides'),
     });
 
@@ -72,7 +72,7 @@ describe('auth slice', () => {
   // [guard] câblage extra.authGateway — vert à l'écriture (thunk déjà branché), verrouille la non-régression du wiring DI
   it('le thunk forwarde email et password au authGateway injecté via extra', async () => {
     const gateway = StubAuthGateway.resolvingWith(AccountBuilder.anAccount().build());
-    const store = createStore({ authGateway: gateway });
+    const store = createTestStore({ authGateway: gateway });
 
     await store.dispatch(signIn({ email: 'aurelie@foyer.test', password: 'secret-42' }));
 
@@ -131,7 +131,7 @@ describe('auth slice', () => {
 
   it('observeAuthState avec session existante passe le store en authenticated', () => {
     const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
-    const store = createStore({ authGateway: StubAuthGateway.withSession(account) });
+    const store = createTestStore({ authGateway: StubAuthGateway.withSession(account) });
 
     store.dispatch(observeAuthState());
 
@@ -143,7 +143,7 @@ describe('auth slice', () => {
   });
 
   it('observeAuthState sans session passe le store en unauthenticated', () => {
-    const store = createStore({ authGateway: StubAuthGateway.withoutSession() });
+    const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
 
     store.dispatch(observeAuthState());
 
@@ -156,7 +156,7 @@ describe('auth slice', () => {
 
   it("observeAuthState propage l'unsubscribe de la gateway au caller du thunk", () => {
     const gateway = StubAuthGateway.withoutSession();
-    const store = createStore({ authGateway: gateway });
+    const store = createTestStore({ authGateway: gateway });
 
     const unsubscribe = store.dispatch(observeAuthState());
     expect(gateway.unsubscribed).toBe(false);
@@ -169,7 +169,7 @@ describe('auth slice', () => {
   it('signOut rappelle le listener de session avec null → le store repasse unauthenticated', async () => {
     const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
     const gateway = StubAuthGateway.withSession(account);
-    const store = createStore({ authGateway: gateway });
+    const store = createTestStore({ authGateway: gateway });
 
     store.dispatch(observeAuthState());
     expect(selectAuth(store.getState()).status).toBe('authenticated');
@@ -187,7 +187,7 @@ describe('auth slice', () => {
   it('signOut échoué ne rejette pas au caller et ne déconnecte pas (statut reste authenticated)', async () => {
     const account = AccountBuilder.anAccount().withEmail('aurelie@foyer.test').build();
     const gateway = StubAuthGateway.withSession(account).failingSignOut('offline');
-    const store = createStore({ authGateway: gateway });
+    const store = createTestStore({ authGateway: gateway });
 
     store.dispatch(observeAuthState());
     expect(selectAuth(store.getState()).status).toBe('authenticated');
@@ -204,7 +204,7 @@ describe('auth slice', () => {
 
   // [guard] loading observé sur le FLUX RÉEL (dispatch via store, pas le reducer isolé).
   it('pendant un signIn en vol, le status passe à loading', () => {
-    const store = createStore({
+    const store = createTestStore({
       authGateway: StubAuthGateway.resolvingWith(AccountBuilder.anAccount().build()),
     });
 

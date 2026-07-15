@@ -8,6 +8,7 @@ export class RecipeBuilder {
     private readonly title: string,
     private readonly ingredients: Ingredient[],
     private readonly convivesReference: number | undefined,
+    private readonly instructions: string | undefined,
   ) {}
 
   static aRecipe(): RecipeBuilder {
@@ -16,23 +17,58 @@ export class RecipeBuilder {
       'Poulet rôti',
       [IngredientBuilder.anIngredient().build()],
       4,
+      undefined,
     );
   }
 
   withId(id: string): RecipeBuilder {
-    return new RecipeBuilder(id, this.title, this.ingredients, this.convivesReference);
+    return new RecipeBuilder(
+      id,
+      this.title,
+      this.ingredients,
+      this.convivesReference,
+      this.instructions,
+    );
   }
 
   withTitle(title: string): RecipeBuilder {
-    return new RecipeBuilder(this.id, title, this.ingredients, this.convivesReference);
+    return new RecipeBuilder(
+      this.id,
+      title,
+      this.ingredients,
+      this.convivesReference,
+      this.instructions,
+    );
   }
 
   withIngredients(ingredients: Ingredient[]): RecipeBuilder {
-    return new RecipeBuilder(this.id, this.title, ingredients, this.convivesReference);
+    return new RecipeBuilder(
+      this.id,
+      this.title,
+      ingredients,
+      this.convivesReference,
+      this.instructions,
+    );
   }
 
   withConvivesReference(convivesReference: number): RecipeBuilder {
-    return new RecipeBuilder(this.id, this.title, this.ingredients, convivesReference);
+    return new RecipeBuilder(
+      this.id,
+      this.title,
+      this.ingredients,
+      convivesReference,
+      this.instructions,
+    );
+  }
+
+  withInstructions(instructions: string): RecipeBuilder {
+    return new RecipeBuilder(
+      this.id,
+      this.title,
+      this.ingredients,
+      this.convivesReference,
+      instructions,
+    );
   }
 
   withoutId(): RecipeBuilder {
@@ -48,22 +84,28 @@ export class RecipeBuilder {
   }
 
   withoutConvivesReference(): RecipeBuilder {
-    return new RecipeBuilder(this.id, this.title, this.ingredients, undefined);
+    return new RecipeBuilder(this.id, this.title, this.ingredients, undefined, this.instructions);
+  }
+
+  withoutInstructions(): RecipeBuilder {
+    return new RecipeBuilder(
+      this.id,
+      this.title,
+      this.ingredients,
+      this.convivesReference,
+      undefined,
+    );
   }
 
   build(): Recipe {
-    if (this.convivesReference !== undefined) {
-      return createRecipe({
-        id: this.id,
-        title: this.title,
-        ingredients: this.ingredients,
-        convivesReference: this.convivesReference,
-      });
-    }
     return createRecipe({
       id: this.id,
       title: this.title,
       ingredients: this.ingredients,
+      ...(this.convivesReference !== undefined
+        ? { convivesReference: this.convivesReference }
+        : {}),
+      ...(this.instructions !== undefined ? { instructions: this.instructions } : {}),
     });
   }
 }

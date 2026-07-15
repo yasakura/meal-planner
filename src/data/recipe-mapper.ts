@@ -5,6 +5,7 @@ export type RecipeDocument = {
   title: string;
   ingredients: Array<{ name: string; quantity: number; unit: Unit }>;
   convivesReference: number;
+  instructions?: string;
 };
 
 export function recipeToDocument(recipe: Recipe): RecipeDocument {
@@ -16,6 +17,7 @@ export function recipeToDocument(recipe: Recipe): RecipeDocument {
       unit: i.unit,
     })),
     convivesReference: recipe.convivesReference,
+    ...(recipe.instructions !== undefined ? { instructions: recipe.instructions } : {}),
   };
 }
 
@@ -24,7 +26,7 @@ export function documentToRecipe(id: string, data: unknown): Recipe {
     throw new Error('Document recette invalide : la donnée doit être un objet');
   }
   const record = data as Record<string, unknown>;
-  const { title, convivesReference, ingredients } = record;
+  const { title, convivesReference, ingredients, instructions } = record;
   if (typeof title !== 'string') {
     throw new Error('Document recette invalide : le titre doit être une chaîne de caractères');
   }
@@ -34,9 +36,15 @@ export function documentToRecipe(id: string, data: unknown): Recipe {
   if (!Array.isArray(ingredients)) {
     throw new Error('Document recette invalide : les ingrédients doivent être un tableau');
   }
+  if (instructions !== undefined && typeof instructions !== 'string') {
+    throw new Error(
+      'Document recette invalide : les instructions doivent être une chaîne de caractères',
+    );
+  }
   return createRecipe({
     id,
     title,
+    ...(instructions !== undefined ? { instructions } : {}),
     ingredients: ingredients.map((raw: unknown) => {
       if (typeof raw !== 'object' || raw === null) {
         throw new Error('Document recette invalide : chaque ingrédient doit être un objet');

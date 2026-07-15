@@ -5,6 +5,7 @@ export type Recipe = {
   readonly title: string;
   readonly ingredients: readonly Ingredient[];
   readonly convivesReference: number;
+  readonly instructions?: string;
 };
 
 export type RecipeProps = {
@@ -12,6 +13,7 @@ export type RecipeProps = {
   title: string;
   ingredients: Ingredient[];
   convivesReference?: number;
+  instructions?: string;
 };
 
 export function createRecipe(props: RecipeProps): Recipe {
@@ -33,10 +35,12 @@ export function createRecipe(props: RecipeProps): Recipe {
   if (convivesReference < 1) {
     throw new Error('Le nombre de convives de référence doit être au moins 1');
   }
+  const instructions = props.instructions?.trim();
   return Object.freeze({
     id,
     title,
     ingredients: Object.freeze([...props.ingredients]),
     convivesReference,
+    ...(instructions !== undefined && instructions !== '' ? { instructions } : {}),
   });
 }

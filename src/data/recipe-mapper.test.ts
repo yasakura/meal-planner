@@ -51,6 +51,58 @@ describe('recipe-mapper', () => {
     expect(doc.ingredients).toEqual([{ name: 'Carotte', quantity: 3, unit: 'piece' }]);
   });
 
+  it('recipeToDocument inclut les instructions multi-lignes en préservant les sauts de ligne', () => {
+    const recipe = RecipeBuilder.aRecipe().withInstructions('Étape 1\n- sel\n- poivre').build();
+
+    const doc = recipeToDocument(recipe);
+
+    expect(doc.instructions).toBe('Étape 1\n- sel\n- poivre');
+  });
+
+  it('recipeToDocument sans instructions n’ajoute jamais la clé instructions (piège Firestore undefined)', () => {
+    const recipe = RecipeBuilder.aRecipe().withoutInstructions().build();
+
+    const doc = recipeToDocument(recipe);
+
+    expect('instructions' in doc).toBe(false);
+  });
+
+  it('round-trip document→recipe→document préserve les instructions multi-lignes', () => {
+    const recipe = RecipeBuilder.aRecipe()
+      .withId('recipe-77')
+      .withInstructions('Ligne A\n\nLigne B')
+      .build();
+
+    const roundTripped = recipeToDocument(documentToRecipe(recipe.id, recipeToDocument(recipe)));
+
+    expect(roundTripped.instructions).toBe('Ligne A\n\nLigne B');
+  });
+
+  it('documentToRecipe sans instructions → recipe.instructions undefined', () => {
+    const doc: RecipeDocument = {
+      title: 'Soupe',
+      ingredients: [{ name: 'Carotte', quantity: 3, unit: 'piece' }],
+      convivesReference: 4,
+    };
+
+    const recipe = documentToRecipe('recipe-1', doc);
+
+    expect(recipe.instructions).toBeUndefined();
+  });
+
+  it('documentToRecipe avec instructions non-string (number) → throw structurel', () => {
+    const data: unknown = {
+      title: 'Soupe',
+      ingredients: [{ name: 'Carotte', quantity: 3, unit: 'piece' }],
+      convivesReference: 4,
+      instructions: 123,
+    };
+
+    expect(() => documentToRecipe('recipe-1', data)).toThrow(
+      'Document recette invalide : les instructions doivent être une chaîne de caractères',
+    );
+  });
+
   describe('documentToRecipe re-valide structure ET valeurs des données non fiables', () => {
     it('data non-objet (null) → throw structurel', () => {
       const data: unknown = null;

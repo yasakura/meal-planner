@@ -4,11 +4,11 @@ import { describe, it, expect } from 'vitest';
 
 import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { StubAuthGateway } from '../../../domain/test-doubles/stub-auth-gateway';
-import { createStore } from '../../store/store';
+import { createTestStore } from '../../store/create-test-store';
 import { AuthGate } from './AuthGate';
 
 function renderGate(gateway: StubAuthGateway) {
-  const store = createStore({ authGateway: gateway });
+  const store = createTestStore({ authGateway: gateway });
   const view = render(
     <Provider store={store}>
       <AuthGate>
