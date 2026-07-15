@@ -15,4 +15,8 @@ export class ThrowingRecipeRepository implements RecipeRepository {
   findAll(): Promise<Recipe[]> {
     return Promise.reject(new Error(this.message));
   }
+
+  findById(): Promise<Recipe | undefined> {
+    return Promise.reject(new Error(this.message));
+  }
 }

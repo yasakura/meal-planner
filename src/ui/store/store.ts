@@ -2,21 +2,25 @@ import { combineReducers, configureStore } from '@reduxjs/toolkit';
 
 import { type AuthGateway } from '../../domain/ports/auth-gateway';
 import { type CreateRecipe } from '../../domain/use-cases/create-recipe';
+import { type GetRecipe } from '../../domain/use-cases/get-recipe';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
 import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
+import { recipeDetailReducer } from '../features/recipe-detail/recipe-detail-slice';
 import { recipeReducer } from '../features/recipe/recipe-slice';
 
 export type AppDependencies = {
   authGateway: AuthGateway;
   createRecipe: CreateRecipe;
   listRecipes: ListRecipes;
+  getRecipe: GetRecipe;
 };
 
 const rootReducer = combineReducers({
   auth: authReducer,
   recipe: recipeReducer,
   catalogue: catalogueReducer,
+  recipeDetail: recipeDetailReducer,
 });
 
 export function createStore(dependencies: AppDependencies) {

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';
+import { BrowserRouter } from 'react-router-dom';
 import { App } from './ui/App';
 import { AuthGate } from './ui/features/auth/AuthGate';
 import { createAppStore } from './ui/store/create-app-store';
@@ -15,9 +16,11 @@ createRoot(root).render(
   <StrictMode>
     <GlobalStyle />
     <Provider store={store}>
-      <AuthGate>
-        <App />
-      </AuthGate>
+      <BrowserRouter>
+        <AuthGate>
+          <App />
+        </AuthGate>
+      </BrowserRouter>
     </Provider>
   </StrictMode>,
 );

@@ -25,7 +25,7 @@ export class InMemoryRecipeRepository implements RecipeRepository {
     return [...this.recipes.values()];
   }
 
-  findById(id: string): Recipe | undefined {
-    return this.recipes.get(id);
+  findById(id: string): Promise<Recipe | undefined> {
+    return Promise.resolve(this.recipes.get(id));
   }
 }

@@ -106,7 +106,7 @@ describe('createRecipeUseCase', () => {
 
     // Assertion forte : l'entité persistée EST celle retournée (identité de référence),
     // pas seulement « quelque chose existe » sous cet id.
-    expect(recipeRepository.findById('id-connu-42')).toBe(recipe);
+    expect(await recipeRepository.findById('id-connu-42')).toBe(recipe);
   });
 
   // Guard (green-on-arrival assumé) : save appelé EXACTEMENT une fois. Tue les mutants

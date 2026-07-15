@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
@@ -10,11 +11,14 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import { CatalogueContainer } from './CatalogueContainer';
 
+// Les lignes du catalogue sont désormais des <Link> → montage sous <Router> requis.
 function renderWithStore(listRecipes: ListRecipes) {
   const store = createTestStore({ listRecipes });
   const view = render(
     <Provider store={store}>
-      <CatalogueContainer />
+      <MemoryRouter>
+        <CatalogueContainer />
+      </MemoryRouter>
     </Provider>,
   );
   return { store, ...view };
@@ -89,6 +93,19 @@ describe('CatalogueContainer', () => {
 
     expect(await screen.findByText('Poulet rôti')).toBeInTheDocument();
     expect(count).toBe(2);
+  });
+
+  it('rend chaque recette comme un lien vers son détail', async () => {
+    const recipes = [
+      RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build(),
+      RecipeBuilder.aRecipe().withId('r-2').withTitle('Blanquette').build(),
+    ];
+    renderWithStore(async () => recipes);
+
+    const link1 = await screen.findByRole('link', { name: /Ratatouille/i });
+    expect(link1).toHaveAttribute('href', '/catalogue/r-1');
+    const link2 = screen.getByRole('link', { name: /Blanquette/i });
+    expect(link2).toHaveAttribute('href', '/catalogue/r-2');
   });
 
   it('formate la meta de ligne : pluralise les ingrédients et affiche les convives', async () => {
