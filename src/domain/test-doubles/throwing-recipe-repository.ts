@@ -1,3 +1,4 @@
+import { type Recipe } from '../entities/recipe';
 import { type RecipeRepository } from '../ports/recipe-repository';
 
 export class ThrowingRecipeRepository implements RecipeRepository {
@@ -8,6 +9,10 @@ export class ThrowingRecipeRepository implements RecipeRepository {
   }
 
   save(): Promise<void> {
+    return Promise.reject(new Error(this.message));
+  }
+
+  findAll(): Promise<Recipe[]> {
     return Promise.reject(new Error(this.message));
   }
 }
