@@ -1,4 +1,5 @@
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
+import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
 import { StubAuthGateway } from '../../domain/test-doubles/stub-auth-gateway';
 import { StubIdGenerator } from '../../domain/test-doubles/stub-id-generator';
@@ -11,6 +12,9 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
     authGateway: StubAuthGateway.withoutSession(),
     createRecipe: createRecipeUseCase({
       idGenerator: StubIdGenerator.create(),
+      recipeRepository: InMemoryRecipeRepository.create(),
+    }),
+    listRecipes: listRecipesUseCase({
       recipeRepository: InMemoryRecipeRepository.create(),
     }),
   };
