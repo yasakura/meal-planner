@@ -104,6 +104,30 @@ describe('Recipe', () => {
     expect(recipe.convivesReference).toBe(1);
   });
 
+  it('sans instructions fournies → recipe.instructions est undefined', () => {
+    const recipe = RecipeBuilder.aRecipe().withoutInstructions().build();
+
+    expect(recipe.instructions).toBeUndefined();
+  });
+
+  it('préserve à l’identique les instructions multi-lignes (sauts de ligne internes intacts)', () => {
+    const recipe = RecipeBuilder.aRecipe().withInstructions('Étape 1\n- sel\n- poivre').build();
+
+    expect(recipe.instructions).toBe('Étape 1\n- sel\n- poivre');
+  });
+
+  it('traite des instructions composées uniquement de blancs/sauts de ligne comme absentes', () => {
+    const recipe = RecipeBuilder.aRecipe().withInstructions('   \n  ').build();
+
+    expect(recipe.instructions).toBeUndefined();
+  });
+
+  it('trim les instructions aux bords uniquement, sans toucher les sauts de ligne internes', () => {
+    const recipe = RecipeBuilder.aRecipe().withInstructions('  a\nb  ').build();
+
+    expect(recipe.instructions).toBe('a\nb');
+  });
+
   it('gèle la recette ET son tableau d’ingrédients (immuable au runtime)', () => {
     const recipe = RecipeBuilder.aRecipe().build();
 

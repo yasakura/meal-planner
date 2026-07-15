@@ -7,6 +7,7 @@ export type CreateRecipeInput = {
   title: string;
   ingredients: Ingredient[];
   convivesReference?: number;
+  instructions?: string;
 };
 
 export function createRecipeUseCase(deps: {
