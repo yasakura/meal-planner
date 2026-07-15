@@ -17,6 +17,10 @@ export class InMemoryRecipeRepository implements RecipeRepository {
     return Promise.resolve();
   }
 
+  findAll(): Promise<Recipe[]> {
+    return Promise.resolve(this.all());
+  }
+
   all(): Recipe[] {
     return [...this.recipes.values()];
   }

@@ -42,4 +42,9 @@ describe('App', () => {
     renderApp();
     expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
   });
+
+  it('rend le catalogue', () => {
+    renderApp();
+    expect(screen.getByText('Catalogue')).toBeInTheDocument();
+  });
 });
