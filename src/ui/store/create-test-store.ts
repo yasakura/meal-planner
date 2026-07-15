@@ -1,4 +1,5 @@
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
+import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
 import { StubAuthGateway } from '../../domain/test-doubles/stub-auth-gateway';
@@ -15,6 +16,9 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
       recipeRepository: InMemoryRecipeRepository.create(),
     }),
     listRecipes: listRecipesUseCase({
+      recipeRepository: InMemoryRecipeRepository.create(),
+    }),
+    getRecipe: getRecipeUseCase({
       recipeRepository: InMemoryRecipeRepository.create(),
     }),
   };

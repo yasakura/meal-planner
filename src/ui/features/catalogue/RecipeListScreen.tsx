@@ -1,4 +1,5 @@
 import { styled, keyframes } from 'styled-components';
+import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
 
@@ -113,11 +114,15 @@ const List = styled.ul`
 `;
 
 const Row = styled.li`
+  border-bottom: 1px solid ${colors.hairline};
+`;
+
+const RowLink = styled(Link)`
   display: flex;
   flex-direction: column;
   gap: ${space.xs}px;
   padding: ${space.md}px 0;
-  border-bottom: 1px solid ${colors.hairline};
+  text-decoration: none;
 `;
 
 const RowTitle = styled.h2`
@@ -188,8 +193,10 @@ function Body(props: RecipeListScreenProps) {
         <List>
           {props.recipes.map((recipe) => (
             <Row key={recipe.id}>
-              <RowTitle>{recipe.title}</RowTitle>
-              <RowMeta>{recipe.meta}</RowMeta>
+              <RowLink to={`/catalogue/${recipe.id}`}>
+                <RowTitle>{recipe.title}</RowTitle>
+                <RowMeta>{recipe.meta}</RowMeta>
+              </RowLink>
             </Row>
           ))}
         </List>
