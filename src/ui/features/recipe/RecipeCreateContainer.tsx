@@ -18,6 +18,7 @@ export function RecipeCreateContainer() {
   const [title, setTitle] = useState('');
   const [convives, setConvives] = useState(4);
   const [rows, setRows] = useState<IngredientRow[]>([emptyRow()]);
+  const [instructions, setInstructions] = useState('');
 
   const { status } = useAppSelector(selectRecipeCreation);
   const dispatch = useAppDispatch();
@@ -32,7 +33,7 @@ export function RecipeCreateContainer() {
     const ingredients = validRows.map((row) =>
       createIngredient({ name: row.name, quantity: Number(row.quantity), unit: row.unit }),
     );
-    dispatch(createRecipe({ title, ingredients, convivesReference: convives }));
+    dispatch(createRecipe({ title, ingredients, convivesReference: convives, instructions }));
   };
 
   const handleRowChange = (index: number, patch: Partial<IngredientRow>) => {
@@ -49,8 +50,10 @@ export function RecipeCreateContainer() {
       title={title}
       convives={convives}
       rows={rows}
+      instructions={instructions}
       onTitleChange={setTitle}
       onConvivesChange={setConvives}
+      onInstructionsChange={setInstructions}
       onRowChange={handleRowChange}
       onAddRow={handleAddRow}
       onRemoveRow={handleRemoveRow}

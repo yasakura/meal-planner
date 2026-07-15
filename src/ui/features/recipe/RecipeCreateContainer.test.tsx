@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
@@ -103,6 +103,7 @@ describe('RecipeCreateContainer', () => {
       title: 'Poulet rôti',
       ingredients: [{ name: 'Poulet', quantity: 500, unit: 'kg' }],
       convivesReference: 4,
+      instructions: '',
     });
   });
 
@@ -242,5 +243,53 @@ describe('RecipeCreateContainer', () => {
     await user.type(screen.getByLabelText(/quantité/i), '500');
 
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
+  });
+
+  it('rend un champ multi-lignes « Préparation »', () => {
+    renderWithStore();
+
+    const preparation = screen.getByRole('textbox', { name: /préparation/i });
+    expect(preparation.tagName).toBe('TEXTAREA');
+  });
+
+  // Test clé : le textarea préserve les sauts de ligne à l'identique (\n et \n\n)
+  // et l'input brut est forwardé au use-case sans normalisation dans le container.
+  it('préserve les sauts de ligne de la préparation et forwarde l’input brut', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+
+    const preparation = screen.getByRole('textbox', { name: /préparation/i });
+    fireEvent.change(preparation, { target: { value: 'Étape 1\n\n- sel\n- poivre' } });
+    expect(preparation).toHaveValue('Étape 1\n\n- sel\n- poivre');
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(spy.state.captured?.instructions).toBe('Étape 1\n\n- sel\n- poivre');
+  });
+
+  // [guard] vert à l'écriture : submitDisabled ne référence pas instructions.
+  // Verrouille que la préparation ne gate PAS le submit et que l'input est forwardé
+  // avec instructions vide (chaîne brute, non normalisée) quand rien n'est saisi.
+  it('n’exige pas la préparation : submit activé et forwardé avec instructions vide', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+
+    const submit = screen.getByRole('button', { name: /enregistrer/i });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(spy.state.captured?.instructions).toBe('');
   });
 });

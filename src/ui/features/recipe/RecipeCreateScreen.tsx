@@ -15,8 +15,10 @@ export type RecipeCreateScreenProps = {
   title: string;
   convives: number;
   rows: IngredientRow[];
+  instructions: string;
   onTitleChange: (value: string) => void;
   onConvivesChange: (value: number) => void;
+  onInstructionsChange: (value: string) => void;
   onRowChange: (index: number, patch: Partial<IngredientRow>) => void;
   onAddRow: () => void;
   onRemoveRow: (index: number) => void;
@@ -68,6 +70,19 @@ const Input = styled.input`
   font-family: ${fonts.body};
   font-size: 16px;
   color: ${colors.ink};
+`;
+
+const Textarea = styled.textarea`
+  width: 100%;
+  box-sizing: border-box;
+  background: ${colors.sand};
+  border: none;
+  border-radius: ${radii.sm};
+  padding: ${space.md}px;
+  font-family: ${fonts.body};
+  font-size: 16px;
+  color: ${colors.ink};
+  resize: vertical;
 `;
 
 const Select = styled.select`
@@ -231,6 +246,17 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
         <AddButton type="button" onClick={props.onAddRow}>
           Ajouter un ingrédient
         </AddButton>
+
+        <Field>
+          <Label htmlFor="recipe-instructions">Préparation</Label>
+          <Textarea
+            id="recipe-instructions"
+            name="instructions"
+            rows={6}
+            value={props.instructions}
+            onChange={(event) => props.onInstructionsChange(event.target.value)}
+          />
+        </Field>
 
         <SubmitButton type="submit" disabled={props.submitDisabled}>
           {props.submitLabel}
