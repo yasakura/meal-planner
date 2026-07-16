@@ -54,7 +54,9 @@ describe('App', () => {
 
   it('rend le catalogue', () => {
     renderApp();
-    expect(screen.getByText('Catalogue')).toBeInTheDocument();
+    // Cible le <h1> de la page : depuis l'ajout de la nav, un <Link> "Catalogue"
+    // partage ce texte → on vise explicitement le titre de page (rupture volontaire).
+    expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
   });
 
   it('affiche le chrome partagé (en-tête env + logout) sur la route détail aussi', () => {
@@ -67,6 +69,20 @@ describe('App', () => {
   it('redirige la racine / vers /catalogue', () => {
     renderAppAt('/');
 
-    expect(screen.getByText('Catalogue')).toBeInTheDocument();
+    // Cf. « rend le catalogue » : on vise le titre de page, pas le lien de nav.
+    expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
+  });
+
+  it('rend l’écran Menu sur la route /menu', () => {
+    renderAppAt('/menu');
+
+    expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
+  });
+
+  it('affiche la navigation Catalogue / Menu dans le chrome partagé', () => {
+    renderApp();
+
+    expect(screen.getByRole('link', { name: /catalogue/i })).toHaveAttribute('href', '/catalogue');
+    expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
   });
 });
