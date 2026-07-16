@@ -19,10 +19,15 @@ export function generateMenuUseCase(deps: {
       throw new Error('Impossible de générer un menu sans recette');
     }
     const repas: Repas[] = [];
+    let pool = recipes;
     for (let jour = 0; jour < days; jour += 1) {
       for (const creneau of CRENEAUX) {
-        const index = deps.randomPicker.nextIndex(recipes.length);
-        const recipe = elementAt(recipes, index);
+        if (pool.length === 0) {
+          pool = recipes;
+        }
+        const index = deps.randomPicker.nextIndex(pool.length);
+        const recipe = elementAt(pool, index);
+        pool = pool.filter((_, i) => i !== index);
         repas.push(createRepas({ jour, creneau, slots: [createSlot({ recipeId: recipe.id })] }));
       }
     }
