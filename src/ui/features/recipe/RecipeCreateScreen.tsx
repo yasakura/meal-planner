@@ -69,6 +69,15 @@ const Label = styled.label`
   display: block;
 `;
 
+// Intitulé de section (ex. « Ingrédients ») : même poids/teinte que les labels de champ,
+// pour une hiérarchie interne homogène. Non lié à un contrôle → simple <p>.
+const SectionLabel = styled.p`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.inkSecondary};
+  margin: ${space.sm}px 0 0;
+`;
+
 const Input = styled.input`
   width: 100%;
   box-sizing: border-box;
@@ -204,6 +213,8 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
             onChange={(event) => props.onConvivesChange(Number(event.target.value))}
           />
         </Field>
+
+        <SectionLabel>Ingrédients</SectionLabel>
 
         {props.rows.map((row, index) => (
           <IngredientRowBox key={index}>

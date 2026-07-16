@@ -90,6 +90,12 @@ describe('RecipeCreateContainer', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it('rend un intitulé de section « Ingrédients »', () => {
+    renderWithStore();
+
+    expect(screen.getByText('Ingrédients')).toBeInTheDocument();
+  });
+
   it('désactive « Enregistrer » à l’ouverture (titre vide, ligne vide)', () => {
     renderWithStore();
 
