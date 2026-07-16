@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { createIngredient } from '../../../domain/entities/ingredient';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -22,6 +23,13 @@ export function RecipeCreateContainer() {
 
   const { status } = useAppSelector(selectRecipeCreation);
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+
+  // Enregistrement réussi → retour à la liste, qui se remonte et re-fetch (nouvelle recette
+  // visible). Sur erreur, on reste sur la page pour afficher le message.
+  useEffect(() => {
+    if (status === 'success') navigate('/catalogue');
+  }, [status, navigate]);
 
   const validRows = rows.filter(isValidRow);
   const submitDisabled = status === 'saving' || title.trim() === '' || validRows.length === 0;

@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { Link } from 'react-router-dom';
 
 import { UNITS, type Unit } from '../../../domain/entities/ingredient';
 import { tokens } from '../../theme/tokens';
@@ -35,6 +36,14 @@ const Page = styled.div`
   display: flex;
   flex-direction: column;
   padding: ${space.lg}px;
+`;
+
+const BackLink = styled(Link)`
+  font-family: ${fonts.body};
+  font-size: 14px;
+  color: ${colors.inkSecondary};
+  text-decoration: none;
+  margin-bottom: ${space.lg}px;
 `;
 
 const Title = styled.h1`
@@ -164,6 +173,7 @@ function unitLabel(unit: Unit): string {
 export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
   return (
     <Page>
+      <BackLink to="/catalogue">← Recettes</BackLink>
       <Title>Nouvelle recette</Title>
 
       <Form

@@ -21,11 +21,29 @@ const Page = styled.div`
   padding: ${space.lg}px;
 `;
 
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: ${space.xl}px;
+`;
+
 const Title = styled.h1`
   font-family: ${fonts.serif};
   font-size: 28px;
   color: ${colors.ink};
-  margin: 0 0 ${space.xl}px;
+  margin: 0;
+`;
+
+const AddLink = styled(Link)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-right: -${space.sm}px;
+  color: ${colors.terracotta};
+  text-decoration: none;
 `;
 
 const spin = keyframes`
@@ -207,7 +225,24 @@ function Body(props: RecipeListScreenProps) {
 export function RecipeListScreen(props: RecipeListScreenProps) {
   return (
     <Page>
-      <Title>Recettes</Title>
+      <Header>
+        <Title>Recettes</Title>
+        <AddLink to="/catalogue/nouvelle" aria-label="Ajouter une recette">
+          <svg
+            width={24}
+            height={24}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+        </AddLink>
+      </Header>
       <Body {...props} />
     </Page>
   );

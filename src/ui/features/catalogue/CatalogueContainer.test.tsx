@@ -95,6 +95,28 @@ describe('CatalogueContainer', () => {
     expect(count).toBe(2);
   });
 
+  it('rend une action « + » liant vers la page de création /catalogue/nouvelle', async () => {
+    renderWithStore(async () => [
+      RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build(),
+    ]);
+
+    await screen.findByText('Ratatouille');
+    expect(screen.getByRole('link', { name: /ajouter une recette/i })).toHaveAttribute(
+      'href',
+      '/catalogue/nouvelle',
+    );
+  });
+
+  it('rend l’action « + » aussi sur l’état vide (en plus du CTA)', async () => {
+    renderWithStore(spyReturning([]).fn);
+
+    await screen.findByText(/aucune recette/i);
+    expect(screen.getByRole('link', { name: /ajouter une recette/i })).toHaveAttribute(
+      'href',
+      '/catalogue/nouvelle',
+    );
+  });
+
   it('rend chaque recette comme un lien vers son détail', async () => {
     const recipes = [
       RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build(),

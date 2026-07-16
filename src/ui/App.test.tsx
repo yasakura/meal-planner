@@ -70,9 +70,31 @@ describe('App', () => {
     expect(screen.getByText(/Firebase : non configuré/)).toBeInTheDocument();
   });
 
-  it('rend l’écran de création de recette', () => {
-    renderApp();
+  it('rend l’écran de création de recette sur /catalogue/nouvelle', () => {
+    // DÉMÉNAGEMENT VOLONTAIRE : le formulaire n'est plus rendu inline sous /catalogue (liste) ;
+    // il vit désormais sur sa page dédiée /catalogue/nouvelle.
+    renderAppAt('/catalogue/nouvelle');
     expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
+  });
+
+  it('ne rend PAS le formulaire de création sous /catalogue (liste seule)', () => {
+    renderApp();
+    expect(screen.queryByText('Nouvelle recette')).not.toBeInTheDocument();
+  });
+
+  it('/catalogue/nouvelle rend le formulaire, pas le détail (précédence statique sur :id)', async () => {
+    renderAppAt('/catalogue/nouvelle');
+
+    expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
+    expect(screen.queryByText(/introuvable/i)).not.toBeInTheDocument();
+  });
+
+  it('/catalogue/:id rend le détail (route dynamique), pas le formulaire', async () => {
+    renderAppAt('/catalogue/r-1');
+
+    // Recette absente du store par défaut → écran détail « introuvable ».
+    expect(await screen.findByRole('alert')).toHaveTextContent(/introuvable/i);
+    expect(screen.queryByText('Nouvelle recette')).not.toBeInTheDocument();
   });
 
   it('rend le catalogue', () => {
