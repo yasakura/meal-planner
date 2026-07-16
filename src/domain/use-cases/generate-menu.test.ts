@@ -13,7 +13,7 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r3').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      randomPicker: SequenceRandomPicker.returning(0, 1, 2, 3),
+      randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 
     const menu = await generateMenu({ days: 2 });
@@ -45,18 +45,69 @@ describe('generateMenuUseCase', () => {
     expect(recipeIds).toEqual(['r2', 'r0']);
   });
 
-  it('tire AVEC REMISE : une même recette peut remplir plusieurs slots (catalogue plus petit que le nombre de slots)', async () => {
+  it('tire SANS REMISE dans une tournée : deux slots consécutifs ne réutilisent pas la même recette', async () => {
+    const recipeRepository = InMemoryRecipeRepository.create();
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r0').build());
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
+    const generateMenu = generateMenuUseCase({
+      recipeRepository,
+      // 1 jour = 2 slots. Index 0 sur le POOL COURANT à chaque slot :
+      // slot1 pool [r0,r1] idx0 → r0 (retiré) ; slot2 pool [r1] idx0 → r1.
+      randomPicker: SequenceRandomPicker.returning(0, 0),
+    });
+
+    const menu = await generateMenu({ days: 1 });
+
+    expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual(['r0', 'r1']);
+  });
+
+  it('recharge le pool à l’épuisement (nouvelle tournée) : le cycle recommence sur le catalogue complet', async () => {
+    const recipeRepository = InMemoryRecipeRepository.create();
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r0').build());
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
+    const generateMenu = generateMenuUseCase({
+      recipeRepository,
+      // 2 jours = 4 slots. Index 0 sur le pool courant à chaque slot :
+      // tournée 1 : r0 puis r1 (pool vidé) ; recharge ; tournée 2 : r0 puis r1.
+      randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
+    });
+
+    const menu = await generateMenu({ days: 2 });
+
+    expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual(['r0', 'r1', 'r0', 'r1']);
+  });
+
+  it('force la répétition quand le catalogue (1 recette) est plus petit que le nombre de slots (recharge à chaque slot)', async () => {
     const recipeRepository = InMemoryRecipeRepository.create();
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('only').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 1 jour = 2 slots, catalogue d'1 recette : l'index 0 est retiré deux fois.
+      // 1 jour = 2 slots, catalogue d'1 recette : pool vidé puis rechargé à chaque slot.
       randomPicker: SequenceRandomPicker.returning(0, 0),
     });
 
     const menu = await generateMenu({ days: 1 });
 
     expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual(['only', 'only']);
+  });
+
+  it('assure une diversité complète quand le catalogue (4 recettes) couvre exactement les 4 slots', async () => {
+    const recipeRepository = InMemoryRecipeRepository.create();
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r0').build());
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r2').build());
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r3').build());
+    const generateMenu = generateMenuUseCase({
+      recipeRepository,
+      // 2 jours = 4 slots. Toujours idx0 du pool courant qui rétrécit :
+      // r0 (pool [r0,r1,r2,r3]), r1 (pool [r1,r2,r3]), r2 (pool [r2,r3]), r3 (pool [r3]).
+      randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
+    });
+
+    const menu = await generateMenu({ days: 2 });
+
+    const recipeIds = menu.repas.map((r) => r.slots[0]?.recipeId);
+    expect(new Set(recipeIds).size).toBe(4);
   });
 
   it.each([0, -1, 1.5])('rejette un nombre de jours invalide (%s)', async (days) => {
