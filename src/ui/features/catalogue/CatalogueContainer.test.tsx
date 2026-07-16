@@ -69,7 +69,7 @@ describe('CatalogueContainer', () => {
     const spy = spyReturning([]);
     const { container } = renderWithStore(spy.fn);
 
-    expect(await screen.findByText(/catalogue est vide/i)).toBeInTheDocument();
+    expect(await screen.findByText(/aucune recette/i)).toBeInTheDocument();
     expect(container.querySelector('svg')).toBeInTheDocument();
   });
 
@@ -95,6 +95,28 @@ describe('CatalogueContainer', () => {
     expect(count).toBe(2);
   });
 
+  it('rend une action « + » liant vers la page de création /catalogue/nouvelle', async () => {
+    renderWithStore(async () => [
+      RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build(),
+    ]);
+
+    await screen.findByText('Ratatouille');
+    expect(screen.getByRole('link', { name: /ajouter une recette/i })).toHaveAttribute(
+      'href',
+      '/catalogue/nouvelle',
+    );
+  });
+
+  it('rend l’action « + » aussi sur l’état vide (en plus du CTA)', async () => {
+    renderWithStore(spyReturning([]).fn);
+
+    await screen.findByText(/aucune recette/i);
+    expect(screen.getByRole('link', { name: /ajouter une recette/i })).toHaveAttribute(
+      'href',
+      '/catalogue/nouvelle',
+    );
+  });
+
   it('rend chaque recette comme un lien vers son détail', async () => {
     const recipes = [
       RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build(),
@@ -108,7 +130,7 @@ describe('CatalogueContainer', () => {
     expect(link2).toHaveAttribute('href', '/catalogue/r-2');
   });
 
-  it('formate la meta de ligne : pluralise les ingrédients et affiche les convives', async () => {
+  it('formate la meta de ligne : pluralise les ingrédients et affiche les personnes', async () => {
     const twoIngredients = RecipeBuilder.aRecipe()
       .withId('r-1')
       .withTitle('Salade complète')
@@ -127,7 +149,7 @@ describe('CatalogueContainer', () => {
     const spy = spyReturning([twoIngredients, oneIngredient]);
     renderWithStore(spy.fn);
 
-    expect(await screen.findByText('2 ingrédients · 4 convives')).toBeInTheDocument();
-    expect(screen.getByText('1 ingrédient · 2 convives')).toBeInTheDocument();
+    expect(await screen.findByText('2 ingrédients · 4 personnes')).toBeInTheDocument();
+    expect(screen.getByText('1 ingrédient · 2 personnes')).toBeInTheDocument();
   });
 });

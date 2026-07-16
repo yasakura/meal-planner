@@ -197,7 +197,7 @@ function Body(props: RecipeDetailScreenProps) {
 export function RecipeDetailScreen(props: RecipeDetailScreenProps) {
   return (
     <Page>
-      <BackLink to="/catalogue">← Catalogue</BackLink>
+      <BackLink to="/catalogue">← Recettes</BackLink>
       <Body {...props} />
     </Page>
   );

@@ -25,7 +25,7 @@ function renderAt(id: string, getRecipe: GetRecipe) {
 }
 
 describe('RecipeDetailContainer', () => {
-  it('charge la recette de l’URL et affiche titre, convives et ingrédients', async () => {
+  it('charge la recette de l’URL et affiche titre, personnes et ingrédients', async () => {
     const recipe = RecipeBuilder.aRecipe()
       .withId('r-1')
       .withTitle('Ratatouille')
@@ -44,30 +44,30 @@ describe('RecipeDetailContainer', () => {
     renderAt('r-1', getRecipe);
 
     expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
-    expect(screen.getByText(/Pour 4 convives/)).toBeInTheDocument();
+    expect(screen.getByText(/Pour 4 personnes/)).toBeInTheDocument();
     expect(screen.getByText('Tomates')).toBeInTheDocument();
     expect(screen.getByText('200 g')).toBeInTheDocument();
     expect(screen.getByText('Œufs')).toBeInTheDocument();
     expect(screen.getByText('3 pièce')).toBeInTheDocument();
   });
 
-  it('accorde « convive » au singulier pour une recette à 1 convive', async () => {
+  it('accorde « personne » au singulier pour une recette à 1 personne', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-solo').withConvivesReference(1).build();
     const getRecipe: GetRecipe = async () => recipe;
 
     renderAt('r-solo', getRecipe);
 
-    expect(await screen.findByText('Pour 1 convive')).toBeInTheDocument();
-    expect(screen.queryByText('Pour 1 convives')).not.toBeInTheDocument();
+    expect(await screen.findByText('Pour 1 personne')).toBeInTheDocument();
+    expect(screen.queryByText('Pour 1 personnes')).not.toBeInTheDocument();
   });
 
-  it('accorde « convives » au pluriel dès 2 convives', async () => {
+  it('accorde « personnes » au pluriel dès 2 personnes', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-duo').withConvivesReference(2).build();
     const getRecipe: GetRecipe = async () => recipe;
 
     renderAt('r-duo', getRecipe);
 
-    expect(await screen.findByText('Pour 2 convives')).toBeInTheDocument();
+    expect(await screen.findByText('Pour 2 personnes')).toBeInTheDocument();
   });
 
   it('affiche la section Préparation avec les instructions quand elles existent', async () => {
@@ -177,13 +177,14 @@ describe('RecipeDetailContainer', () => {
     expect(calls).toBe(0);
   });
 
-  it('offre toujours un lien retour vers le catalogue', async () => {
+  it('offre toujours un lien retour vers la liste des recettes', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
     renderAt('r-1', async () => recipe);
     await screen.findByText('Ratatouille');
 
-    const link = screen.getByRole('link', { name: /catalogue/i });
+    // Libellé « ← Recettes » (renommage visible) ; la route de retour reste /catalogue.
+    const link = screen.getByRole('link', { name: /recettes/i });
     expect(link).toHaveAttribute('href', '/catalogue');
   });
 });

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
@@ -8,8 +9,13 @@ import { App } from './App';
 import { createTestStore } from './store/create-test-store';
 
 // App rend désormais <Routes> (routing) → montage sous <Router> requis en plus du <Provider>.
-// On monte sur /catalogue : cette route affiche le Layout partagé (en-tête env + logout)
-// et son contenu (catalogue + création). Assertions métier inchangées.
+// On monte sur /catalogue : cette route affiche le Layout partagé (TopBar marque + icône Compte,
+// tab bar basse, sheet Compte) et son contenu (catalogue + création).
+//
+// RUPTURE VOLONTAIRE (refonte du chrome, validée) : la déconnexion et l'info env ne sont plus
+// dans un bandeau texte toujours visible, mais derrière l'icône Compte de la TopBar, dans une
+// sheet fermée par défaut. Les assertions correspondantes ont été reciblées sur ce parcours
+// (ouvrir la sheet puis vérifier). Intention préservée, pas affaiblie.
 function renderAppAt(path: string) {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
   return render(
@@ -31,46 +37,85 @@ describe('App', () => {
     expect(screen.getByText(/Meal Planner/)).toBeInTheDocument();
   });
 
-  it('rend le bouton de déconnexion', () => {
+  it('ne montre pas la sheet Compte au montage', () => {
     renderApp();
+
+    expect(screen.queryByText('Compte')).not.toBeInTheDocument();
+  });
+
+  it('permet la déconnexion via la sheet ouverte par l’icône Compte', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
 
     expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
   });
 
-  it("affiche 'env : dev' par défaut dans le badge d'environnement", () => {
+  it("affiche 'Environnement : dev' dans la sheet Compte (env dev)", async () => {
+    const user = userEvent.setup();
     renderApp();
-    expect(screen.getByText(/env : dev/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
+
+    expect(screen.getByText(/Environnement : dev/)).toBeInTheDocument();
   });
 
-  it("affiche 'Firebase : non configuré' par défaut dans le badge d'environnement", () => {
+  it("affiche 'Firebase : non configuré' dans la sheet Compte par défaut", async () => {
+    const user = userEvent.setup();
     renderApp();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
+
     expect(screen.getByText(/Firebase : non configuré/)).toBeInTheDocument();
   });
 
-  it('rend l’écran de création de recette', () => {
-    renderApp();
+  it('rend l’écran de création de recette sur /catalogue/nouvelle', () => {
+    // DÉMÉNAGEMENT VOLONTAIRE : le formulaire n'est plus rendu inline sous /catalogue (liste) ;
+    // il vit désormais sur sa page dédiée /catalogue/nouvelle.
+    renderAppAt('/catalogue/nouvelle');
     expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
+  });
+
+  it('ne rend PAS le formulaire de création sous /catalogue (liste seule)', () => {
+    renderApp();
+    expect(screen.queryByText('Nouvelle recette')).not.toBeInTheDocument();
+  });
+
+  it('/catalogue/nouvelle rend le formulaire, pas le détail (précédence statique sur :id)', async () => {
+    renderAppAt('/catalogue/nouvelle');
+
+    expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
+    expect(screen.queryByText(/introuvable/i)).not.toBeInTheDocument();
+  });
+
+  it('/catalogue/:id rend le détail (route dynamique), pas le formulaire', async () => {
+    renderAppAt('/catalogue/r-1');
+
+    // Recette absente du store par défaut → écran détail « introuvable ».
+    expect(await screen.findByRole('alert')).toHaveTextContent(/introuvable/i);
+    expect(screen.queryByText('Nouvelle recette')).not.toBeInTheDocument();
   });
 
   it('rend le catalogue', () => {
     renderApp();
-    // Cible le <h1> de la page : depuis l'ajout de la nav, un <Link> "Catalogue"
-    // partage ce texte → on vise explicitement le titre de page (rupture volontaire).
-    expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
+    // Libellé visible « Recettes » (renommage volontaire) ; on vise le <h1> de la page, distinct
+    // du lien de nav « Recettes » de la tab bar.
+    expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 
-  it('affiche le chrome partagé (en-tête env + logout) sur la route détail aussi', () => {
+  it('affiche le chrome partagé (marque + accès Compte) sur la route détail aussi', () => {
     renderAppAt('/catalogue/r-1');
 
-    expect(screen.getByText(/Meal Planner/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
+    expect(screen.getByText('Meal Planner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /compte/i })).toBeInTheDocument();
   });
 
   it('redirige la racine / vers /catalogue', () => {
     renderAppAt('/');
 
     // Cf. « rend le catalogue » : on vise le titre de page, pas le lien de nav.
-    expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 
   it('rend l’écran Menu sur la route /menu', () => {
@@ -79,10 +124,10 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
   });
 
-  it('affiche la navigation Catalogue / Menu dans le chrome partagé', () => {
+  it('affiche la navigation Recettes / Menu dans le chrome partagé', () => {
     renderApp();
 
-    expect(screen.getByRole('link', { name: /catalogue/i })).toHaveAttribute('href', '/catalogue');
+    expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
   });
 });

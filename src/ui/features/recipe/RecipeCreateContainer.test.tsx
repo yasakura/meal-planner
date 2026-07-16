@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type CreateRecipe, type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
@@ -9,11 +10,25 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import { RecipeCreateContainer } from './RecipeCreateContainer';
 
+// La page de création navigue vers /catalogue à l'enregistrement réussi (useNavigate) et expose
+// un lien retour (Link) → montage sous <Router> requis ; on espionne la navigation.
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+beforeEach(() => {
+  mockNavigate.mockClear();
+});
+
 function renderWithStore(createRecipe?: CreateRecipe) {
   const store = createTestStore(createRecipe ? { createRecipe } : undefined);
   const view = render(
     <Provider store={store}>
-      <RecipeCreateContainer />
+      <MemoryRouter>
+        <RecipeCreateContainer />
+      </MemoryRouter>
     </Provider>,
   );
   return { store, ...view };
@@ -30,16 +45,55 @@ function capturingSpy() {
 }
 
 describe('RecipeCreateContainer', () => {
-  it('rend le titre, une ligne ingrédient, le champ convives (=4) et les boutons ajouter/enregistrer', () => {
+  it('rend le titre, une ligne ingrédient, le champ personnes (=4) et les boutons ajouter/enregistrer', () => {
     renderWithStore();
 
     expect(screen.getByLabelText(/titre/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/nom/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/quantité/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/unité/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/convives/i)).toHaveValue(4);
+    expect(screen.getByLabelText(/personnes/i)).toHaveValue(4);
     expect(screen.getByRole('button', { name: /ajouter un ingrédient/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
+  });
+
+  it('offre un lien retour « ← Recettes » vers /catalogue', () => {
+    renderWithStore();
+
+    expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
+  });
+
+  it('navigue vers /catalogue après un enregistrement réussi', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue'));
+  });
+
+  it('ne navigue pas si l’enregistrement échoue (reste sur la page)', async () => {
+    const user = userEvent.setup();
+    const failing: CreateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
+    renderWithStore(failing);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    await screen.findByRole('alert');
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('rend un intitulé de section « Ingrédients »', () => {
+    renderWithStore();
+
+    expect(screen.getByText('Ingrédients')).toBeInTheDocument();
   });
 
   it('désactive « Enregistrer » à l’ouverture (titre vide, ligne vide)', () => {
@@ -132,12 +186,12 @@ describe('RecipeCreateContainer', () => {
     expect(options).toEqual(['g', 'kg', 'ml', 'l', 'pièce']);
   });
 
-  it('convives éditable : passé à 2, il est forwardé comme convivesReference', async () => {
+  it('personnes éditable : passé à 2, il est forwardé comme convivesReference', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
     renderWithStore(spy.fn);
 
-    const convives = screen.getByLabelText(/convives/i);
+    const convives = screen.getByLabelText(/personnes/i);
     await user.clear(convives);
     await user.type(convives, '2');
 

@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { Link } from 'react-router-dom';
 
 import { UNITS, type Unit } from '../../../domain/entities/ingredient';
 import { tokens } from '../../theme/tokens';
@@ -37,6 +38,14 @@ const Page = styled.div`
   padding: ${space.lg}px;
 `;
 
+const BackLink = styled(Link)`
+  font-family: ${fonts.body};
+  font-size: 14px;
+  color: ${colors.inkSecondary};
+  text-decoration: none;
+  margin-bottom: ${space.lg}px;
+`;
+
 const Title = styled.h1`
   font-family: ${fonts.serif};
   font-size: 28px;
@@ -58,6 +67,15 @@ const Label = styled.label`
   color: ${colors.inkSecondary};
   margin-bottom: ${space.xs}px;
   display: block;
+`;
+
+// Intitulé de section (ex. « Ingrédients ») : même poids/teinte que les labels de champ,
+// pour une hiérarchie interne homogène. Non lié à un contrôle → simple <p>.
+const SectionLabel = styled.p`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.inkSecondary};
+  margin: ${space.sm}px 0 0;
 `;
 
 const Input = styled.input`
@@ -164,6 +182,7 @@ function unitLabel(unit: Unit): string {
 export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
   return (
     <Page>
+      <BackLink to="/catalogue">← Recettes</BackLink>
       <Title>Nouvelle recette</Title>
 
       <Form
@@ -184,7 +203,7 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
         </Field>
 
         <Field>
-          <Label htmlFor="recipe-convives">Convives</Label>
+          <Label htmlFor="recipe-convives">Personnes</Label>
           <Input
             id="recipe-convives"
             name="convives"
@@ -194,6 +213,8 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
             onChange={(event) => props.onConvivesChange(Number(event.target.value))}
           />
         </Field>
+
+        <SectionLabel>Ingrédients</SectionLabel>
 
         {props.rows.map((row, index) => (
           <IngredientRowBox key={index}>
