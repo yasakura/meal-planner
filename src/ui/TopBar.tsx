@@ -9,6 +9,9 @@ export type TopBarProps = {
 };
 
 const Bar = styled.header`
+  position: sticky;
+  top: 0;
+  z-index: 10;
   height: 52px;
   background: ${colors.white};
   border-bottom: 1px solid ${colors.hairline};

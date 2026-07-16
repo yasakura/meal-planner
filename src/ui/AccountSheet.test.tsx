@@ -111,6 +111,14 @@ describe('AccountSheet', () => {
     expect(screen.queryByText('Compte')).not.toBeInTheDocument();
   });
 
+  it('rend le contenu dans un portail sur document.body (hors du conteneur du Layout)', () => {
+    const { container } = render(sheet(true));
+
+    const panel = screen.getByTestId('account-sheet-panel');
+    expect(document.body).toContainElement(panel);
+    expect(container).not.toContainElement(panel);
+  });
+
   it('se démonte immédiatement à la fermeture quand prefers-reduced-motion', () => {
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true } as MediaQueryList));
 

@@ -5,6 +5,7 @@ import { styled } from 'styled-components';
 import { env } from '../config/env';
 import { AccountSheet } from './AccountSheet';
 import { BottomTabBar } from './BottomTabBar';
+import { ScrollToTop } from './ScrollToTop';
 import { TopBar } from './TopBar';
 import { LogoutButton } from './features/auth/LogoutButton';
 import { tokens } from './theme/tokens';
@@ -26,10 +27,12 @@ const Content = styled.main`
 `;
 
 // Tab bar collante en bas du viewport : sticky réserve sa place dans le flux (ne recouvre pas
-// le contenu), et la garde visible quand la route défile.
+// le contenu), et la garde visible quand la route défile. z-index aligné sur la TopBar (10),
+// sous l'overlay de la sheet (100).
 const StickyTabBar = styled.div`
   position: sticky;
   bottom: 0;
+  z-index: 10;
 `;
 
 // Chrome applicatif partagé par toutes les routes (sous l'auth) : barre haute (marque + compte),
@@ -39,6 +42,7 @@ export function Layout() {
 
   return (
     <Shell>
+      <ScrollToTop />
       <TopBar onAccountClick={() => setAccountOpen(true)} />
       <Content>
         <Outlet />

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { styled } from 'styled-components';
 
 import { tokens } from './theme/tokens';
@@ -15,6 +16,8 @@ export type AccountSheetProps = {
 const Overlay = styled.div<{ $closing: boolean }>`
   position: fixed;
   inset: 0;
+  /* Au-dessus du chrome sticky (TopBar & tab bar en z-index 10) : la sheet couvre tout l'écran. */
+  z-index: 100;
   background: rgba(31, 27, 22, 0.5);
   display: flex;
   flex-direction: column;
@@ -111,7 +114,10 @@ export function AccountSheet({ isOpen, onClose, env, children }: AccountSheetPro
     if (isClosing) setClosing(false);
   };
 
-  return (
+  // Rendu via portail sur document.body : la sheet devient enfant direct du body, donc au-dessus
+  // de tout le chrome sticky (TopBar, tab bar), qui vivent dans des contextes d'empilement séparés
+  // où le z-index de l'overlay ne se comparerait pas.
+  return createPortal(
     <Overlay $closing={isClosing} data-testid="account-sheet-overlay" onClick={onClose}>
       <Panel
         $closing={isClosing}
@@ -145,6 +151,7 @@ export function AccountSheet({ isOpen, onClose, env, children }: AccountSheetPro
         )}
         {children}
       </Panel>
-    </Overlay>
+    </Overlay>,
+    document.body,
   );
 }
