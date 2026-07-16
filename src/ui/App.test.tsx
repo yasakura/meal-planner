@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
@@ -8,8 +9,13 @@ import { App } from './App';
 import { createTestStore } from './store/create-test-store';
 
 // App rend désormais <Routes> (routing) → montage sous <Router> requis en plus du <Provider>.
-// On monte sur /catalogue : cette route affiche le Layout partagé (en-tête env + logout)
-// et son contenu (catalogue + création). Assertions métier inchangées.
+// On monte sur /catalogue : cette route affiche le Layout partagé (TopBar marque + icône Compte,
+// tab bar basse, sheet Compte) et son contenu (catalogue + création).
+//
+// RUPTURE VOLONTAIRE (refonte du chrome, validée) : la déconnexion et l'info env ne sont plus
+// dans un bandeau texte toujours visible, mais derrière l'icône Compte de la TopBar, dans une
+// sheet fermée par défaut. Les assertions correspondantes ont été reciblées sur ce parcours
+// (ouvrir la sheet puis vérifier). Intention préservée, pas affaiblie.
 function renderAppAt(path: string) {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
   return render(
@@ -31,19 +37,36 @@ describe('App', () => {
     expect(screen.getByText(/Meal Planner/)).toBeInTheDocument();
   });
 
-  it('rend le bouton de déconnexion', () => {
+  it('ne montre pas la sheet Compte au montage', () => {
     renderApp();
+
+    expect(screen.queryByText('Compte')).not.toBeInTheDocument();
+  });
+
+  it('permet la déconnexion via la sheet ouverte par l’icône Compte', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
 
     expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
   });
 
-  it("affiche 'env : dev' par défaut dans le badge d'environnement", () => {
+  it("affiche 'Environnement : dev' dans la sheet Compte (env dev)", async () => {
+    const user = userEvent.setup();
     renderApp();
-    expect(screen.getByText(/env : dev/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
+
+    expect(screen.getByText(/Environnement : dev/)).toBeInTheDocument();
   });
 
-  it("affiche 'Firebase : non configuré' par défaut dans le badge d'environnement", () => {
+  it("affiche 'Firebase : non configuré' dans la sheet Compte par défaut", async () => {
+    const user = userEvent.setup();
     renderApp();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
+
     expect(screen.getByText(/Firebase : non configuré/)).toBeInTheDocument();
   });
 
@@ -59,11 +82,11 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
   });
 
-  it('affiche le chrome partagé (en-tête env + logout) sur la route détail aussi', () => {
+  it('affiche le chrome partagé (marque + accès Compte) sur la route détail aussi', () => {
     renderAppAt('/catalogue/r-1');
 
-    expect(screen.getByText(/Meal Planner/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
+    expect(screen.getByText('Meal Planner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /compte/i })).toBeInTheDocument();
   });
 
   it('redirige la racine / vers /catalogue', () => {
