@@ -1,0 +1,33 @@
+import { CRENEAUX } from '../entities/creneau';
+import { createMenu, type Menu } from '../entities/menu';
+import { createRepas, type Repas } from '../entities/repas';
+import { createSlot } from '../entities/slot';
+import { elementAt } from '../lib/element-at';
+import { type RandomPicker } from '../ports/random-picker';
+import { type RecipeRepository } from '../ports/recipe-repository';
+
+export function generateMenuUseCase(deps: {
+  recipeRepository: RecipeRepository;
+  randomPicker: RandomPicker;
+}): (input: { days: number }) => Promise<Menu> {
+  return async ({ days }) => {
+    if (!Number.isInteger(days) || days < 1) {
+      throw new Error('Le nombre de jours doit être un entier positif');
+    }
+    const recipes = await deps.recipeRepository.findAll();
+    if (recipes.length === 0) {
+      throw new Error('Impossible de générer un menu sans recette');
+    }
+    const repas: Repas[] = [];
+    for (let jour = 0; jour < days; jour += 1) {
+      for (const creneau of CRENEAUX) {
+        const index = deps.randomPicker.nextIndex(recipes.length);
+        const recipe = elementAt(recipes, index);
+        repas.push(createRepas({ jour, creneau, slots: [createSlot({ recipeId: recipe.id })] }));
+      }
+    }
+    return createMenu({ repas });
+  };
+}
+
+export type GenerateMenu = ReturnType<typeof generateMenuUseCase>;
