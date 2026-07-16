@@ -184,7 +184,7 @@ function Body(props: RecipeListScreenProps) {
             <path d="M4 18.5A1.5 1.5 0 0 1 5.5 17H20" />
             <path d="M20 17v3H5.5A1.5 1.5 0 0 1 4 18.5V5.5" />
           </EmptyIcon>
-          <EmptyTitle>Le catalogue est vide</EmptyTitle>
+          <EmptyTitle>Aucune recette</EmptyTitle>
           <EmptyText>Crée ta première recette pour la retrouver ici</EmptyText>
         </EmptyState>
       );
@@ -207,7 +207,7 @@ function Body(props: RecipeListScreenProps) {
 export function RecipeListScreen(props: RecipeListScreenProps) {
   return (
     <Page>
-      <Title>Catalogue</Title>
+      <Title>Recettes</Title>
       <Body {...props} />
     </Page>
   );

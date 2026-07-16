@@ -30,14 +30,14 @@ function capturingSpy() {
 }
 
 describe('RecipeCreateContainer', () => {
-  it('rend le titre, une ligne ingrédient, le champ convives (=4) et les boutons ajouter/enregistrer', () => {
+  it('rend le titre, une ligne ingrédient, le champ personnes (=4) et les boutons ajouter/enregistrer', () => {
     renderWithStore();
 
     expect(screen.getByLabelText(/titre/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/nom/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/quantité/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/unité/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/convives/i)).toHaveValue(4);
+    expect(screen.getByLabelText(/personnes/i)).toHaveValue(4);
     expect(screen.getByRole('button', { name: /ajouter un ingrédient/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
   });
@@ -132,12 +132,12 @@ describe('RecipeCreateContainer', () => {
     expect(options).toEqual(['g', 'kg', 'ml', 'l', 'pièce']);
   });
 
-  it('convives éditable : passé à 2, il est forwardé comme convivesReference', async () => {
+  it('personnes éditable : passé à 2, il est forwardé comme convivesReference', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
     renderWithStore(spy.fn);
 
-    const convives = screen.getByLabelText(/convives/i);
+    const convives = screen.getByLabelText(/personnes/i);
     await user.clear(convives);
     await user.type(convives, '2');
 

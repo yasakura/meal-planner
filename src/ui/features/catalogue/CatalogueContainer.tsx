@@ -11,7 +11,7 @@ import {
 
 function toItem(recipe: Recipe): RecipeListItem {
   const count = recipe.ingredients.length;
-  const meta = `${count} ingrédient${count > 1 ? 's' : ''} · ${recipe.convivesReference} convives`;
+  const meta = `${count} ingrédient${count > 1 ? 's' : ''} · ${recipe.convivesReference} personnes`;
   return { id: recipe.id, title: recipe.title, meta };
 }
 

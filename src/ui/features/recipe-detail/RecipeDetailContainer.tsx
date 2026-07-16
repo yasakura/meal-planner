@@ -24,7 +24,7 @@ function toLoadedProps(recipe: Recipe): RecipeDetailScreenProps {
   return {
     status: 'loaded',
     title: recipe.title,
-    convivesLabel: `Pour ${convives} convive${convives > 1 ? 's' : ''}`,
+    convivesLabel: `Pour ${convives} personne${convives > 1 ? 's' : ''}`,
     ingredients,
     instructions: recipe.instructions ?? null,
   };

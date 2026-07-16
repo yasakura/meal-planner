@@ -1,10 +1,18 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import { AccountSheet } from './AccountSheet';
 
 const envDev = { name: 'dev', firebaseProjectId: 'meal-planner-dev-c9e0d' };
+
+function sheet(isOpen: boolean) {
+  return (
+    <AccountSheet isOpen={isOpen} onClose={() => {}} env={envDev}>
+      <button type="button">Se déconnecter</button>
+    </AccountSheet>
+  );
+}
 
 describe('AccountSheet', () => {
   it('ne rend rien quand fermée', () => {
@@ -89,4 +97,33 @@ describe('AccountSheet', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('reste montée pendant la fermeture, puis se démonte au transitionEnd du panneau', () => {
+    const { rerender } = render(sheet(true));
+    expect(screen.getByText('Compte')).toBeInTheDocument();
+
+    rerender(sheet(false));
+    // Animation de sortie en cours → le contenu doit rester monté.
+    expect(screen.getByText('Compte')).toBeInTheDocument();
+
+    fireEvent.transitionEnd(screen.getByTestId('account-sheet-panel'));
+
+    expect(screen.queryByText('Compte')).not.toBeInTheDocument();
+  });
+
+  it('se démonte immédiatement à la fermeture quand prefers-reduced-motion', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true } as MediaQueryList));
+
+    const { rerender } = render(sheet(true));
+    expect(screen.getByText('Compte')).toBeInTheDocument();
+
+    rerender(sheet(false));
+
+    // Aucun transitionEnd attendu : démontage immédiat.
+    expect(screen.queryByText('Compte')).not.toBeInTheDocument();
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });

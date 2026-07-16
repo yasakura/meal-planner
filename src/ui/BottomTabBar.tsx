@@ -73,7 +73,7 @@ export function BottomTabBar() {
     <Bar>
       <Tab to="/catalogue">
         {CatalogueIcon}
-        <span>Catalogue</span>
+        <span>Recettes</span>
       </Tab>
       <Tab to="/menu">
         {MenuIcon}

@@ -13,10 +13,11 @@ function renderAt(path: string) {
 }
 
 describe('BottomTabBar', () => {
-  it('rend un onglet Catalogue vers /catalogue', () => {
+  // Libellé « Recettes » (renommage visible volontaire) ; la route reste /catalogue.
+  it('rend un onglet Recettes vers /catalogue', () => {
     renderAt('/catalogue');
 
-    expect(screen.getByRole('link', { name: /catalogue/i })).toHaveAttribute('href', '/catalogue');
+    expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
   });
 
   it('rend un onglet Menu vers /menu', () => {
@@ -29,6 +30,6 @@ describe('BottomTabBar', () => {
     renderAt('/menu');
 
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: /catalogue/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /recettes/i })).not.toHaveAttribute('aria-current');
   });
 });

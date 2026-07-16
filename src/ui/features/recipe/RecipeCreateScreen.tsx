@@ -184,7 +184,7 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
         </Field>
 
         <Field>
-          <Label htmlFor="recipe-convives">Convives</Label>
+          <Label htmlFor="recipe-convives">Personnes</Label>
           <Input
             id="recipe-convives"
             name="convives"

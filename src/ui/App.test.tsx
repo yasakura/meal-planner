@@ -77,9 +77,9 @@ describe('App', () => {
 
   it('rend le catalogue', () => {
     renderApp();
-    // Cible le <h1> de la page : depuis l'ajout de la nav, un <Link> "Catalogue"
-    // partage ce texte → on vise explicitement le titre de page (rupture volontaire).
-    expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
+    // Libellé visible « Recettes » (renommage volontaire) ; on vise le <h1> de la page, distinct
+    // du lien de nav « Recettes » de la tab bar.
+    expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 
   it('affiche le chrome partagé (marque + accès Compte) sur la route détail aussi', () => {
@@ -93,7 +93,7 @@ describe('App', () => {
     renderAppAt('/');
 
     // Cf. « rend le catalogue » : on vise le titre de page, pas le lien de nav.
-    expect(screen.getByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 
   it('rend l’écran Menu sur la route /menu', () => {
@@ -102,10 +102,10 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
   });
 
-  it('affiche la navigation Catalogue / Menu dans le chrome partagé', () => {
+  it('affiche la navigation Recettes / Menu dans le chrome partagé', () => {
     renderApp();
 
-    expect(screen.getByRole('link', { name: /catalogue/i })).toHaveAttribute('href', '/catalogue');
+    expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
   });
 });

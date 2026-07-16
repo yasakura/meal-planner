@@ -33,7 +33,7 @@ describe('Layout', () => {
     expect(screen.getByText('Meal Planner')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /compte/i })).toBeInTheDocument();
     // BottomTabBar
-    expect(screen.getByRole('link', { name: /catalogue/i })).toHaveAttribute('href', '/catalogue');
+    expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
     // Outlet
     expect(screen.getByText('contenu de route')).toBeInTheDocument();
