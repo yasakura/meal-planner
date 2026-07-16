@@ -1,10 +1,13 @@
+import { useState } from 'react';
+
 import { type Menu } from '../../../domain/entities/menu';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { generateMenu, NO_RECIPES, selectMenu } from './menu-slice';
 import { MenuScreen, type MenuDay, type MenuScreenProps } from './MenuScreen';
 
-const DAYS = 7;
+// Fenêtre par défaut : 2 semaines (14 jours).
+const DEFAULT_DAYS = 14;
 
 const CRENEAU_LABELS: Record<string, string> = {
   midi: 'Midi',
@@ -42,6 +45,7 @@ function errorMessage(error: string | null): string {
 export function MenuContainer() {
   const { status, menu, recipes, error } = useAppSelector(selectMenu);
   const dispatch = useAppDispatch();
+  const [days, setDays] = useState(DEFAULT_DAYS);
 
   let props: MenuScreenProps;
   if (status === 'loading') {
@@ -50,16 +54,23 @@ export function MenuContainer() {
     props = {
       status: 'error',
       message: errorMessage(error),
-      onRetry: () => dispatch(generateMenu(DAYS)),
+      onRetry: () => dispatch(generateMenu(days)),
     };
   } else if (status === 'success' && menu !== null && recipes !== null) {
     props = {
       status: 'success',
       days: toDays(menu, recipes),
-      onRegenerate: () => dispatch(generateMenu(DAYS)),
+      selectedDays: days,
+      onSelect: setDays,
+      onRegenerate: () => dispatch(generateMenu(days)),
     };
   } else {
-    props = { status: 'idle', onGenerate: () => dispatch(generateMenu(DAYS)) };
+    props = {
+      status: 'idle',
+      selectedDays: days,
+      onSelect: setDays,
+      onGenerate: () => dispatch(generateMenu(days)),
+    };
   }
 
   return <MenuScreen {...props} />;

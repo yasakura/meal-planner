@@ -8,10 +8,21 @@ export type MenuSlotLine = { key: string; creneauLabel: string; title: string };
 export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
 
 export type MenuScreenProps =
-  | { status: 'idle'; onGenerate: () => void }
+  | {
+      status: 'idle';
+      selectedDays: number;
+      onSelect: (days: number) => void;
+      onGenerate: () => void;
+    }
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  | { status: 'success'; days: MenuDay[]; onRegenerate: () => void };
+  | {
+      status: 'success';
+      days: MenuDay[];
+      selectedDays: number;
+      onSelect: (days: number) => void;
+      onRegenerate: () => void;
+    };
 
 const Page = styled.div`
   min-height: 100dvh;
@@ -27,6 +38,47 @@ const Title = styled.h1`
   color: ${colors.ink};
   margin: 0 0 ${space.xl}px;
 `;
+
+const Segmented = styled.div`
+  align-self: flex-start;
+  display: inline-flex;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${tokens.radii.sm};
+  overflow: hidden;
+  margin-bottom: ${space.lg}px;
+`;
+
+const Segment = styled.button<{ $active: boolean }>`
+  background: ${(props) => (props.$active ? colors.terracotta : 'transparent')};
+  color: ${(props) => (props.$active ? colors.creme : colors.inkSecondary)};
+  border: none;
+  font-family: ${fonts.body};
+  font-size: 14px;
+  padding: ${space.sm}px ${space.lg}px;
+`;
+
+const MENU_WINDOWS: { days: number; label: string }[] = [
+  { days: 7, label: '1 semaine' },
+  { days: 14, label: '2 semaines' },
+];
+
+function WindowSelector(props: { selectedDays: number; onSelect: (days: number) => void }) {
+  return (
+    <Segmented role="group" aria-label="Fenêtre du menu">
+      {MENU_WINDOWS.map((window) => (
+        <Segment
+          key={window.days}
+          type="button"
+          $active={props.selectedDays === window.days}
+          aria-pressed={props.selectedDays === window.days}
+          onClick={() => props.onSelect(window.days)}
+        >
+          {window.label}
+        </Segment>
+      ))}
+    </Segmented>
+  );
+}
 
 const PrimaryButton = styled.button`
   align-self: flex-start;
@@ -148,7 +200,8 @@ function Body(props: MenuScreenProps) {
     case 'idle':
       return (
         <>
-          <Intro>Génère un menu de la semaine à partir de tes recettes.</Intro>
+          <Intro>Génère un menu à partir de tes recettes.</Intro>
+          <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
           <PrimaryButton type="button" onClick={props.onGenerate}>
             Générer un menu
           </PrimaryButton>
@@ -196,6 +249,7 @@ function Body(props: MenuScreenProps) {
               </DaySection>
             ))}
           </DayList>
+          <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
           <PrimaryButton type="button" onClick={props.onRegenerate}>
             Régénérer
           </PrimaryButton>
