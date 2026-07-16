@@ -2,7 +2,9 @@ import { auth, db } from '../../config/firebase';
 import { FirebaseAuthGateway } from '../../data/firebase-auth-gateway';
 import { FirestoreRecipeRepository } from '../../data/firestore-recipe-repository';
 import { IdGeneratorCuid2 } from '../../data/id-generator-cuid2';
+import { MathRandomPicker } from '../../data/math-random-picker';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
+import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { createStore } from './store';
@@ -19,5 +21,9 @@ export function createAppStore() {
     }),
     listRecipes: listRecipesUseCase({ recipeRepository }),
     getRecipe: getRecipeUseCase({ recipeRepository }),
+    generateMenu: generateMenuUseCase({
+      recipeRepository,
+      randomPicker: MathRandomPicker.create(),
+    }),
   });
 }

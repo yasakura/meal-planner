@@ -1,4 +1,6 @@
+import { MathRandomPicker } from '../../data/math-random-picker';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
+import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
@@ -20,6 +22,10 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
     }),
     getRecipe: getRecipeUseCase({
       recipeRepository: InMemoryRecipeRepository.create(),
+    }),
+    generateMenu: generateMenuUseCase({
+      recipeRepository: InMemoryRecipeRepository.create(),
+      randomPicker: MathRandomPicker.create(() => 0),
     }),
   };
 
