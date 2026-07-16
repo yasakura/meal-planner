@@ -50,7 +50,8 @@ describe('MenuContainer', () => {
     expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
   });
 
-  it('génère un menu de 7 jours au clic sur « Générer un menu »', async () => {
+  // RUPTURE VOLONTAIRE : la fenêtre par défaut passe de 7 à 14 jours (« 2 semaines »).
+  it('génère un menu de 14 jours (« 2 semaines ») par défaut au clic sur « Générer un menu »', async () => {
     const user = userEvent.setup();
     const daysReceived: number[] = [];
     const generate: GenerateMenu = async ({ days }) => {
@@ -62,7 +63,53 @@ describe('MenuContainer', () => {
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
 
     expect(await screen.findByText('Jour 1')).toBeInTheDocument();
+    expect(daysReceived).toEqual([14]);
+  });
+
+  it('rend le sélecteur segmenté avec « 2 semaines » actif par défaut', () => {
+    renderWithStore({});
+
+    expect(screen.getByRole('button', { name: /2 semaines/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /1 semaine/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('sélectionner « 1 semaine » puis Générer → generateMenu avec 7 jours', async () => {
+    const user = userEvent.setup();
+    const daysReceived: number[] = [];
+    const generate: GenerateMenu = async ({ days }) => {
+      daysReceived.push(days);
+      return aMenu();
+    };
+    renderWithStore({ generateMenu: generate, listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /1 semaine/i }));
+    // Le segment sélectionné devient actif.
+    expect(screen.getByRole('button', { name: /1 semaine/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    expect(await screen.findByText('Jour 1')).toBeInTheDocument();
     expect(daysReceived).toEqual([7]);
+  });
+
+  it('propose encore le sélecteur segmenté sur l’état « menu généré »', async () => {
+    const user = userEvent.setup();
+    renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByRole('button', { name: /régénérer/i });
+
+    expect(screen.getByRole('button', { name: /1 semaine/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2 semaines/i })).toBeInTheDocument();
   });
 
   it('affiche l’indicateur de chargement pendant la génération', async () => {
