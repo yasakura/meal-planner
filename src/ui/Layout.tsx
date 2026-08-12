@@ -8,6 +8,7 @@ import { BottomTabBar } from './BottomTabBar';
 import { ScrollToTop } from './ScrollToTop';
 import { TopBar } from './TopBar';
 import { LogoutButton } from './features/auth/LogoutButton';
+import { ConvivesContainer } from './features/convives/ConvivesContainer';
 import { tokens } from './theme/tokens';
 
 const { colors, space } = tokens;
@@ -55,6 +56,7 @@ export function Layout() {
         onClose={() => setAccountOpen(false)}
         env={{ name: env.name, firebaseProjectId: env.firebase.projectId }}
       >
+        <ConvivesContainer />
         <LogoutButton />
       </AccountSheet>
     </Shell>
