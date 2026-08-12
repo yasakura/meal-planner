@@ -1,12 +1,15 @@
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
 
 import { type AuthGateway } from '../../domain/ports/auth-gateway';
+import { type AddConvive } from '../../domain/use-cases/add-convive';
 import { type CreateRecipe } from '../../domain/use-cases/create-recipe';
 import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
 import { type GetRecipe } from '../../domain/use-cases/get-recipe';
+import { type ListConvives } from '../../domain/use-cases/list-convives';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
 import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
+import { convivesReducer } from '../features/convives/convives-slice';
 import { menuReducer } from '../features/menu/menu-slice';
 import { recipeDetailReducer } from '../features/recipe-detail/recipe-detail-slice';
 import { recipeReducer } from '../features/recipe/recipe-slice';
@@ -17,6 +20,8 @@ export type AppDependencies = {
   listRecipes: ListRecipes;
   getRecipe: GetRecipe;
   generateMenu: GenerateMenu;
+  listConvives: ListConvives;
+  addConvive: AddConvive;
 };
 
 const rootReducer = combineReducers({
@@ -25,6 +30,7 @@ const rootReducer = combineReducers({
   catalogue: catalogueReducer,
   recipeDetail: recipeDetailReducer,
   menu: menuReducer,
+  convives: convivesReducer,
 });
 
 export function createStore(dependencies: AppDependencies) {

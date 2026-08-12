@@ -48,4 +48,18 @@ describe('Layout', () => {
 
     expect(screen.getByText('Compte')).toBeInTheDocument();
   });
+
+  it('monte la section Foyer dans la sheet, à côté de l’info dev et de la déconnexion', async () => {
+    const user = userEvent.setup();
+    renderLayout();
+
+    await user.click(screen.getByRole('button', { name: /compte/i }));
+
+    expect(screen.getByText('Foyer')).toBeInTheDocument();
+    expect(await screen.findByText('Personne dans le foyer pour le moment.')).toBeInTheDocument();
+    // La sheet reste la sheet Compte : titre, info dev et déconnexion inchangés.
+    expect(screen.getByText('Compte')).toBeInTheDocument();
+    expect(screen.getByText(/Environnement : dev/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
+  });
 });
