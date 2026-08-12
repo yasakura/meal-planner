@@ -4,8 +4,9 @@ import { type Convive } from '../../../domain/entities/convive';
 import { type AddConvive } from '../../../domain/use-cases/add-convive';
 import { type ListConvives } from '../../../domain/use-cases/list-convives';
 import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
+import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { createTestStore } from '../../store/create-test-store';
-import { addConvive, loadConvives, selectConvives } from './convives-slice';
+import { addConvive, conviveNameEdited, loadConvives, selectConvives } from './convives-slice';
 
 function twoConvives(): Convive[] {
   return [
@@ -24,6 +25,7 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'idle',
       addError: null,
+      addSubjectName: null,
     });
   });
 
@@ -40,6 +42,7 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'idle',
       addError: null,
+      addSubjectName: null,
     });
   });
 
@@ -62,6 +65,7 @@ describe('convives slice', () => {
       error: 'Firestore indisponible',
       addStatus: 'idle',
       addError: null,
+      addSubjectName: null,
     });
   });
 
@@ -77,6 +81,7 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'idle',
       addError: null,
+      addSubjectName: null,
     });
   });
 
@@ -102,6 +107,7 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'idle',
       addError: null,
+      addSubjectName: null,
     });
   });
 
@@ -145,6 +151,7 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'error',
       addError: 'Firestore indisponible',
+      addSubjectName: 'Rory',
     });
   });
 
@@ -165,7 +172,190 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'adding',
       addError: null,
+      addSubjectName: 'Rory',
     });
+  });
+
+  // Le dépôt injoignable n'est ni un succès (foyer vide) ni un échec quelconque : c'est un
+  // état à part, sinon l'UI n'a aucun moyen de choisir le bon constat.
+  it('un chargement empêché par un dépôt injoignable prend un status distinct de error', async () => {
+    const unavailable: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({ listConvives: unavailable });
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState())).toEqual({
+      status: 'unavailable',
+      convives: [],
+      error: null,
+      addStatus: 'idle',
+      addError: null,
+      addSubjectName: null,
+    });
+  });
+
+  // Troisième issue de l'ajout : ni confirmé, ni perdu. La liste ne bouge pas — afficher le
+  // convive laisserait croire qu'il est enregistré, alors que la file d'écritures Firestore
+  // est en mémoire seulement et ne survit pas à la fermeture de l'onglet.
+  it('un ajout que le serveur n’a pas acquitté prend un addStatus distinct de error, sans rejoindre la liste', async () => {
+    const existing = twoConvives();
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => existing,
+      addConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+
+    await store.dispatch(addConvive({ name: 'Rory' }));
+
+    expect(selectConvives(store.getState())).toEqual({
+      status: 'success',
+      convives: existing,
+      error: null,
+      addStatus: 'unconfirmed',
+      addError: null,
+      addSubjectName: 'Rory',
+    });
+  });
+
+  // Le store est un SINGLETON DE SESSION (main.tsx) : sans remise à zéro, un constat d'ajout
+  // survit à la fermeture de la sheet et l'écran finit par se contredire — il affiche le
+  // convive dans la liste tout en affirmant que l'ajout n'a pas pu être confirmé, bouton
+  // verrouillé jusqu'au rechargement de l'onglet.
+  it('un nouveau chargement remet le cycle de vie de l’ajout au repos', async () => {
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      addConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).addStatus).toBe('idle');
+    expect(selectConvives(store.getState()).addError).toBeNull();
+  });
+
+  // Chemin RÉEL, pas théorique : la sheet démonte le container à la fermeture et le remonte à
+  // l'ouverture, ce qui redéclenche `loadConvives`. Un thunk RTK n'est pas annulé par un
+  // démontage — fermer puis rouvrir pendant les 5 s de la borne fait donc partir un
+  // chargement alors que l'écriture est TOUJOURS en vol. Réarmer le bouton à cet instant
+  // rendrait un second appui possible, donc un second id, donc le doublon.
+  it('un chargement qui démarre pendant un ajout en vol ne réarme pas le formulaire', async () => {
+    const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      addConvive: pendingAdd,
+    });
+    void store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('adding');
+
+    void store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).addStatus).toBe('adding');
+  });
+
+  // Après un remontage réel pendant un ajout en vol, le container repart avec un `name` vide
+  // (useState frais) : sans mémoire côté store, le constat ne saurait plus de quel ajout il
+  // parle. Le prénom doit donc vivre dans le slice, et survivre au rejet.
+  it('un ajout non acquitté retient le prénom soumis pour pouvoir le nommer', async () => {
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({ addConvive: unacknowledged });
+
+    await store.dispatch(addConvive({ name: 'Rory' }));
+
+    expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
+  });
+
+  it('saisir un prénom oublie le prénom soumis avec le reste du cycle de vie', async () => {
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({ addConvive: unacknowledged });
+    await store.dispatch(addConvive({ name: 'Rory' }));
+
+    store.dispatch(conviveNameEdited());
+
+    expect(selectConvives(store.getState()).addSubjectName).toBeNull();
+  });
+
+  // Même règle que `addStatus`/`addError`, sans exception : un prénom orphelin qui survivrait
+  // à un rechargement ferait parler un constat d'un ajout qui n'existe plus.
+  it('un nouveau chargement oublie le prénom soumis, sauf si l’ajout est encore en vol', async () => {
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      addConvive: unacknowledged,
+    });
+    await store.dispatch(addConvive({ name: 'Rory' }));
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).addSubjectName).toBeNull();
+  });
+
+  it('un chargement qui démarre pendant un ajout en vol conserve le prénom soumis', () => {
+    const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({ addConvive: pendingAdd });
+    void store.dispatch(addConvive({ name: 'Rory' }));
+
+    void store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
+  });
+
+  // DÉCISION, pas effet de bord de la garde générique : ré-entrer dans l'écran repart propre,
+  // quelle qu'ait été l'issue de l'ajout précédent. Un échec d'ajout est un constat aussi
+  // périmé qu'un ajout non confirmé une fois qu'on recharge le foyer.
+  it('un nouveau chargement efface aussi un échec d’ajout, pas seulement un constat non confirmé', async () => {
+    const failingAdd: AddConvive = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      addConvive: failingAdd,
+    });
+    await store.dispatch(loadConvives());
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('error');
+    expect(selectConvives(store.getState()).addError).toBe('Firestore indisponible');
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).addStatus).toBe('idle');
+    expect(selectConvives(store.getState()).addError).toBeNull();
+  });
+
+  // Déclencheur qui ne suppose RIEN du cycle de montage. `AccountSheet` garde son panneau
+  // monté pendant les 200 ms de sa transition de sortie : rouvrir avant la fin annule le
+  // démontage sans qu'aucun cycle n'ait lieu, et `loadConvives` n'est jamais rejoué.
+  // Mesuré : réouverture à 80 ms → pas de remontage ; à 700 ms → remontage.
+  it('saisir un prénom remet le cycle de vie de l’ajout au repos', async () => {
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      addConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+
+    store.dispatch(conviveNameEdited());
+
+    expect(selectConvives(store.getState()).addStatus).toBe('idle');
+    expect(selectConvives(store.getState()).addError).toBeNull();
+  });
+
+  // Symétrique de la condition posée sur `loadConvives.pending`, pour la même raison : une
+  // écriture en vol ne se déverrouille pas. Taper pendant les 5 s de la borne ne doit rien
+  // débloquer, sinon un second appui produit un second id, donc le doublon.
+  it('saisir un prénom pendant un ajout en vol ne déverrouille rien', () => {
+    const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({ addConvive: pendingAdd });
+    void store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('adding');
+
+    store.dispatch(conviveNameEdited());
+
+    expect(selectConvives(store.getState()).addStatus).toBe('adding');
   });
 
   it('un ajout réussi ramène le cycle de vie au repos et efface l’erreur de l’échec précédent', async () => {
@@ -191,6 +381,7 @@ describe('convives slice', () => {
       error: null,
       addStatus: 'idle',
       addError: null,
+      addSubjectName: null,
     });
   });
 });
