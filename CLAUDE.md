@@ -48,8 +48,12 @@ Toute modification d'un test hors périmètre requiert une justification explici
 - Tests par couche :
   - `domain/` : Vitest + adapters in-memory + Test Data Builders.
   - `data/` : **pas d'émulateur Java** (projet front — décision 2026-07-14). Pattern **humble object** : le mapping pur entité ↔ document Firestore vit dans un module pur, testé à 100 % en Vitest (aucune infra) ; les adapters Firestore sont des wrappers minces (I/O only), au plus un test léger avec SDK mocké. Le **round-trip réel** et les **Security Rules** ne sont **pas** testés automatiquement pour l'instant — à revisiter via un émulateur Docker si le besoin se confirme.
+    - **Garde-fou compensatoire, obligatoire** : un test statique vérifie que **toute collection Firestore référencée dans `src/data/**` possède un bloc `match` dans `firestore.rules`**. Firestore refuse par défaut toute collection non déclarée : sans ce garde, un adapter neuf produit une feature **verte en test unitaire et morte dans le navigateur**. Purement statique, aucun émulateur requis. _(Vécu FR-3 : la collection `convives` n'était pas déclarée, 355 tests verts et écran cassé — 2026-08-11.)_
+    - `firestore.rules` **n'est pas la source de vérité tant qu'il n'est pas déployé** : rien dans le repo ne le pousse. Après toute modification, déploiement explicite puis vérification.
   - `ui/` containers : RTL + store Redux réel + ports mockés.
 - **Mutation testing sur le code de PRODUCTION** : `domain/`, `data/`, et la **logique UI** (`src/ui/features/**/*.ts` — slices/thunks). **Exclus du `mutate`** : les fichiers de test ET l'**infra de test** (`domain/test-doubles/**`, `domain/test-builders/**`) — sinon elle pollue le score avec des mutants équivalents. Gate **bloquant global** `break: 80` (`stryker.conf.mjs`). Les mutants équivalents de boilerplate RTK (nom du type d'action, `name` de slice, objet de config `createSlice`) sont tolérés dès lors que **toute la logique de transition est couverte** — le seuil étant global, ils ne fragilisent pas le gate.
+- **Le score global n'est PAS reproductible : le run isolé fait foi.** Avec `timeoutMS: 10000` et la concurrence par défaut, un même mutant est compté « tué par timeout » quand la machine est chargée et « survivant » quand elle respire. Sur un même commit, `convives-slice.ts` est sorti à **100 % en run complet et 85 % en run ciblé** (2026-08-12). Pour **tout fichier modifié dans un cycle**, rejouer `npx stryker run --mutate '<fichier>'` et **rapporter ce chiffre-là** ; le global ne vaut que comme signal de fumée. Conséquence : un survivant réel peut se cacher derrière un timeout, et le score global ne vaut rien comme mesure de progression.
+- **Les `.tsx` ne sont pas mutés du tout.** `mutate` ne couvre que `src/ui/features/**/*.ts` : containers et composants n'ont **aucun** filet de mutation, seule la RTL les protège. Un chiffre de mutation flatteur ne dit donc **rien** sur un container. Corollaire de design : une décision (quand vider un champ, quand verrouiller un bouton) appartient au slice, qui est muté — pas au container, qui ne l'est pas. _(Vécu FR-3 : échec d'ajout silencieux et double-soumission vivaient tous deux dans un `.tsx`, à 99 % de mutation — trouvés par la revue indépendante, 2026-08-11.)_
 
 ## Diff d'architecture (fin de cycle)
 
@@ -75,6 +79,24 @@ Pas de littéraux verbeux dans les tests. Un builder par entity, chaînable, ave
 RecipeBuilder.aRecipe().withoutTitle().build();
 ```
 
+## Convention Test Doubles — un double ne promet jamais plus que son port
+
+Un test-double **plus aimable que son contrat** rend la suite verte sur un comportement que le vrai adapter n'a jamais eu. C'est un faux vert structurel : aucun test ne peut l'attraper, puisque c'est le référentiel lui-même qui ment.
+
+- Là où un port déclare une garantie **absente** (« ordre non garanti », unicité non garantie…), le double doit **exercer activement cette absence** — ordre délibérément mélangé par un shuffle déterministe et seedé, jamais l'ordre d'insertion « par gentillesse ». Tout test qui dépendait implicitement de la garantie casse alors dans `domain/`, des semaines avant que l'adapter réel n'existe.
+- Quand le contrat d'un port change, **le double change dans la même passe**. Un double en retard sur son port est un faux vert en attente.
+- _Vécu FR-3 : `InMemoryConviveRepository` rendait l'ordre d'insertion, Firestore rend l'ordre des identifiants (cuid2, non triable par construction). Suite verte, écran affichant un ordre aléatoire à chaque rechargement — trouvé par la vérif navigateur seulement (2026-08-11)._
+
+## État transitoire et rémanence du store
+
+Le store Redux est un **singleton de session** (créé une fois dans `main.tsx`) : démonter un composant ne réinitialise que son `useState`, jamais l'état du slice. Or les tests RTL créent un store neuf par test — chacun est donc un « premier montage de la session », et **l'état résiduel est structurellement invisible**.
+
+- Tout champ représentant un **événement transitoire** (constat, résultat one-shot, statut d'une opération ponctuelle) doit avoir un **déclencheur de remise à zéro explicitement spécifié et testé**. Sans lui, le constat ressurgit sur un montage ultérieur sans aucun rapport.
+- Toute feature portant un tel champ a **au moins un test qui démonte puis remonte sur le MÊME store** (`unmount()` puis nouveau `render()` en réutilisant l'instance). Un test qui recrée le store ne peut pas reproduire le défaut.
+- **Ne jamais supposer qu'un démontage a lieu** : un conteneur animé (sheet, modale, drawer) reste monté pendant sa transition de sortie, et une réouverture pendant l'animation peut annuler le démontage sans qu'aucun cycle ne se produise. Si la remise à zéro dépend d'un remontage, ce remontage doit être **prouvé**, pas déduit.
+- Attention au symétrique : une remise à zéro **inconditionnelle** peut déverrouiller une opération encore en vol — un thunk RTK n'est pas annulé par un démontage. La condition se justifie par un test rouge, pas par une intuition.
+- _Vécu : `addStatus: 'unconfirmed'` survivait toute la session ; l'écran affichait le convive dans la liste **et** « l'ajout n'a pas pu être confirmé », bouton verrouillé jusqu'au rechargement complet de l'onglet (2026-08-12)._
+
 ## Vérification post-TDD (features `src/ui/` uniquement)
 
 Les tests unitaires garantissent que **le code fait ce que le test dit** ; la vérif navigateur garantit que **la feature fait ce que l'utilisateur voit**. Les deux sont requis.
@@ -87,7 +109,8 @@ Pour toute feature qui touche `src/ui/`, après le cycle TDD, l'agent principal 
 4. `mcp__chrome-devtools__list_console_messages` — aucune erreur autre que HMR/Vite.
 5. Si interaction requise : `click`, `fill`, `press_key` puis re-screenshot pour valider l'état après.
 6. **États non-nominaux** : le screenshot du seul chemin nominal ne suffit pas. Vérifier explicitement les états pertinents pour l'écran — **vide** (liste/collection sans données), **erreur** (échec de chargement/validation), **chargement** (spinner/skeleton). Un état non pertinent est écarté explicitement, pas oublié.
-7. Screenshot final joint au report utilisateur.
+7. **Sortie de chaque état non-nominal** : vérifier l'**entrée** dans un état ne suffit pas — il faut vérifier qu'on en **sort**. Pour chaque état non-nominal atteint, rejouer le retour au nominal (rétablir le réseau, corriger la saisie, refermer/rouvrir, recharger) et confirmer que l'écran ne garde **aucune trace** : message résiduel, bouton verrouillé, liste périmée. Une liste d'états est un instantané ; les défauts vivent dans les **séquences**. _(Vécu : la vérif hors-ligne couvrait « couper le réseau, observer » mais jamais « rétablir, refermer, rouvrir » — l'écran affichait alors le convive ajouté ET le constat d'échec, 2026-08-12.)_
+8. Screenshot final joint au report utilisateur.
 
 Alternative à la demande : slash command **`/verify <route>`**.
 
@@ -130,8 +153,12 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] `npm run test` OK (seuils coverage tenus)
 - [ ] `npm run build` OK (`tsc -b` — Vitest ne typecheck PAS ; seul le build attrape les erreurs de types, y compris dans les fichiers de test)
 - [ ] `npm run test:mutation` OK (seuil `break: 80` tenu — gate bloquant, pas décoratif)
+- [ ] **Run de mutation ISOLÉ** (`--mutate` ciblé) sur chaque fichier modifié, et c'est **ce** chiffre qui est rapporté — le score global masque des survivants derrière des timeouts
 - [ ] **Si use-case / logique métier** : intention validée au **rouge** avant implémentation (point de contrôle « rouge »)
+- [ ] **Si nouvelle collection Firestore** : bloc `match` ajouté dans `firestore.rules` **et déployé** (le fichier du repo ne fait pas foi)
+- [ ] **Si nouveau test-double ou port modifié** : le double n'offre aucune garantie que son port ne promet pas (ordre, unicité…)
+- [ ] **Si nouvel état transitoire** (constat, statut d'opération ponctuelle) : déclencheur de remise à zéro spécifié + test de remontage sur le **même** store
 - [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
 - [ ] **Revue de code indépendante** passée AVANT commit (findings pertinents traités, non-pertinents justifiés)
-- [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement)
+- [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement + **sortie** de chacun d'eux)
 - [ ] Commit conforme aux Conventional Commits
