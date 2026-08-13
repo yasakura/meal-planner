@@ -19,6 +19,24 @@ export type ConvivesState = {
   status: ConvivesStatus;
   convives: Convive[];
   error: string | null;
+  /**
+   * requestId du DERNIER chargement lancé. Plomberie de dispatch : aucun écran ne le lit.
+   *
+   * Un thunk RTK n'est PAS annulé par le démontage de son container — la sheet le démontre
+   * chaque fois qu'elle se ferme. Fermer pendant un chargement lent puis rouvrir en relance
+   * un second : sans cette mémoire, le rejet tardif du premier écrase le foyer qui vient de
+   * s'afficher, et l'affiche « Aucune connexion » sans bouton pour en sortir.
+   *
+   * Volontairement PAS remis à null au règlement : le champ signifie « dernière requête
+   * lancée », pas « requête en vol ». Le remettre à null rouvrirait le trou — une réponse
+   * tardive arrivant après le règlement du chargement courant ne correspondrait plus à rien
+   * et serait acceptée.
+   *
+   * SÉPARÉ de `latestAddRequestId` : les deux thunks ont des cycles de vie indépendants. Une
+   * mémoire unique ferait qu'un rechargement invaliderait l'ajout en vol (l'écriture partie
+   * n'apparaîtrait jamais dans la liste) et réciproquement.
+   */
+  latestLoadRequestId: string | null;
   addStatus: ConviveAddStatus;
   addError: string | null;
   /**
@@ -29,15 +47,29 @@ export type ConvivesState = {
    * se remettent à zéro ensemble, exactement aux mêmes conditions.
    */
   addSubjectName: string | null;
+  /**
+   * requestId du DERNIER ajout lancé. Même rôle que `latestLoadRequestId`, sur l'autre cycle
+   * de vie. Enjeu propre à l'ajout : un rejet tardif repasserait en `unconfirmed`, ce qui
+   * VERROUILLE le bouton « Ajouter » jusqu'à la frappe suivante — alors que l'ajout courant
+   * vient de réussir.
+   *
+   * N'est PAS remis à zéro par `restAddLifecycle` : ce n'est pas un constat destiné à
+   * l'utilisateur, c'est un aiguillage. Le mêler au cycle du constat le rendrait
+   * réinitialisable par `conviveNameEdited`, donc par une frappe — sans aucun rapport avec
+   * la fraîcheur d'une réponse en vol.
+   */
+  latestAddRequestId: string | null;
 };
 
 const initialState: ConvivesState = {
   status: 'idle',
   convives: [],
   error: null,
+  latestLoadRequestId: null,
   addStatus: 'idle',
   addError: null,
   addSubjectName: null,
+  latestAddRequestId: null,
 };
 
 export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>(
@@ -84,7 +116,9 @@ const convivesSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loadConvives.pending, (state) => {
+      .addCase(loadConvives.pending, (state, action) => {
+        // Le dernier chargement lancé prend la main : c'est celui que l'utilisateur attend.
+        state.latestLoadRequestId = action.meta.requestId;
         state.status = 'loading';
         state.error = null;
         // Filet SECONDAIRE, pas le mécanisme de récupération. Il couvre le seul cas que la
@@ -101,11 +135,14 @@ const convivesSlice = createSlice({
         if (state.addStatus !== 'adding') restAddLifecycle(state);
       })
       .addCase(loadConvives.fulfilled, (state, action) => {
+        if (action.meta.requestId !== state.latestLoadRequestId) return;
         state.status = 'success';
         state.convives = action.payload;
         state.error = null;
       })
       .addCase(loadConvives.rejected, (state, action) => {
+        // Un échec périmé ne dit rien de l'état courant : il est jeté avant tout examen.
+        if (action.meta.requestId !== state.latestLoadRequestId) return;
         // `action.error` est une copie plate (miniSerializeError) : le garde du domaine est
         // nominal précisément pour rester lisible ici.
         if (isRepositoryUnavailable(action.error)) {
@@ -117,12 +154,16 @@ const convivesSlice = createSlice({
         state.error = action.error.message ?? null;
       })
       .addCase(addConvive.pending, (state, action) => {
+        // Aiguillage propre à l'ajout, indépendant de `latestLoadRequestId` : un
+        // rechargement concurrent ne doit pas invalider cette écriture.
+        state.latestAddRequestId = action.meta.requestId;
         state.addStatus = 'adding';
         // Mémorisé dès le départ, et conservé sur `rejected` : c'est le seul moment où le
         // prénom soumis est disponible côté store.
         state.addSubjectName = action.meta.arg.name;
       })
       .addCase(addConvive.fulfilled, (state, action) => {
+        if (action.meta.requestId !== state.latestAddRequestId) return;
         // Le convive rejoint sa place alphabétique tout de suite : sans ce tri il
         // resterait en bas de liste jusqu'au prochain chargement, qui lui l'ordonne.
         // Même comparateur que le use-case — la règle appartient au domaine.
@@ -131,6 +172,8 @@ const convivesSlice = createSlice({
         restAddLifecycle(state);
       })
       .addCase(addConvive.rejected, (state, action) => {
+        // Un échec périmé ne verrouille pas le formulaire d'un ajout qui, lui, a abouti.
+        if (action.meta.requestId !== state.latestAddRequestId) return;
         // Non acquitté ≠ échoué : la liste n'accueille pas le convive (rien ne prouve qu'il
         // est enregistré) et aucun message d'erreur n'est armé.
         if (isRepositoryUnavailable(action.error)) {

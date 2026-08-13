@@ -24,7 +24,12 @@ export function CatalogueContainer() {
   }, [dispatch]);
 
   let props: RecipeListScreenProps;
-  if (status === 'error') {
+  if (status === 'unavailable') {
+    props = {
+      status: 'unavailable',
+      message: 'Aucune connexion — le catalogue n’a pas pu être chargé.',
+    };
+  } else if (status === 'error') {
     props = {
       status: 'error',
       message: 'Impossible de charger le catalogue.',

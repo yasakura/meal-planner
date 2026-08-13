@@ -10,6 +10,9 @@ export type RecipeDetailIngredient = { name: string; quantity: string };
 export type RecipeDetailScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string }
+  // Hors ligne : un constat, distinct de `notFound` qui affirmerait l'inexistence de la
+  // recette, et de `error` qui désigne un serveur ayant répondu non.
+  | { status: 'unavailable'; message: string }
   | { status: 'notFound' }
   | {
       status: 'loaded';
@@ -157,6 +160,15 @@ function Body(props: RecipeDetailScreenProps) {
       return (
         <CenteredState>
           <ErrorText role="alert">{props.message}</ErrorText>
+        </CenteredState>
+      );
+    // `role="status"` (poli) et non `role="alert"` (assertif, utilisé par `error` et
+    // `notFound`) : une absence de réseau est un constat, pas une alerte, et rien n'est
+    // attendu de l'utilisateur dans l'immédiat.
+    case 'unavailable':
+      return (
+        <CenteredState>
+          <StateText role="status">{props.message}</StateText>
         </CenteredState>
       );
     case 'notFound':

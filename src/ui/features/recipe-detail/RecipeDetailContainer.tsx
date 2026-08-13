@@ -42,6 +42,11 @@ export function RecipeDetailContainer() {
   let props: RecipeDetailScreenProps;
   if (status === 'success' && recipe !== null) {
     props = toLoadedProps(recipe);
+  } else if (status === 'unavailable') {
+    props = {
+      status: 'unavailable',
+      message: 'Aucune connexion — la recette n’a pas pu être chargée.',
+    };
   } else if (status === 'notFound') {
     props = { status: 'notFound' };
   } else if (status === 'error') {
