@@ -9,6 +9,7 @@
     "preview": "vite preview --host --mode prod",
     "qr": "node scripts/qr.mjs",
     "seed:dev": "node scripts/seed-recipes.mjs",
+    "check:rules": "node scripts/check-rules.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
