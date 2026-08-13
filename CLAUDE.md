@@ -13,9 +13,14 @@ Tout contrat entre couches passe par un port dans `domain/ports/`. Le "M" du MVC
 ## TDD Uncle Bob (règle absolue)
 
 - Toute ligne d'implémentation naît d'un **test rouge observé**. Jamais l'inverse.
-- Cycle strict : rouge → vert → refactor.
 - Pour toute écriture ou modification de code productif dans `src/`, **DÉLÉGUER au sous-agent `tdd-clean-coder`** (`~/.claude/agents/`) ou utiliser la slash command `/tdd <tâche>`.
 - Interdit : green-on-arrival (un test qui passe dès l'écriture ne teste rien).
+
+**Ce qui compte n'est pas l'ordre, c'est la confrontation.** Un test n'a de valeur que s'il a été **vu échouer face à une implémentation fausse**. Écrire le test en premier est la façon la moins chère de l'obtenir — l'implémentation fausse est gratuite, c'est l'absence de code. Ce n'est pas la seule.
+
+**Batching autorisé, et recommandé.** Pour un ensemble cohérent de comportements : écrire **tous** les tests rouges, observer le rouge **en bloc**, puis implémenter jusqu'au vert. Un cycle unitaire par comportement n'apporte rien de plus et rejoue la suite complète à chaque pas.
+
+Quand un test ne **peut pas** naître rouge — filet posé sur un comportement déjà correct, réponse à un mutant survivant — la confrontation se fait par **sabotage** : casser volontairement la ligne que le nom du test désigne, observer le rouge, restaurer. Saboter _une_ ligne quelconque ne suffit pas : il faut saboter **celle que le nom promet de protéger**. _(Vécu : un test container nommé « ne déverrouille pas Ajouter » sabotait le container et passait, alors qu'il ne pouvait pas détecter la régression du garde qu'il annonçait — `user.type()` sur un champ `disabled` est un no-op, 2026-08-12.)_
 
 ## Point de contrôle « rouge » (use-cases & logique métier)
 
@@ -37,6 +42,14 @@ Un test qui passe de vert à rouge suite à une modif de code productif n'est **
 **STOP → diagnostiquer → classifier** (régression involontaire vs rupture volontaire) **→ présenter impact → décider avec l'utilisateur → agir**.
 
 Toute modification d'un test hors périmètre requiert une justification explicite dans le message de commit.
+
+**Exception pré-autorisée — rupture de FORME uniquement.** Ajouter un champ à un état casse mécaniquement tout `toEqual` exhaustif écrit sur l'ancienne forme. Ce cas est répétitif, prévisible, et son arbitrage a toujours été le même. L'agent **applique et rapporte** au lieu de s'arrêter, à trois conditions cumulatives :
+
+1. le seul écart est **l'ajout de clés** avec leur valeur attendue ;
+2. **aucune** assertion n'est supprimée, ni relâchée (pas de `toEqual` → `toMatchObject`, pas de littéral → regex partielle) ;
+3. la valeur attendue ajoutée est **discriminante** — elle devient une assertion sur le nouveau champ, pas un remplissage.
+
+Tout le reste continue de déclencher le STOP : sémantique modifiée, assertion affaiblie, test supprimé, jeu de données changé, intention métier révoquée.
 
 ## Stack & tests
 
@@ -131,12 +144,22 @@ La checklist DoD n'est **pas** un état figé au moment du 1er cycle : c'est un 
 
 Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
 
+La revue se fait en **deux moments**, pas un seul. Le premier bug de FR-3 — l'échec d'ajout silencieux — était visible dans la **forme** du container (`await dispatch()` suivi d'un reset inconditionnel), donc lisible sur la spec avant qu'une ligne d'implémentation existe. Le trouver au vert a coûté un cycle TDD complet, une re-vérif Chrome et une seconde revue.
+
+**Revue d'intention, au point de contrôle rouge** — légère, sur les tests rouges et la conception annoncée, pas sur du code. Elle cherche : décision placée au mauvais endroit, cas non spécifié, règle métier fausse.
+
+**Revue de code complète, avant commit** :
+
 1. Lancer un **sous-agent de code review INDÉPENDANT** — contexte frais, **pas** l'agent (ni un fork de l'agent) qui a orchestré le code — sur le diff.
-2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles.
+2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles. **Lui demander explicitement d'instruire le cycle de vie et la rémanence d'état** — c'est par là que les trois bugs de la branche hors-ligne ont été trouvés, jamais par une lecture ligne à ligne.
 3. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
 4. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
 5. **Re-vérifier** (lint / test / mutation) après corrections.
 6. **Seulement ensuite : commit.**
+
+Si le code rebouclé n'a changé que sur quelques points, la re-revue porte sur le **delta**, avec les findings précédents fournis en contexte et l'interdiction de les redécouvrir. Relancer une revue complète à chaque tour coûte un agent entier pour re-instruire ce qui est déjà tranché.
+
+**L'agent principal ne rejoue pas systématiquement `lint`/`test`/`build` après chaque rapport d'agent** : sur une dizaine de rejeux, aucun n'a jamais contredit le rapport. Un seul passage complet avant commit suffit. En revanche le **run de mutation isolé reste rejoué** — lui a révélé de vrais écarts (100 % annoncé, 85 % réel).
 
 ## Commits
 
