@@ -161,6 +161,27 @@ Si le code rebouclé n'a changé que sur quelques points, la re-revue porte sur 
 
 **L'agent principal ne rejoue pas systématiquement `lint`/`test`/`build` après chaque rapport d'agent** : sur une dizaine de rejeux, aucun n'a jamais contredit le rapport. Un seul passage complet avant commit suffit. En revanche le **run de mutation isolé reste rejoué** — lui a révélé de vrais écarts (100 % annoncé, 85 % réel).
 
+## Quand consulter l'utilisateur, quand trancher
+
+Une question bloquante coûte un aller-retour. Trop peu, on impose des décisions qui ne nous appartiennent pas ; trop, on transforme une session en questionnaire. Le critère n'est ni l'importance ni l'irréversibilité : c'est **est-ce que la réponse change le travail ?**
+
+**Consulter — la réponse change ce qui est produit :**
+
+- décision **produit** (libellé vu par l'utilisateur, comportement d'un écran, périmètre d'une feature) ;
+- arbitrage **anti test-tampering** sur une intention métier, y compris la révocation d'une décision antérieure ;
+- **point de contrôle rouge** : validation de l'intention avant implémentation ;
+- choix de **conception durable** (nouveau port, nouvelle convention, placement d'une abstraction) ;
+- **findings de revue** : pertinent vs non-pertinent.
+
+**Trancher et signaler — il existe un défaut évident et se tromper coûte un rollback trivial :**
+
+- valeurs d'outillage et de configuration (seuils, timeouts, options de test) ;
+- application d'une correction **mécanique** déjà arbitrée sur un cas identique ;
+- découpage des commits, formulation des messages, nommage interne ;
+- ordre d'exécution des étapes, choix de déléguer ou de faire soi-même.
+
+En cas de doute sur la catégorie : **trancher, et exposer la décision** avec ce qu'elle écarte. Un choix annoncé se conteste ; une question de plus se subit.
+
 ## Commits
 
 Conventional Commits : `feat:`, `fix:`, `test:`, `refactor:`, `chore:`, `docs:`.
