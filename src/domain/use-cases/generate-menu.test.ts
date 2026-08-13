@@ -41,8 +41,12 @@ describe('generateMenuUseCase', () => {
 
     const menu = await generateMenu({ days: 1 });
 
+    // L'attendu est DÉRIVÉ du catalogue tel que le repository le rend : le port ne
+    // garantit aucun ordre. Coder 'r2' puis 'r0' supposerait l'ordre d'insertion, ce que
+    // Firestore ne respecte pas (il rend l'ordre des identifiants).
+    const catalogue = await recipeRepository.findAll();
     const recipeIds = menu.repas.map((r) => r.slots[0]?.recipeId);
-    expect(recipeIds).toEqual(['r2', 'r0']);
+    expect(recipeIds).toEqual([catalogue[2]?.id, catalogue[0]?.id]);
   });
 
   it('tire SANS REMISE dans une tournée : deux slots consécutifs ne réutilisent pas la même recette', async () => {
@@ -51,14 +55,19 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 1 jour = 2 slots. Index 0 sur le POOL COURANT à chaque slot :
-      // slot1 pool [r0,r1] idx0 → r0 (retiré) ; slot2 pool [r1] idx0 → r1.
+      // 1 jour = 2 slots. Index 0 sur le POOL COURANT à chaque slot : le premier slot
+      // prend la 1ʳᵉ recette du catalogue et la retire, le second prend celle qui reste.
       randomPicker: SequenceRandomPicker.returning(0, 0),
     });
 
     const menu = await generateMenu({ days: 1 });
 
-    expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual(['r0', 'r1']);
+    // Attendu dérivé du catalogue rendu, pas de l'ordre d'insertion.
+    const catalogue = await recipeRepository.findAll();
+    expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual([
+      catalogue[0]?.id,
+      catalogue[1]?.id,
+    ]);
   });
 
   it('recharge le pool à l’épuisement (nouvelle tournée) : le cycle recommence sur le catalogue complet', async () => {
@@ -67,14 +76,22 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 2 jours = 4 slots. Index 0 sur le pool courant à chaque slot :
-      // tournée 1 : r0 puis r1 (pool vidé) ; recharge ; tournée 2 : r0 puis r1.
+      // 2 jours = 4 slots. Index 0 sur le pool courant à chaque slot : la tournée 1 vide
+      // le catalogue dans l'ordre rendu, puis recharge et la tournée 2 le rejoue à
+      // l'identique.
       randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 
     const menu = await generateMenu({ days: 2 });
 
-    expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual(['r0', 'r1', 'r0', 'r1']);
+    // Attendu dérivé du catalogue rendu, pas de l'ordre d'insertion.
+    const [premiere, seconde] = await recipeRepository.findAll();
+    expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual([
+      premiere?.id,
+      seconde?.id,
+      premiere?.id,
+      seconde?.id,
+    ]);
   });
 
   it('force la répétition quand le catalogue (1 recette) est plus petit que le nombre de slots (recharge à chaque slot)', async () => {

@@ -87,8 +87,15 @@ describe('listConvivesUseCase', () => {
 
     // Deux convives peuvent porter le même prénom (FR-3 ne déduplique pas) : les deux
     // restent présents, et à prénom égal le tri n'invente aucun ordre — il préserve
-    // celui du repository (r1 avant r2).
-    expect(convives.map((c) => c.id)).toEqual(['a1', 'r1', 'r2']);
+    // celui du repository.
+    // L'attendu est DÉRIVÉ de ce que le repository rend, jamais de l'ordre d'insertion :
+    // le port ne garantit aucun ordre, et le double l'exerce activement.
+    const fournis = await conviveRepository.findAll();
+    const homonymesDansLOrdreDuRepository = fournis
+      .filter((c) => c.name === 'Rory')
+      .map((c) => c.id);
+
+    expect(convives.map((c) => c.id)).toEqual(['a1', ...homonymesDansLOrdreDuRepository]);
   });
 
   it('propage une erreur rejetée par le repository', async () => {
