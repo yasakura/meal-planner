@@ -1,12 +1,39 @@
 import { useEffect, useState } from 'react';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { ConvivesSection, type ConvivesSectionProps } from './ConvivesSection';
-import { addConvive, loadConvives, selectConvives } from './convives-slice';
+import { ConvivesSection, type AddNotice, type ConvivesSectionProps } from './ConvivesSection';
+import { elidedDe } from './french-elision';
+import {
+  addConvive,
+  conviveNameEdited,
+  loadConvives,
+  selectConvives,
+  selectIsAddInFlight,
+  type ConviveAddStatus,
+} from './convives-slice';
+
+// « n'a pas pu être confirmé » et non « n'est pas enregistré » : l'écriture part réellement
+// au retour du réseau, donc l'affirmer perdue serait un nouveau mensonge. La phrase reste
+// vraie dans les deux issues, et n'emprunte pas le mot « personne » que l'état vide utilise
+// au même endroit de la sheet comme négation.
+function addNoticeFor(addStatus: ConviveAddStatus, subjectName: string | null): AddNotice | null {
+  if (addStatus === 'error') return { tone: 'error', message: 'Impossible d’ajouter le convive.' };
+  // `subjectName` est toujours renseigné en `unconfirmed` : le slice le mémorise sur
+  // `pending`, qui précède nécessairement `rejected`. Le test de nullité est une exigence du
+  // typage, pas un cas atteignable.
+  if (addStatus === 'unconfirmed' && subjectName !== null) {
+    return {
+      tone: 'unconfirmed',
+      message: `Aucune connexion — l’ajout ${elidedDe(subjectName)} n’a pas pu être confirmé.`,
+    };
+  }
+  return null;
+}
 
 export function ConvivesContainer() {
   const [name, setName] = useState('');
-  const { status, convives, addStatus } = useAppSelector(selectConvives);
+  const { status, convives, addStatus, addSubjectName } = useAppSelector(selectConvives);
+  const isAddInFlight = useAppSelector(selectIsAddInFlight);
   const dispatch = useAppDispatch();
 
   useEffect(() => {
@@ -22,14 +49,31 @@ export function ConvivesContainer() {
 
   const form = {
     name,
-    onNameChange: setName,
+    // Saisir efface le constat d'ajout périmé. Le container ne DÉCIDE rien : il rapporte le
+    // geste, le slice tranche (il est le seul des deux à être couvert par la mutation).
+    onNameChange: (value: string) => {
+      setName(value);
+      dispatch(conviveNameEdited());
+    },
     onSubmit: () => void handleSubmit(),
-    submitDisabled: addStatus === 'adding' || name.trim() === '',
-    addErrorMessage: addStatus === 'error' ? 'Impossible d’ajouter le convive.' : null,
+    // Verrouillé aussi après un ajout non acquitté : l'écriture est réellement partie et
+    // atterrira au retour du réseau. Ré-armer le bouton inviterait un second appui, donc un
+    // second id, donc le doublon que tout ceci cherche à éviter. Le verrou se lève dès que
+    // l'utilisateur retape quelque chose (`conviveNameEdited`) — pas au remontage, qui n'est
+    // pas garanti.
+    submitDisabled: addStatus === 'adding' || addStatus === 'unconfirmed' || name.trim() === '',
+    inputDisabled: isAddInFlight,
+    addNotice: addNoticeFor(addStatus, addSubjectName),
   };
 
   let props: ConvivesSectionProps;
-  if (status === 'error') {
+  if (status === 'unavailable') {
+    props = {
+      ...form,
+      status: 'unavailable',
+      message: 'Aucune connexion — le foyer n’a pas pu être chargé.',
+    };
+  } else if (status === 'error') {
     props = {
       ...form,
       status: 'error',

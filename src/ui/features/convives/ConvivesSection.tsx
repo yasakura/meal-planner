@@ -6,17 +6,42 @@ const { colors, radii, space, fonts } = tokens;
 
 export type ConviveItem = { id: string; name: string };
 
+/**
+ * Issue d'un ajout qui n'a pas abouti. `error` = le serveur a refusé, l'utilisateur peut
+ * agir. `unconfirmed` = le serveur n'a rien acquitté, il n'y a rien à faire d'utile —
+ * d'où deux tons, et deux rôles ARIA distincts.
+ * Un seul objet nullable plutôt que deux messages nullables : au plus un constat à la fois,
+ * et l'état invalide « les deux à la fois » devient irreprésentable.
+ */
+export type AddNotice = { tone: 'error' | 'unconfirmed'; message: string };
+
 // Le formulaire d'ajout accompagne tous les états « chargés » (liste ou foyer vide) ;
-// les états transitoires (chargement, erreur) n'exposent que leur constat.
+// les états transitoires (chargement, erreur, hors-ligne) n'exposent que leur constat.
+//
+// ANGLE MORT ACCEPTÉ. `addNotice` vit dans le formulaire, donc il disparaît avec lui : si un
+// rechargement concurrent échoue pendant qu'un ajout est en vol, l'issue de cet ajout devient
+// invisible jusqu'au prochain chargement réussi. L'écran est alors INCOMPLET, pas faux — le
+// chargement a réellement échoué et c'est ce qu'il dit. Rendre le constat dans `unavailable`
+// contredirait la décision d'y masquer le formulaire, prise pour ne pas inviter la re-saisie
+// qui produit les doublons. Aucun doublon possible ici : le prochain chargement resynchronise
+// depuis le serveur, et le convive apparaît s'il a été écrit.
 export type ConvivesSectionProps = {
   name: string;
   onNameChange: (value: string) => void;
   onSubmit: () => void;
   submitDisabled: boolean;
-  addErrorMessage: string | null;
+  // Verrou du champ, volontairement séparé de `submitDisabled` : le bouton se verrouille
+  // aussi sur un ajout non confirmé, le champ jamais — la frappe est le mécanisme de
+  // récupération. Deux props, parce que ce sont deux règles.
+  inputDisabled: boolean;
+  addNotice: AddNotice | null;
 } & (
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
+  // Hors ligne : un constat, sans « Réessayer » — le bouton ne ferait que rejouer le même
+  // échec tant que le réseau manque. C'est ce qui distingue cet état de `error`, où le
+  // réessai a du sens.
+  | { status: 'unavailable'; message: string }
   | { status: 'empty' }
   | { status: 'loaded'; convives: ConviveItem[] }
 );
@@ -133,13 +158,18 @@ function AddForm(props: ConvivesSectionProps) {
           name="convive-name"
           type="text"
           value={props.name}
+          disabled={props.inputDisabled}
           onChange={(event) => props.onNameChange(event.target.value)}
         />
         <SubmitButton type="submit" disabled={props.submitDisabled}>
           Ajouter
         </SubmitButton>
       </FieldRow>
-      {props.addErrorMessage !== null && <Note role="alert">{props.addErrorMessage}</Note>}
+      {props.addNotice !== null && (
+        <Note role={props.addNotice.tone === 'error' ? 'alert' : 'status'}>
+          {props.addNotice.message}
+        </Note>
+      )}
     </Form>
   );
 }
@@ -157,6 +187,10 @@ function Body(props: ConvivesSectionProps) {
           </RetryButton>
         </>
       );
+    // `role="status"` (poli) et non `role="alert"` (assertif) : une absence de réseau est un
+    // constat, pas une alerte, et rien n'est attendu de l'utilisateur dans l'immédiat.
+    case 'unavailable':
+      return <Note role="status">{props.message}</Note>;
     case 'empty':
       return (
         <>
