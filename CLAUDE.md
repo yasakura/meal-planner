@@ -159,6 +159,17 @@ La revue se fait en **deux moments**, pas un seul. Le premier bug de FR-3 — l'
 
 Si le code rebouclé n'a changé que sur quelques points, la re-revue porte sur le **delta**, avec les findings précédents fournis en contexte et l'interdiction de les redécouvrir. Relancer une revue complète à chaque tour coûte un agent entier pour re-instruire ce qui est déjà tranché.
 
+### Règle d'arrêt — quand une branche est finie
+
+Une revue trouve **toujours** quelque chose : c'est sa fonction, pas un signal que le travail n'est pas fini. Sans frontière écrite, chaque branche se rouvre indéfiniment sur des findings réels mais accessoires.
+
+**Un finding PRÉ-EXISTANT et NON BLOQUANT ne rouvre pas le cycle en cours — il devient le suivant.** Seul un défaut **introduit par la branche**, ou **bloquant pour l'utilisateur**, la maintient ouverte.
+
+- **Pré-existant** : le défaut est déjà sur `main` avant la branche. Le fait que la branche le rende plus visible, plus fréquent ou plus gênant **ne le rend pas nouveau** — c'est la rationalisation exacte qui a doublé la durée de la passe recettes (2026-08-13).
+- **Bloquant** : perte de donnée, faux signal de succès, écran qui se contredit, impasse sans porte de sortie. Pas « ce serait mieux autrement ».
+
+Quand la règle s'applique, **ne pas soumettre le choix à l'utilisateur comme une option ouverte** : annoncer que le finding est reporté, avec son motif, et le tracer. Lui présenter « corriger maintenant » comme une alternative d'égale dignité fabrique la décision coûteuse en la rendant raisonnable. Il reste libre de trancher l'inverse — mais sur une proposition, pas sur un menu.
+
 **L'agent principal ne rejoue pas systématiquement `lint`/`test`/`build` après chaque rapport d'agent** : sur une dizaine de rejeux, aucun n'a jamais contredit le rapport. Un seul passage complet avant commit suffit. En revanche le **run de mutation isolé reste rejoué** — lui a révélé de vrais écarts (100 % annoncé, 85 % réel).
 
 ## Quand consulter l'utilisateur, quand trancher
