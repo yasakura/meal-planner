@@ -4,24 +4,10 @@ import { type ConviveRepository } from '../domain/ports/convive-repository';
 import { type Convive } from '../domain/entities/convive';
 import { RepositoryUnavailableError } from '../domain/errors/repository-unavailable-error';
 import { conviveToDocument, documentToConvive } from './convive-mapper';
-
-// Le SDK signale une panne réseau par ce code ; tout autre code (permission-denied,
-// not-found…) décrit un serveur qui a bel et bien répondu.
-// Lecture totale par `?.` : le canal de rejet n'est pas typé, et une valeur sans `code`
-// — voire non-objet — doit répondre « non », jamais faire crasher la traduction.
-function isNetworkUnavailable(error: unknown): boolean {
-  return (error as { code?: unknown } | null | undefined)?.code === 'unavailable';
-}
-
-/**
- * Frontière `data → domain` : point de passage UNIQUE des pannes, lecture comme écriture.
- * Une asymétrie ici se paierait cher — une écriture refusée pour panne réseau qui remonterait
- * brute passerait pour un échec, et le formulaire se réarmerait alors que l'écriture peut
- * encore aboutir.
- */
-function asDomainFailure(error: unknown): unknown {
-  return isNetworkUnavailable(error) ? RepositoryUnavailableError.create() : error;
-}
+// Traduction `data → domain` PARTAGÉE (`firestore-failure`) : extraite d'ici à l'arrivée du
+// second consommateur, l'adapter recettes. Deux adapters, un seul point de passage — sinon
+// un écran dirait « aucune connexion » là où l'autre dirait « impossible de charger ».
+import { asDomainFailure } from './firestore-failure';
 
 /**
  * Borne au-delà de laquelle une écriture non acquittée est déclarée non confirmée.
@@ -73,6 +59,9 @@ export class FirestoreConviveRepository implements ConviveRepository {
     // le cache et renvoie un snapshot VIDE. L'app affichait alors un foyer vide inventé, et
     // l'utilisateur re-saisissait ses convives — doublons au retour du réseau. On veut la
     // vérité du serveur, ou l'aveu qu'on ne l'a pas.
+    // Rien n'est sacrifié en ligne : mesuré sur la vraie base, `getDocs` interroge DÉJÀ le
+    // serveur à chaque appel (`fromCache=false`, médiane 63 ms) et la lecture serveur est
+    // même plus rapide et plus régulière (31 ms). Il n'y a aucun repli cache à perdre.
     let snapshot;
     try {
       snapshot = await getDocsFromServer(collection(this.db, 'convives'));

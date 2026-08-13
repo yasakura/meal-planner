@@ -6,6 +6,7 @@ import { type ListConvives } from '../../../domain/use-cases/list-convives';
 import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { createTestStore } from '../../store/create-test-store';
+import { deferred } from '../../test-utils/deferred';
 import { addConvive, conviveNameEdited, loadConvives, selectConvives } from './convives-slice';
 
 function twoConvives(): Convive[] {
@@ -23,9 +24,11 @@ describe('convives slice', () => {
       status: 'idle',
       convives: [],
       error: null,
+      latestLoadRequestId: null,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: null,
     });
   });
 
@@ -34,15 +37,17 @@ describe('convives slice', () => {
     const listConvives: ListConvives = async () => convives;
     const store = createTestStore({ listConvives });
 
-    await store.dispatch(loadConvives());
+    const loaded = await store.dispatch(loadConvives());
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives,
       error: null,
+      latestLoadRequestId: loaded.meta.requestId,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: null,
     });
   });
 
@@ -57,15 +62,17 @@ describe('convives slice', () => {
 
     await store.dispatch(loadConvives());
     shouldFail = true;
-    await store.dispatch(loadConvives());
+    const failed = await store.dispatch(loadConvives());
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'error',
       convives,
       error: 'Firestore indisponible',
+      latestLoadRequestId: failed.meta.requestId,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: null,
     });
   });
 
@@ -73,15 +80,17 @@ describe('convives slice', () => {
     const pending: ListConvives = () => new Promise<Convive[]>(() => {});
     const store = createTestStore({ listConvives: pending });
 
-    void store.dispatch(loadConvives());
+    const inFlight = store.dispatch(loadConvives());
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'loading',
       convives: [],
       error: null,
+      latestLoadRequestId: inFlight.requestId,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: null,
     });
   });
 
@@ -96,18 +105,20 @@ describe('convives slice', () => {
       listConvives: async () => existing,
       addConvive: addConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    const loaded = await store.dispatch(loadConvives());
 
-    await store.dispatch(addConvive({ name: 'Rory' }));
+    const added = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(captured.input).toEqual({ name: 'Rory' });
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives: [...existing, ConviveBuilder.aConvive().withId('c3').withName('Rory').build()],
       error: null,
+      latestLoadRequestId: loaded.meta.requestId,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: added.meta.requestId,
     });
   });
 
@@ -141,17 +152,19 @@ describe('convives slice', () => {
       listConvives: async () => existing,
       addConvive: failingAdd,
     });
-    await store.dispatch(loadConvives());
+    const loaded = await store.dispatch(loadConvives());
 
-    await store.dispatch(addConvive({ name: 'Rory' }));
+    const failed = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives: existing,
       error: null,
+      latestLoadRequestId: loaded.meta.requestId,
       addStatus: 'error',
       addError: 'Firestore indisponible',
       addSubjectName: 'Rory',
+      latestAddRequestId: failed.meta.requestId,
     });
   });
 
@@ -162,17 +175,19 @@ describe('convives slice', () => {
       listConvives: async () => existing,
       addConvive: pendingAdd,
     });
-    await store.dispatch(loadConvives());
+    const loaded = await store.dispatch(loadConvives());
 
-    void store.dispatch(addConvive({ name: 'Rory' }));
+    const inFlight = store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives: existing,
       error: null,
+      latestLoadRequestId: loaded.meta.requestId,
       addStatus: 'adding',
       addError: null,
       addSubjectName: 'Rory',
+      latestAddRequestId: inFlight.requestId,
     });
   });
 
@@ -182,15 +197,17 @@ describe('convives slice', () => {
     const unavailable: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({ listConvives: unavailable });
 
-    await store.dispatch(loadConvives());
+    const refused = await store.dispatch(loadConvives());
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'unavailable',
       convives: [],
       error: null,
+      latestLoadRequestId: refused.meta.requestId,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: null,
     });
   });
 
@@ -204,17 +221,19 @@ describe('convives slice', () => {
       listConvives: async () => existing,
       addConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    const loaded = await store.dispatch(loadConvives());
 
-    await store.dispatch(addConvive({ name: 'Rory' }));
+    const unacked = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives: existing,
       error: null,
+      latestLoadRequestId: loaded.meta.requestId,
       addStatus: 'unconfirmed',
       addError: null,
       addSubjectName: 'Rory',
+      latestAddRequestId: unacked.meta.requestId,
     });
   });
 
@@ -369,19 +388,166 @@ describe('convives slice', () => {
       listConvives: async () => existing,
       addConvive: flakyAdd,
     });
-    await store.dispatch(loadConvives());
+    const loaded = await store.dispatch(loadConvives());
     await store.dispatch(addConvive({ name: 'Rory' }));
     shouldFail = false;
 
-    await store.dispatch(addConvive({ name: 'Rory' }));
+    const retried = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives: [...existing, ConviveBuilder.aConvive().withId('c3').withName('Rory').build()],
       error: null,
+      latestLoadRequestId: loaded.meta.requestId,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      latestAddRequestId: retried.meta.requestId,
     });
+  });
+
+  // La sheet démonte le container à la fermeture ; un thunk RTK n'est PAS annulé pour autant.
+  // Fermer pendant un chargement lent puis rouvrir en relance un second : sans garde, le
+  // rejet tardif du premier écrase le foyer qui vient de s'afficher.
+  it('un rejet tardif d’un chargement dépassé n’écrase pas le foyer fraîchement chargé', async () => {
+    const fresh = twoConvives();
+    const slow = deferred<Convive[]>();
+    let call = 0;
+    const listConvives: ListConvives = () => {
+      call += 1;
+      return call === 1 ? slow.promise : Promise.resolve(fresh);
+    };
+    const store = createTestStore({ listConvives });
+
+    const abandoned = store.dispatch(loadConvives());
+    const current = store.dispatch(loadConvives());
+    await current;
+    // Le rejet arrive APRÈS que le chargement courant a abouti : c'est tout l'enjeu.
+    slow.reject(RepositoryUnavailableError.create());
+    await abandoned;
+
+    expect(selectConvives(store.getState())).toEqual({
+      status: 'success',
+      convives: fresh,
+      error: null,
+      latestLoadRequestId: current.requestId,
+      addStatus: 'idle',
+      addError: null,
+      addSubjectName: null,
+      latestAddRequestId: null,
+    });
+  });
+
+  // Conséquence la plus coûteuse sur l'ajout : un rejet tardif repasserait en `unconfirmed`,
+  // ce qui VERROUILLE le bouton « Ajouter » jusqu'à ce que l'utilisateur retape quelque
+  // chose — alors même que l'ajout courant vient de réussir.
+  it('un rejet tardif d’un ajout dépassé ne verrouille pas le formulaire après un ajout réussi', async () => {
+    const existing = twoConvives();
+    const slow = deferred<Convive>();
+    let call = 0;
+    const addConviveUseCase: AddConvive = (input) => {
+      call += 1;
+      return call === 1
+        ? slow.promise
+        : Promise.resolve(ConviveBuilder.aConvive().withId('c3').withName(input.name).build());
+    };
+    const store = createTestStore({
+      listConvives: async () => existing,
+      addConvive: addConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    const abandoned = store.dispatch(addConvive({ name: 'Rory' }));
+    const current = store.dispatch(addConvive({ name: 'Rory' }));
+    await current;
+    slow.reject(RepositoryUnavailableError.create());
+    await abandoned;
+
+    expect(selectConvives(store.getState()).addStatus).toBe('idle');
+    expect(selectConvives(store.getState()).addError).toBeNull();
+    expect(selectConvives(store.getState()).addSubjectName).toBeNull();
+    expect(selectConvives(store.getState()).latestAddRequestId).toBe(current.requestId);
+  });
+
+  // Symétrique du rejet tardif, sur l'autre issue — trouvé par un mutant survivant, pas par
+  // relecture. Sans garde, le succès tardif d'un ajout abandonné fait DEUX dégâts d'un coup :
+  // son convive rejoint une liste que plus rien ne concerne, et `restAddLifecycle` efface le
+  // constat de l'ajout COURANT — déverrouillant le bouton alors que l'écriture en cours n'est
+  // toujours pas confirmée, ce qui invite le second appui, donc le doublon.
+  it('un succès tardif d’un ajout dépassé n’efface pas le constat de l’ajout courant', async () => {
+    const existing = twoConvives();
+    const slow = deferred<Convive>();
+    let call = 0;
+    const addConviveUseCase: AddConvive = () => {
+      call += 1;
+      return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
+    };
+    const store = createTestStore({
+      listConvives: async () => existing,
+      addConvive: addConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    const abandoned = store.dispatch(addConvive({ name: 'Sacha' }));
+    const current = store.dispatch(addConvive({ name: 'Rory' }));
+    await current;
+    // Le succès tardif arrive APRÈS que l'ajout courant s'est soldé par un non-acquittement.
+    slow.resolve(ConviveBuilder.aConvive().withId('c3').withName('Sacha').build());
+    await abandoned;
+
+    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  // Les deux thunks ont des cycles de vie SÉPARÉS : une seule mémoire de fraîcheur partagée
+  // ferait qu'un rechargement invaliderait l'ajout en vol, et l'écriture réellement partie
+  // n'apparaîtrait jamais dans la liste.
+  it('un rechargement du foyer n’invalide pas l’ajout en vol : son résultat rejoint bien la liste', async () => {
+    const existing = twoConvives();
+    const slowAdd = deferred<Convive>();
+    const store = createTestStore({
+      listConvives: async () => existing,
+      addConvive: () => slowAdd.promise,
+    });
+
+    const add = store.dispatch(addConvive({ name: 'Rory' }));
+    await store.dispatch(loadConvives());
+    slowAdd.resolve(ConviveBuilder.aConvive().withId('c3').withName('Rory').build());
+    await add;
+
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+      'Rory',
+    ]);
+    expect(selectConvives(store.getState()).addStatus).toBe('idle');
+  });
+
+  // Réciproque exacte du test précédent.
+  it('un ajout n’invalide pas le chargement en vol : la liste chargée s’affiche bien', async () => {
+    const existing = twoConvives();
+    const rory = ConviveBuilder.aConvive().withId('c3').withName('Rory').build();
+    const slowLoad = deferred<Convive[]>();
+    const store = createTestStore({
+      listConvives: () => slowLoad.promise,
+      addConvive: async () => rory,
+    });
+
+    const load = store.dispatch(loadConvives());
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    // Le serveur a bien enregistré l'ajout : le chargement lent le rapporte avec le reste.
+    slowLoad.resolve([...existing, rory]);
+    await load;
+
+    expect(selectConvives(store.getState()).status).toBe('success');
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+      'Rory',
+    ]);
   });
 });

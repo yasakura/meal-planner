@@ -4,15 +4,25 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type GetRecipe } from '../../../domain/use-cases/get-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import { RecipeDetailContainer } from './RecipeDetailContainer';
 
+const OFFLINE_NOTICE = 'Aucune connexion — la recette n’a pas pu être chargée.';
+
 function renderAt(id: string, getRecipe: GetRecipe) {
   const store = createTestStore({ getRecipe });
-  const view = render(
+  return { store, ...renderAtWith(store, id) };
+}
+
+// Monte le container sur un store DONNÉ. Indispensable pour rejouer un aller-retour sur la
+// route : en prod le store est un singleton de session (main.tsx), seul le container est
+// démonté. Un test qui recréerait le store ne reproduirait aucune rémanence.
+function renderAtWith(store: ReturnType<typeof createTestStore>, id: string) {
+  return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[`/catalogue/${id}`]}>
         <Routes>
@@ -21,7 +31,6 @@ function renderAt(id: string, getRecipe: GetRecipe) {
       </MemoryRouter>
     </Provider>,
   );
-  return { store, ...view };
 }
 
 describe('RecipeDetailContainer', () => {
@@ -186,5 +195,59 @@ describe('RecipeDetailContainer', () => {
     // Libellé « ← Recettes » (renommage visible) ; la route de retour reste /catalogue.
     const link = screen.getByRole('link', { name: /recettes/i });
     expect(link).toHaveAttribute('href', '/catalogue');
+  });
+
+  // Hors ligne, `getDoc` servait le cache et rendait un snapshot inexistant : l'écran
+  // affirmait « Recette introuvable ». Il affirmait l'inexistence d'une recette qu'il
+  // n'avait pas pu lire — le pire des trois constats possibles, parce qu'il est définitif.
+  it('hors ligne, l’app dit qu’elle n’a pas pu charger la recette — jamais qu’elle est introuvable', async () => {
+    renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
+
+    expect(await screen.findByText(OFFLINE_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText('Recette introuvable')).not.toBeInTheDocument();
+    expect(screen.queryByText('Impossible de charger la recette.')).not.toBeInTheDocument();
+  });
+
+  // Filet sur la couche de RENDU : stryker ne mute pas les .tsx, `RecipeDetailScreen.tsx`
+  // n'a donc aucun mutant pour attraper une fusion de `unavailable` avec `error` ou
+  // `notFound`, qui s'annoncent tous deux en `alert`. Une absence de réseau est un constat,
+  // pas une alerte : rien n'est attendu de l'utilisateur dans l'immédiat.
+  it('le constat hors-ligne est annoncé poliment, jamais comme une alerte', async () => {
+    renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
+    await screen.findByText(OFFLINE_NOTICE);
+
+    expect(screen.getByRole('status')).toHaveTextContent(OFFLINE_NOTICE);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // Un écran qui ne peut rien afficher doit au minimum rester quittable : sans le lien
+  // retour, l'utilisateur hors ligne se retrouve coincé sur une page vide.
+  it('hors ligne, le lien retour vers la liste reste accessible', async () => {
+    renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
+    await screen.findByText(OFFLINE_NOTICE);
+
+    expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
+  });
+
+  // Rémanence : le store est un singleton de session, seul le container est démonté quand on
+  // quitte la route. Le constat hors-ligne ne doit pas survivre à la consultation suivante,
+  // sinon l'écran afficherait la recette ET « aucune connexion » (le défaut vécu sur le
+  // foyer).
+  it('un rechargement réussi au remontage efface le constat hors-ligne, sur le MÊME store', async () => {
+    let offline = true;
+    const flaky: GetRecipe = async () => {
+      if (offline) throw RepositoryUnavailableError.create();
+      return RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+    };
+    const store = createTestStore({ getRecipe: flaky });
+    const { unmount } = renderAtWith(store, 'r-1');
+    await screen.findByText(OFFLINE_NOTICE);
+
+    offline = false;
+    unmount();
+    renderAtWith(store, 'r-1');
+
+    expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
+    expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
   });
 });

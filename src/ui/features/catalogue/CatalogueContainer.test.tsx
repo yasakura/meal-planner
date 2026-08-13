@@ -5,23 +5,32 @@ import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
+import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import { CatalogueContainer } from './CatalogueContainer';
 
+const OFFLINE_NOTICE = 'Aucune connexion — le catalogue n’a pas pu être chargé.';
+
 // Les lignes du catalogue sont désormais des <Link> → montage sous <Router> requis.
 function renderWithStore(listRecipes: ListRecipes) {
   const store = createTestStore({ listRecipes });
-  const view = render(
+  return { store, ...renderWith(store) };
+}
+
+// Monte le container sur un store DONNÉ. Indispensable pour rejouer un aller-retour sur la
+// route : en prod le store est un singleton de session (main.tsx), seul le container est
+// démonté. Un test qui recréerait le store ne reproduirait aucune rémanence.
+function renderWith(store: ReturnType<typeof createTestStore>) {
+  return render(
     <Provider store={store}>
       <MemoryRouter>
         <CatalogueContainer />
       </MemoryRouter>
     </Provider>,
   );
-  return { store, ...view };
 }
 
 // Stub-spy : compte les appels et renvoie les recettes fournies.
@@ -151,5 +160,73 @@ describe('CatalogueContainer', () => {
 
     expect(await screen.findByText('2 ingrédients · 4 personnes')).toBeInTheDocument();
     expect(screen.getByText('1 ingrédient · 2 personnes')).toBeInTheDocument();
+  });
+
+  // Le même mensonge que celui corrigé sur le foyer, mais sur l'écran d'ACCUEIL : réseau
+  // coupé, l'app affichait « Aucune recette » et invitait à créer ce qui existait déjà.
+  it('hors ligne, l’app dit qu’elle n’a pas pu charger le catalogue — jamais qu’il est vide', async () => {
+    renderWithStore(() => Promise.reject(RepositoryUnavailableError.create()));
+
+    expect(await screen.findByText(OFFLINE_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText(/aucune recette/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Impossible de charger le catalogue.')).not.toBeInTheDocument();
+  });
+
+  // Deux constats, deux actions : un échec de chargement se réessaie, une absence de réseau
+  // ne se réessaie pas — le bouton ne ferait que rejouer le même échec.
+  // (`EXPERIENCE.md` : « Aucune connexion — … » ✅ n'offre aucune action ; c'est
+  // « Erreur réseau ! Réessayer ? » qui est proscrit.)
+  it('le constat hors-ligne ne propose pas « Réessayer », contrairement à l’échec de chargement', async () => {
+    renderWithStore(() => Promise.reject(RepositoryUnavailableError.create()));
+    await screen.findByText(OFFLINE_NOTICE);
+
+    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+  });
+
+  // Filet sur la couche de RENDU : stryker ne mute pas les .tsx, `RecipeListScreen.tsx` n'a
+  // donc aucun mutant pour attraper une fusion des états `error` et `unavailable`. Un
+  // constat sur lequel rien n'est attendu de l'utilisateur s'annonce poliment ; `alert` est
+  // assertif et interrompt le lecteur d'écran.
+  it('le constat hors-ligne est annoncé poliment, jamais comme une alerte', async () => {
+    renderWithStore(() => Promise.reject(RepositoryUnavailableError.create()));
+    await screen.findByText(OFFLINE_NOTICE);
+
+    expect(screen.getByRole('status')).toHaveTextContent(OFFLINE_NOTICE);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // Décision DIFFÉRENTE de celle prise pour le foyer, où le formulaire d'ajout est masqué
+  // hors ligne : ajouter un convive à l'aveugle sans savoir qui est déjà là invite au
+  // doublon. Ici « + » est un lien de navigation vers une autre route, pas une écriture
+  // aveugle — le masquer enfermerait l'utilisateur sur un écran sans issue.
+  it('l’état hors-ligne garde le lien « Ajouter une recette » accessible', async () => {
+    renderWithStore(() => Promise.reject(RepositoryUnavailableError.create()));
+    await screen.findByText(OFFLINE_NOTICE);
+
+    expect(screen.getByRole('link', { name: /ajouter une recette/i })).toHaveAttribute(
+      'href',
+      '/catalogue/nouvelle',
+    );
+  });
+
+  // Rémanence : le store est un singleton de session, seul le container est démonté quand on
+  // quitte la route. Le constat hors-ligne ne doit pas survivre au chargement suivant, sinon
+  // l'écran afficherait le catalogue ET « aucune connexion » (le défaut vécu sur le foyer).
+  it('un rechargement réussi au remontage efface le constat hors-ligne, sur le MÊME store', async () => {
+    let offline = true;
+    const flaky: ListRecipes = async () => {
+      if (offline) throw RepositoryUnavailableError.create();
+      return [RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()];
+    };
+    const store = createTestStore({ listRecipes: flaky });
+    const { unmount } = renderWith(store);
+    await screen.findByText(OFFLINE_NOTICE);
+
+    offline = false;
+    unmount();
+    renderWith(store);
+
+    expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
+    expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
   });
 });

@@ -10,6 +10,10 @@ export type RecipeListItem = { id: string; title: string; meta: string };
 export type RecipeListScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
+  // Hors ligne : un constat, sans « Réessayer » — le bouton ne ferait que rejouer le même
+  // échec tant que le réseau manque. C'est ce qui distingue cet état de `error`, où le
+  // réessai a du sens.
+  | { status: 'unavailable'; message: string }
   | { status: 'empty' }
   | { status: 'loaded'; recipes: RecipeListItem[] };
 
@@ -71,7 +75,9 @@ const Spinner = styled.svg`
   animation: ${spin} 0.8s linear infinite;
 `;
 
-const LoadingText = styled.p`
+// Constat neutre (chargement, absence de réseau) : teinte secondaire, aucun rouge d'alerte —
+// un état n'est pas un jugement. Le rouge reste réservé à `ErrorMessage`.
+const StateText = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
   color: ${colors.inkSecondary};
@@ -171,7 +177,7 @@ function Body(props: RecipeListScreenProps) {
               strokeLinecap="round"
             />
           </Spinner>
-          <LoadingText>Chargement…</LoadingText>
+          <StateText>Chargement…</StateText>
         </LoadingState>
       );
     case 'error':
@@ -182,6 +188,15 @@ function Body(props: RecipeListScreenProps) {
             Réessayer
           </RetryButton>
         </ErrorBox>
+      );
+    // `role="status"` (poli) et non `role="alert"` (assertif) : une absence de réseau est un
+    // constat, pas une alerte, et rien n'est attendu de l'utilisateur dans l'immédiat.
+    // Pas de « Réessayer » non plus — voir le commentaire sur le type.
+    case 'unavailable':
+      return (
+        <CenteredState>
+          <StateText role="status">{props.message}</StateText>
+        </CenteredState>
       );
     case 'empty':
       return (
