@@ -7,7 +7,28 @@ import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { createTestStore } from '../../store/create-test-store';
 import { deferred } from '../../test-utils/deferred';
-import { addConvive, conviveNameEdited, loadConvives, selectConvives } from './convives-slice';
+import {
+  type RemoveConvive,
+  type RemoveConviveInput,
+} from '../../../domain/use-cases/remove-convive';
+import {
+  type RenameConvive,
+  type RenameConviveInput,
+} from '../../../domain/use-cases/rename-convive';
+import {
+  addConvive,
+  conviveEditCancelled,
+  conviveEditRequested,
+  conviveNameEdited,
+  conviveRemovalCancelled,
+  conviveRemovalRequested,
+  loadConvives,
+  removeConvive,
+  renameConvive,
+  renameDraftEdited,
+  conviveRowsOf,
+  selectConvives,
+} from './convives-slice';
 
 function twoConvives(): Convive[] {
   return [
@@ -29,6 +50,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: null,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -48,6 +76,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: null,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -73,6 +108,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: null,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -91,6 +133,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: null,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -119,6 +168,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: added.meta.requestId,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -165,6 +221,13 @@ describe('convives slice', () => {
       addError: 'Firestore indisponible',
       addSubjectName: 'Rory',
       latestAddRequestId: failed.meta.requestId,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -188,6 +251,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: 'Rory',
       latestAddRequestId: inFlight.requestId,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -208,6 +278,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: null,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -234,6 +311,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: 'Rory',
       latestAddRequestId: unacked.meta.requestId,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -403,6 +487,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: retried.meta.requestId,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -435,6 +526,13 @@ describe('convives slice', () => {
       addError: null,
       addSubjectName: null,
       latestAddRequestId: null,
+      renameStatus: 'idle',
+      renameDraft: '',
+      editingConviveId: null,
+      latestRenameRequestId: null,
+      removeStatus: 'idle',
+      pendingRemovalId: null,
+      latestRemoveRequestId: null,
     });
   });
 
@@ -549,5 +647,995 @@ describe('convives slice', () => {
       'Lionel',
       'Rory',
     ]);
+  });
+
+  // ─── Renommer (FR-3) ────────────────────────────────────────────────────────────────
+
+  it('renameConvive appelle le use case avec l’id et le nouveau prénom, et remplace le convive', async () => {
+    const captured: { input: RenameConviveInput | undefined } = { input: undefined };
+    const renameConviveUseCase: RenameConvive = async (input) => {
+      captured.input = input;
+      return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: renameConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(captured.input).toEqual({ id: 'c2', name: 'Lio' });
+    // Remplacement EN PLACE : le convive garde son id, la liste garde sa taille.
+    expect(selectConvives(store.getState()).convives).toEqual([
+      ConviveBuilder.aConvive().withId('c1').withName('Aurélie').build(),
+      ConviveBuilder.aConvive().withId('c2').withName('Lio').build(),
+    ]);
+  });
+
+  // Jeu DISCRIMINANT : un remplacement en place sans retri laisserait ['Aurélie', 'Alix'],
+  // c'est-à-dire un foyer qui n'est plus dans l'ordre qu'il affiche depuis le chargement.
+  it('range le convive renommé à sa nouvelle place alphabétique', async () => {
+    const renameConviveUseCase: RenameConvive = async (input) =>
+      ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: renameConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Alix' }));
+
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Alix',
+      'Aurélie',
+    ]);
+  });
+
+  it('un renommage réussi referme l’édition et remet le cycle au repos', async () => {
+    const renameConviveUseCase: RenameConvive = async (input) =>
+      ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: renameConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    const renamed = await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('idle');
+    expect(selectConvives(store.getState()).editingConviveId).toBeNull();
+    expect(selectConvives(store.getState()).latestRenameRequestId).toBe(renamed.meta.requestId);
+  });
+
+  it('pendant un renommage en vol, renameStatus passe à renaming et la liste ne bouge pas', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    const inFlight = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('renaming');
+    expect(selectConvives(store.getState()).latestRenameRequestId).toBe(inFlight.requestId);
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+    // L'édition reste ouverte : c'est la ligne en cours d'écriture qui porte le verrou.
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+  });
+
+  it('un renommage refusé passe en error, sans altérer la liste ni refermer l’édition', async () => {
+    const failingRename: RenameConvive = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: failingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
+    // L'édition reste ouverte : refermer effacerait la saisie de l'utilisateur au moment
+    // précis où il doit pouvoir réessayer.
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  // Troisième issue, comme pour l'ajout : ni renommé, ni refusé. La liste ne bouge pas —
+  // afficher le nouveau prénom laisserait croire qu'il est enregistré.
+  it('un renommage que le serveur n’a pas acquitté prend un status distinct de error', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  it('un rejet tardif d’un renommage dépassé ne verrouille pas la ligne après un renommage réussi', async () => {
+    const slow = deferred<Convive>();
+    let call = 0;
+    const renameConviveUseCase: RenameConvive = (input) => {
+      call += 1;
+      return call === 1
+        ? slow.promise
+        : Promise.resolve(ConviveBuilder.aConvive().withId(input.id).withName(input.name).build());
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: renameConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    const abandoned = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    const current = store.dispatch(renameConvive({ id: 'c2', name: 'Lionelle' }));
+    await current;
+    slow.reject(RepositoryUnavailableError.create());
+    await abandoned;
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('idle');
+    expect(selectConvives(store.getState()).latestRenameRequestId).toBe(current.requestId);
+  });
+
+  // Asymétrie ASSUMÉE avec le retrait : un renommage n'est pas monotone. Appliquer un succès
+  // tardif écraserait une valeur plus fraîche par une plus ancienne — le prénom afficherait
+  // « Lio » alors que le dernier renommage demandé était « Lionelle ».
+  it('un succès tardif d’un renommage dépassé n’écrase pas le renommage plus frais', async () => {
+    const slow = deferred<Convive>();
+    let call = 0;
+    const renameConviveUseCase: RenameConvive = (input) => {
+      call += 1;
+      return call === 1
+        ? slow.promise
+        : Promise.resolve(ConviveBuilder.aConvive().withId(input.id).withName(input.name).build());
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: renameConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    const abandoned = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    const current = store.dispatch(renameConvive({ id: 'c2', name: 'Lionelle' }));
+    await current;
+    slow.resolve(ConviveBuilder.aConvive().withId('c2').withName('Lio').build());
+    await abandoned;
+
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionelle',
+    ]);
+  });
+
+  it('ouvrir l’édition d’une ligne mémorise le convive édité, l’annuler l’oublie', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+
+    store.dispatch(conviveEditRequested('c2'));
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+
+    store.dispatch(conviveEditCancelled());
+    expect(selectConvives(store.getState()).editingConviveId).toBeNull();
+  });
+
+  // Même déclencheur que sur l'ajout, pour la même raison : c'est un geste de l'utilisateur,
+  // il ne suppose rien du cycle de montage — que la sheet ne garantit pas.
+  it('modifier le brouillon de renommage efface le constat périmé', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+
+    store.dispatch(renameDraftEdited('Li'));
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('idle');
+    // L'édition NE se referme PAS : l'utilisateur est en train de taper dedans.
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+  });
+
+  it('modifier le brouillon pendant un renommage en vol ne déverrouille rien', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    store.dispatch(renameDraftEdited('Li'));
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('renaming');
+  });
+
+  // Rémanence : le store est un singleton de session. Sans cette remise à zéro, rouvrir la
+  // sheet retrouverait une ligne ouverte en édition, avec un constat d'échec périmé, sur un
+  // brouillon vide — le container repart avec un `useState` neuf.
+  it('un nouveau chargement referme l’édition et remet le cycle de renommage au repos', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('idle');
+    expect(selectConvives(store.getState()).editingConviveId).toBeNull();
+  });
+
+  // Symétrique de la garde posée sur l'ajout : une écriture en vol ne se déverrouille pas.
+  it('un chargement qui démarre pendant un renommage en vol ne réarme pas la ligne', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    store.dispatch(conviveEditRequested('c2'));
+    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    void store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).renameStatus).toBe('renaming');
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+  });
+
+  // ─── Retirer (FR-3) ─────────────────────────────────────────────────────────────────
+
+  it('removeConvive appelle le use case avec l’id et retire le convive de la liste', async () => {
+    const captured: { input: RemoveConviveInput | undefined } = { input: undefined };
+    const removeConviveUseCase: RemoveConvive = async (input) => {
+      captured.input = input;
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: removeConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(captured.input).toEqual({ id: 'c2' });
+    expect(selectConvives(store.getState()).convives).toEqual([
+      ConviveBuilder.aConvive().withId('c1').withName('Aurélie').build(),
+    ]);
+  });
+
+  it('un retrait réussi referme la confirmation et remet le cycle au repos', async () => {
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: async () => {},
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    const removed = await store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('idle');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBeNull();
+    expect(selectConvives(store.getState()).latestRemoveRequestId).toBe(removed.meta.requestId);
+  });
+
+  it('pendant un retrait en vol, removeStatus passe à removing et le convive reste affiché', async () => {
+    const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: pendingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    const inFlight = store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('removing');
+    expect(selectConvives(store.getState()).latestRemoveRequestId).toBe(inFlight.requestId);
+    // Rien ne prouve encore que l'effacement a eu lieu : le retirer de la liste tout de suite
+    // serait affirmer un fait non acquitté, et le convive réapparaîtrait au chargement suivant.
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  it('un retrait refusé passe en error, le convive reste dans la liste et la confirmation reste ouverte', async () => {
+    const failingRemove: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: failingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('error');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  it('un retrait que le serveur n’a pas acquitté prend un status distinct de error, sans quitter la liste', async () => {
+    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  it('un rejet tardif d’un retrait dépassé n’écrase pas le constat du retrait courant', async () => {
+    const slow = deferred<void>();
+    let call = 0;
+    const removeConviveUseCase: RemoveConvive = () => {
+      call += 1;
+      return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: removeConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    const abandoned = store.dispatch(removeConvive({ id: 'c1' }));
+    const current = store.dispatch(removeConvive({ id: 'c2' }));
+    await current;
+    slow.reject(new Error('Firestore indisponible'));
+    await abandoned;
+
+    // Le constat courant est « non acquitté » ; le rejet périmé ne doit pas le transformer
+    // en « refusé », ce qui armerait une alerte là où il n'y a rien à faire.
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).latestRemoveRequestId).toBe(current.requestId);
+  });
+
+  // Asymétrie ASSUMÉE avec le renommage : un retrait est MONOTONE — une fois le convive
+  // effacé du serveur, cela ne redevient jamais faux. La liste se corrige donc même sur un
+  // succès périmé, alors que le CONSTAT, lui, reste celui du retrait courant.
+  it('un succès tardif d’un retrait dépassé retire quand même le convive, sans toucher au constat courant', async () => {
+    const slow = deferred<void>();
+    let call = 0;
+    const removeConviveUseCase: RemoveConvive = () => {
+      call += 1;
+      return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: removeConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+    // La confirmation ouverte porte sur c2 : c'est elle que le succès périmé de c1 ne doit
+    // pas refermer.
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    const abandoned = store.dispatch(removeConvive({ id: 'c1' }));
+    const current = store.dispatch(removeConvive({ id: 'c2' }));
+    await current;
+    slow.resolve();
+    await abandoned;
+
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual(['Lionel']);
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+  });
+
+  // La suppression est DÉFINITIVE et sans undo : demander le retrait ne retire rien, ça ouvre
+  // une confirmation. Aucun tap unique n'efface une personne.
+  it('demander le retrait n’appelle pas le use case et ne retire personne', async () => {
+    let called = 0;
+    const removeConviveUseCase: RemoveConvive = async () => {
+      called += 1;
+    };
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: removeConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+    expect(called).toBe(0);
+    expect(selectConvives(store.getState()).convives).toHaveLength(2);
+  });
+
+  it('annuler la confirmation oublie la demande de retrait', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+
+    store.dispatch(conviveRemovalCancelled());
+
+    expect(selectConvives(store.getState()).pendingRemovalId).toBeNull();
+  });
+
+  it('un nouveau chargement referme la confirmation et remet le cycle de retrait au repos', async () => {
+    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('idle');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBeNull();
+  });
+
+  it('un chargement qui démarre pendant un retrait en vol ne réarme pas la confirmation', async () => {
+    const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: pendingRemove,
+    });
+    store.dispatch(conviveRemovalRequested('c2'));
+    void store.dispatch(removeConvive({ id: 'c2' }));
+
+    void store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('removing');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+  });
+
+  // ─── Lignes prêtes à afficher ───────────────────────────────────────────────────────
+
+  it('rend une ligne par convive, dans l’ordre de la liste, au repos', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows.map((r) => [r.id, r.name, r.mode])).toEqual([
+      ['c1', 'Aurélie', 'idle'],
+      ['c2', 'Lionel', 'idle'],
+    ]);
+    expect(rows.every((r) => r.notice === null)).toBe(true);
+  });
+
+  it('seule la ligne éditée passe en mode édition', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows.map((r) => r.mode)).toEqual(['idle', 'editing']);
+  });
+
+  it('seule la ligne dont le retrait attend confirmation passe en mode confirmation', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c1'));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows.map((r) => r.mode)).toEqual(['confirming-removal', 'idle']);
+  });
+
+  it('verrouille l’enregistrement tant que le brouillon est vide ou blanc', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    store.dispatch(renameDraftEdited(''));
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    store.dispatch(renameDraftEdited('   '));
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    store.dispatch(renameDraftEdited('Lio'));
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(false);
+  });
+
+  // Renommer vers le prénom déjà porté PAR CE convive n'est pas un renommage : l'écriture
+  // partirait pour rien, et hors ligne elle produirait un constat « le renommage de Lionel
+  // n'a pas pu être confirmé » pour une opération qui ne changeait rien.
+  it('verrouille l’enregistrement quand le brouillon est le prénom actuel du convive', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    // Le brouillon est pré-rempli avec le prénom courant : la ligne s'ouvre donc déjà
+    // verrouillée, sans que l'utilisateur ait rien tapé.
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    // Trimé de la même façon que le domaine : « Lionel » entouré d'espaces reste le même
+    // prénom, et `createConvive` le prouverait après coup.
+    store.dispatch(renameDraftEdited('  Lionel  '));
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    // La casse, elle, EST un renommage : « lionel » et « Lionel » ne s'écrivent pas pareil.
+    store.dispatch(renameDraftEdited('lionel'));
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(false);
+    // Le prénom d'un AUTRE convive reste un renommage valide — les homonymes sont permis.
+    store.dispatch(renameDraftEdited('Aurélie'));
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(false);
+  });
+
+  it('verrouille l’enregistrement pendant le renommage en vol et tant qu’il n’est pas acquitté', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    // Brouillon DIFFÉRENT du prénom courant : sinon le verrou viendrait de l'égalité des
+    // prénoms, et ce test ne dirait plus rien du verrou dû à l'écriture en vol.
+    store.dispatch(renameDraftEdited('Lio'));
+    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    // Le CHAMP, lui, se verrouille pendant l'écriture seulement.
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.editInputDisabled).toBe(true);
+  });
+
+  // Même distinction que sur l'ajout : le bouton reste verrouillé sur un renommage non
+  // acquitté (l'écriture est partie et atterrira), mais le champ NON — c'est la frappe qui
+  // efface le constat, et verrouiller le champ figerait l'écran définitivement.
+  it('après un renommage non acquitté, le bouton reste verrouillé mais le champ redevient saisissable', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    // Brouillon DIFFÉRENT du prénom courant, même raison : c'est le non-acquittement qui
+    // doit verrouiller ici, pas l'absence de changement.
+    store.dispatch(renameDraftEdited('Lio'));
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.editInputDisabled).toBe(false);
+  });
+
+  it('verrouille la confirmation de retrait pendant le retrait en vol', async () => {
+    const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: pendingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    void store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.confirmDisabled).toBe(true);
+  });
+
+  it('porte le constat d’un renommage refusé sur la seule ligne concernée, comme une alerte', async () => {
+    const failingRename: RenameConvive = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: failingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows[0]?.notice).toBeNull();
+    // Message sobre, sans le détail technique : « Firestore indisponible » ne veut rien dire
+    // pour l'utilisateur.
+    expect(rows[1]?.notice).toEqual({
+      tone: 'error',
+      message: 'Impossible de renommer le convive.',
+    });
+  });
+
+  it('nomme le convive dans le constat d’un renommage non acquitté, sur un ton de constat', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c1'));
+    await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    // ANCIEN prénom : c'est celui que la ligne affiche, et le renommage n'a rien changé.
+    // Élision française par la même fonction que l'ajout : « d’Aurélie », pas « de Aurélie ».
+    expect(rows[0]?.notice).toEqual({
+      tone: 'unconfirmed',
+      message: 'Aucune connexion — le renommage d’Aurélie n’a pas pu être confirmé.',
+    });
+    expect(rows[1]?.notice).toBeNull();
+  });
+
+  it('porte le constat d’un retrait refusé sur la seule ligne concernée, comme une alerte', async () => {
+    const failingRemove: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: failingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows[0]?.notice).toBeNull();
+    expect(rows[1]?.notice).toEqual({
+      tone: 'error',
+      message: 'Impossible de retirer le convive.',
+    });
+  });
+
+  it('nomme le convive dans le constat d’un retrait non acquitté, sur un ton de constat', async () => {
+    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows[1]?.notice).toEqual({
+      tone: 'unconfirmed',
+      message: 'Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.',
+    });
+  });
+
+  // ─── Filets posés en réponse à des mutants survivants (run isolé) ───────────────────
+
+  it('ouvrir l’édition d’une autre ligne efface le constat périmé de la précédente', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+
+    store.dispatch(conviveEditRequested('c1'));
+
+    // Sans cet effacement, la ligne d'Aurélie s'ouvrirait en portant le constat du renommage
+    // de Lionel — et son bouton « Enregistrer » naîtrait verrouillé.
+    expect(selectConvives(store.getState()).renameStatus).toBe('idle');
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c1');
+  });
+
+  it('ouvrir l’édition d’une autre ligne pendant un renommage en vol ne déplace rien', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    store.dispatch(conviveEditRequested('c1'));
+
+    // Déplacer l'édition déverrouillerait la ligne en cours d'écriture : un second envoi
+    // deviendrait possible pendant les 5 s de la borne d'acquittement.
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+  });
+
+  it('annuler l’édition pendant un renommage en vol ne referme rien', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    store.dispatch(conviveEditCancelled());
+
+    expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+    expect(selectConvives(store.getState()).renameStatus).toBe('renaming');
+  });
+
+  it('demander le retrait d’un autre convive efface le constat périmé du précédent', async () => {
+    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+
+    store.dispatch(conviveRemovalRequested('c1'));
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('idle');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c1');
+  });
+
+  it('demander le retrait d’un autre convive pendant un retrait en vol ne déplace rien', async () => {
+    const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: pendingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    void store.dispatch(removeConvive({ id: 'c2' }));
+
+    store.dispatch(conviveRemovalRequested('c1'));
+
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+  });
+
+  it('annuler la confirmation pendant un retrait en vol ne referme rien', async () => {
+    const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: pendingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    void store.dispatch(removeConvive({ id: 'c2' }));
+
+    store.dispatch(conviveRemovalCancelled());
+
+    expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
+    expect(selectConvives(store.getState()).removeStatus).toBe('removing');
+  });
+
+  // L'autre compte du board a supprimé le convive pendant que celui-ci le renommait, et le
+  // rechargement l'a fait disparaître de la liste. Le succès du renommage ne doit RESSUSCITER
+  // personne : le domaine a rejeté, mais si le rejet arrive après coup, la liste fait foi.
+  it('un renommage abouti sur un convive absent de la liste n’y ajoute personne', async () => {
+    const slowRename = deferred<Convive>();
+    let load = 0;
+    const listConvives: ListConvives = () => {
+      load += 1;
+      return Promise.resolve(
+        load === 1
+          ? twoConvives()
+          : [ConviveBuilder.aConvive().withId('c1').withName('Aurélie').build()],
+      );
+    };
+    const store = createTestStore({ listConvives, renameConvive: () => slowRename.promise });
+    await store.dispatch(loadConvives());
+
+    const rename = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    await store.dispatch(loadConvives());
+    slowRename.resolve(ConviveBuilder.aConvive().withId('c2').withName('Lio').build());
+    await rename;
+
+    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual(['Aurélie']);
+  });
+
+  it('une ligne ouverte en édition, sans échec, ne porte aucun constat', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.notice).toBeNull();
+  });
+
+  it('une confirmation de retrait ouverte, sans échec, ne porte aucun constat et reste actionnable', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    const row = conviveRowsOf(selectConvives(store.getState()))[1];
+    expect(row?.notice).toBeNull();
+    // Le bouton « Retirer » n'est verrouillé QUE pendant l'écriture : sinon la confirmation
+    // s'ouvrirait déjà morte.
+    expect(row?.confirmDisabled).toBe(false);
+  });
+
+  // ─── Verrou des autres lignes tant qu'un cycle n'est pas au repos ───────────────────
+
+  it('laisse toutes les lignes actionnables quand les deux cycles sont au repos', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+
+    // Jeu DISCRIMINANT : un verrou posé sans condition figerait l'écran en permanence.
+    expect(conviveRowsOf(selectConvives(store.getState())).map((r) => r.actionsDisabled)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it('verrouille les lignes au repos pendant un renommage en vol', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c1'));
+    void store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    // La ligne en écriture n'est pas « au repos » : ce sont les AUTRES qu'on fige, pour que
+    // le `useState` du brouillon ne puisse pas diverger de la ligne que le store tient.
+    expect(rows.map((r) => [r.mode, r.actionsDisabled])).toEqual([
+      ['editing', false],
+      ['idle', true],
+    ]);
+  });
+
+  it('garde les autres lignes verrouillées tant que le constat de renommage n’est pas levé', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c1'));
+    await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.actionsDisabled).toBe(true);
+
+    // Une frappe lève le constat, donc le verrou : le mécanisme de sortie est le même que
+    // pour l'ajout, et il tient en un geste.
+    store.dispatch(renameDraftEdited('Li'));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.actionsDisabled).toBe(false);
+  });
+
+  it('verrouille aussi les autres lignes tant que le constat de retrait n’est pas levé', async () => {
+    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[0]?.actionsDisabled).toBe(true);
+
+    store.dispatch(conviveRemovalCancelled());
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[0]?.actionsDisabled).toBe(false);
+  });
+
+  it('verrouille les autres lignes pendant un retrait en vol', async () => {
+    const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: pendingRemove,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    void store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(conviveRowsOf(selectConvives(store.getState()))[0]?.actionsDisabled).toBe(true);
+  });
+
+  // ─── Le brouillon vit dans le store, pas dans le container ──────────────────────────
+
+  // Racine des défauts de cette feature : un état d'UI hors du store. Le container repart
+  // d'un `useState` vide à chaque montage, le store non — et les deux divergent.
+  it('ouvrir l’édition pré-remplit le brouillon avec le prénom courant', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+
+    store.dispatch(conviveEditRequested('c2'));
+
+    // Corriger une faute de frappe est le cas courant : on repart du prénom affiché.
+    expect(selectConvives(store.getState()).renameDraft).toBe('Lionel');
+  });
+
+  it('ouvrir l’édition d’un convive inconnu laisse le brouillon vide', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+
+    store.dispatch(conviveEditRequested('inconnu'));
+
+    expect(selectConvives(store.getState()).renameDraft).toBe('');
+  });
+
+  it('la frappe remplace le brouillon', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+
+    store.dispatch(renameDraftEdited('Lio'));
+
+    expect(selectConvives(store.getState()).renameDraft).toBe('Lio');
+  });
+
+  it('annuler l’édition oublie le brouillon', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    store.dispatch(renameDraftEdited('Lio'));
+
+    store.dispatch(conviveEditCancelled());
+
+    expect(selectConvives(store.getState()).renameDraft).toBe('');
+  });
+
+  it('un renommage réussi oublie le brouillon avec le reste du cycle', async () => {
+    const renameConviveUseCase: RenameConvive = async (input) =>
+      ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: renameConviveUseCase,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    store.dispatch(renameDraftEdited('Lio'));
+
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    expect(selectConvives(store.getState()).renameDraft).toBe('');
+  });
+
+  // La contrepartie de la garde « une écriture en vol ne se déverrouille pas » : le
+  // brouillon doit survivre au rechargement déclenché par une réouverture de la sheet,
+  // exactement comme l'édition qu'il accompagne.
+  it('un chargement qui démarre pendant un renommage en vol conserve le brouillon', async () => {
+    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      renameConvive: pendingRename,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    store.dispatch(renameDraftEdited('Lio'));
+    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+
+    void store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).renameDraft).toBe('Lio');
+  });
+
+  it('un nouveau chargement hors écriture en vol oublie le brouillon', async () => {
+    const store = createTestStore({ listConvives: async () => twoConvives() });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveEditRequested('c2'));
+    store.dispatch(renameDraftEdited('Lio'));
+
+    await store.dispatch(loadConvives());
+
+    expect(selectConvives(store.getState()).renameDraft).toBe('');
   });
 });

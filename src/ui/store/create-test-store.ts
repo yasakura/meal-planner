@@ -5,6 +5,8 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
+import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { InMemoryConviveRepository } from '../../domain/test-doubles/in-memory-convive-repository';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
 import { StubAuthGateway } from '../../domain/test-doubles/stub-auth-gateway';
@@ -38,6 +40,8 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
       idGenerator: StubIdGenerator.create(),
       conviveRepository,
     }),
+    renameConvive: renameConviveUseCase({ conviveRepository }),
+    removeConvive: removeConviveUseCase({ conviveRepository }),
   };
 
   return createStore({ ...defaults, ...overrides });

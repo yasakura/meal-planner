@@ -7,6 +7,8 @@ import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
 import { type GetRecipe } from '../../domain/use-cases/get-recipe';
 import { type ListConvives } from '../../domain/use-cases/list-convives';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
+import { type RemoveConvive } from '../../domain/use-cases/remove-convive';
+import { type RenameConvive } from '../../domain/use-cases/rename-convive';
 import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
 import { convivesReducer } from '../features/convives/convives-slice';
@@ -22,6 +24,8 @@ export type AppDependencies = {
   generateMenu: GenerateMenu;
   listConvives: ListConvives;
   addConvive: AddConvive;
+  renameConvive: RenameConvive;
+  removeConvive: RemoveConvive;
 };
 
 const rootReducer = combineReducers({

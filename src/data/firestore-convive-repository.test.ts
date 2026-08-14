@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type Firestore,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   getDocsFromServer,
+  runTransaction,
   setDoc,
 } from 'firebase/firestore';
 import { FirestoreConviveRepository } from './firestore-convive-repository';
@@ -15,14 +17,18 @@ import { isRepositoryUnavailable } from '../domain/errors/repository-unavailable
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn(),
   setDoc: vi.fn(),
+  deleteDoc: vi.fn(),
   collection: vi.fn(),
   getDocs: vi.fn(),
   getDocsFromServer: vi.fn(),
+  runTransaction: vi.fn(),
 }));
 
 const mockedDoc = vi.mocked(doc);
 const mockedSetDoc = vi.mocked(setDoc);
+const mockedDeleteDoc = vi.mocked(deleteDoc);
 const mockedCollection = vi.mocked(collection);
+const mockedRunTransaction = vi.mocked(runTransaction);
 const mockedGetDocs = vi.mocked(getDocs);
 const mockedGetDocsFromServer = vi.mocked(getDocsFromServer);
 
@@ -38,7 +44,9 @@ describe('FirestoreConviveRepository', () => {
   beforeEach(() => {
     mockedDoc.mockReset();
     mockedSetDoc.mockReset();
+    mockedDeleteDoc.mockReset();
     mockedCollection.mockReset();
+    mockedRunTransaction.mockReset();
     mockedGetDocs.mockReset();
     mockedGetDocsFromServer.mockReset();
   });
@@ -197,4 +205,190 @@ describe('FirestoreConviveRepository', () => {
       );
     },
   );
+
+  it('remove efface le document convives/{id}', async () => {
+    const docRef = { marker: 'doc-ref-sentinel' };
+    mockedDoc.mockReturnValue(docRef as never);
+    mockedDeleteDoc.mockResolvedValue(undefined as never);
+    const repository = FirestoreConviveRepository.create(db);
+
+    await repository.remove('convive-42');
+
+    expect(mockedDoc).toHaveBeenCalledWith(db, 'convives', 'convive-42');
+    expect(mockedDeleteDoc).toHaveBeenCalledWith(docRef);
+  });
+
+  it('remove traduit un effacement impossible faute de réseau en indisponibilité de dépôt', async () => {
+    mockedDoc.mockReturnValue({} as never);
+    mockedDeleteDoc.mockRejectedValue(firestoreError('unavailable'));
+    const repository = FirestoreConviveRepository.create(db);
+
+    await expect(repository.remove('convive-42')).rejects.toSatisfy(isRepositoryUnavailable);
+  });
+
+  it("remove ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
+    mockedDoc.mockReturnValue({} as never);
+    const refus = firestoreError('permission-denied');
+    mockedDeleteDoc.mockRejectedValue(refus);
+    const repository = FirestoreConviveRepository.create(db);
+
+    await expect(repository.remove('convive-42')).rejects.toBe(refus);
+  });
+
+  // Même défaut que `setDoc`, mesuré identiquement : hors ligne `deleteDoc` ne rejette pas,
+  // il met l'effacement en file locale et n'acquitte qu'au serveur — la promesse ne se règle
+  // jamais. Sans borne, l'écran resterait figé sur « suppression en cours », bouton
+  // verrouillé, sans jamais rien dire.
+  it(
+    "signale un effacement que le serveur n'a pas acquitté dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
+
+      await expect(repository.remove('convive-42')).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it("ne laisse aucune borne en suspens une fois l'effacement acquitté", async () => {
+    vi.useFakeTimers();
+    try {
+      mockedDoc.mockReturnValue({} as never);
+      mockedDeleteDoc.mockResolvedValue(undefined as never);
+      const repository = FirestoreConviveRepository.create(db);
+
+      await repository.remove('convive-42');
+      await Promise.resolve();
+
+      expect(mockedDeleteDoc).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Un faux `Transaction` : on n'a pas d'émulateur (décision 2026-07-14), donc ce qui est
+  // vérifié ici est le CÂBLAGE — que la lecture et l'écriture passent bien par le même objet
+  // de transaction, et non par des appels libres qui ne seraient pas atomiques.
+  function transactionLisant(snapshot: unknown) {
+    const tx = { get: vi.fn().mockResolvedValue(snapshot), set: vi.fn() };
+    mockedRunTransaction.mockImplementation((_db, updateFunction) =>
+      (updateFunction as (t: unknown) => Promise<unknown>)(tx),
+    );
+    return tx;
+  }
+
+  it('updateExisting lit et réécrit convives/{id} DANS la transaction, en appliquant la transformation', async () => {
+    const docRef = { marker: 'doc-ref-sentinel' };
+    mockedDoc.mockReturnValue(docRef as never);
+    const convive = ConviveBuilder.aConvive().withId('convive-42').withName('Aurélie').build();
+    const tx = transactionLisant({
+      id: 'convive-42',
+      exists: () => true,
+      data: () => conviveToDocument(convive),
+    });
+    const repository = FirestoreConviveRepository.create(db);
+
+    const renomme = await repository.updateExisting('convive-42', (existing) =>
+      ConviveBuilder.aConvive().withId(existing.id).withName('Alix').build(),
+    );
+
+    expect(mockedDoc).toHaveBeenCalledWith(db, 'convives', 'convive-42');
+    // Lecture ET écriture par la transaction : `getDocFromServer` puis `setDoc` laisseraient
+    // un intervalle pendant lequel l'autre compte peut supprimer, et l'écriture — un upsert —
+    // ressusciterait le convive.
+    expect(tx.get).toHaveBeenCalledWith(docRef);
+    expect(tx.set).toHaveBeenCalledWith(docRef, conviveToDocument(renomme!));
+    expect(renomme).toEqual({ id: 'convive-42', name: 'Alix' });
+  });
+
+  it("updateExisting rend undefined et n'écrit rien quand le convive n'existe pas", async () => {
+    mockedDoc.mockReturnValue({} as never);
+    const tx = transactionLisant({ exists: () => false });
+    const repository = FirestoreConviveRepository.create(db);
+
+    const renomme = await repository.updateExisting('inconnu', () => {
+      throw new Error('la transformation ne doit pas être appelée sur un convive absent');
+    });
+
+    expect(renomme).toBeUndefined();
+    expect(tx.set).not.toHaveBeenCalled();
+  });
+
+  // La transformation porte les invariants du domaine (`createConvive`) : quand elle refuse,
+  // l'erreur remonte telle quelle et la transaction n'écrit rien.
+  it("updateExisting n'écrit rien et propage l'erreur quand la transformation refuse", async () => {
+    mockedDoc.mockReturnValue({} as never);
+    const convive = ConviveBuilder.aConvive().withId('convive-42').build();
+    const tx = transactionLisant({
+      id: 'convive-42',
+      exists: () => true,
+      data: () => conviveToDocument(convive),
+    });
+    const repository = FirestoreConviveRepository.create(db);
+
+    await expect(
+      repository.updateExisting('convive-42', () => {
+        throw new Error('Le nom du convive est obligatoire');
+      }),
+    ).rejects.toThrow('Le nom du convive est obligatoire');
+    expect(tx.set).not.toHaveBeenCalled();
+  });
+
+  it('updateExisting traduit une transaction impossible faute de réseau en indisponibilité de dépôt', async () => {
+    mockedDoc.mockReturnValue({} as never);
+    mockedRunTransaction.mockRejectedValue(firestoreError('unavailable'));
+    const repository = FirestoreConviveRepository.create(db);
+
+    await expect(repository.updateExisting('convive-42', (existing) => existing)).rejects.toSatisfy(
+      isRepositoryUnavailable,
+    );
+  });
+
+  it("updateExisting ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
+    mockedDoc.mockReturnValue({} as never);
+    const refus = firestoreError('permission-denied');
+    mockedRunTransaction.mockRejectedValue(refus);
+    const repository = FirestoreConviveRepository.create(db);
+
+    await expect(repository.updateExisting('convive-42', (existing) => existing)).rejects.toBe(
+      refus,
+    );
+  });
+
+  // Même borne que `save` et `remove`, et pour la même raison éprouvée deux fois sur cette
+  // feature : une promesse qui ne se règle jamais laisse l'écran figé, bouton verrouillé,
+  // sans un mot. Une transaction retente jusqu'à cinq fois ; sur un réseau qui rampe, cela
+  // peut dépasser la patience de l'utilisateur bien avant de rejeter.
+  it(
+    "signale une transaction que le serveur n'a pas acquittée dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedRunTransaction.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
+
+      await expect(
+        repository.updateExisting('convive-42', (existing) => existing),
+      ).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it('ne laisse aucune borne en suspens une fois la transaction acquittée', async () => {
+    vi.useFakeTimers();
+    try {
+      mockedDoc.mockReturnValue({} as never);
+      transactionLisant({ exists: () => false });
+      const repository = FirestoreConviveRepository.create(db);
+
+      await repository.updateExisting('convive-42', (existing) => existing);
+      await Promise.resolve();
+
+      expect(mockedRunTransaction).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

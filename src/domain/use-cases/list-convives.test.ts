@@ -102,6 +102,8 @@ describe('listConvivesUseCase', () => {
     const conviveRepository: ConviveRepository = {
       save: () => Promise.resolve(),
       findAll: () => Promise.reject(new Error('boom')),
+      updateExisting: () => Promise.resolve(undefined),
+      remove: () => Promise.resolve(),
     };
     const listConvives = listConvivesUseCase({ conviveRepository });
 

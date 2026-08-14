@@ -1,10 +1,25 @@
 import styled from 'styled-components';
 
 import { tokens } from '../../theme/tokens';
+import { type ConviveRow } from './convives-slice';
 
 const { colors, radii, space, fonts } = tokens;
 
-export type ConviveItem = { id: string; name: string };
+/**
+ * Gestes possibles sur une ligne. Le composant ne décide RIEN : il rapporte le geste et
+ * affiche ce que `selectConviveRows` a décidé (mode, constat, verrous) — ce sélecteur vit
+ * dans un `.ts` que la mutation couvre, ce fichier non.
+ */
+export type ConviveRowActions = {
+  renameDraft: string;
+  onRenameDraftChange: (value: string) => void;
+  onRenameSubmit: (id: string) => void;
+  onEditRequest: (id: string) => void;
+  onEditCancel: () => void;
+  onRemoveRequest: (id: string) => void;
+  onRemoveConfirm: (id: string) => void;
+  onRemoveCancel: () => void;
+};
 
 /**
  * Issue d'un ajout qui n'a pas abouti. `error` = le serveur a refusé, l'utilisateur peut
@@ -43,7 +58,7 @@ export type ConvivesSectionProps = {
   // réessai a du sens.
   | { status: 'unavailable'; message: string }
   | { status: 'empty' }
-  | { status: 'loaded'; convives: ConviveItem[] }
+  | { status: 'loaded'; convives: ConviveRow[]; rowActions: ConviveRowActions }
 );
 
 const Section = styled.section`
@@ -86,6 +101,9 @@ const List = styled.ul`
 `;
 
 const Row = styled.li`
+  display: flex;
+  flex-direction: column;
+  gap: ${space.xs}px;
   font-family: ${fonts.body};
   font-size: 15px;
   color: ${colors.ink};
@@ -93,6 +111,39 @@ const Row = styled.li`
 
   & + & {
     border-top: 1px solid ${colors.hairline};
+  }
+`;
+
+const RowLine = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${space.sm}px;
+`;
+
+const RowName = styled.span`
+  flex: 1;
+  min-width: 0;
+  /* Mesuré à 393 px : sans ceci, un prénom plus long que sa boîte s'affichait PAR-DESSUS les
+     boutons. Il passe désormais à la ligne, la rangée grandit — on ne tronque pas, le seul
+     contenu de cet écran est une liste de prénoms. */
+  overflow-wrap: anywhere;
+`;
+
+// Bouton d'action de ligne : discret, tactile (44 px), sans couleur d'alarme — retirer un
+// convive est un geste ordinaire du foyer, pas un danger à signaler en rouge.
+const RowButton = styled.button`
+  flex: none;
+  min-height: 44px;
+  background: transparent;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${radii.sm};
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 13px;
+  padding: 0 ${space.md}px;
+
+  &:disabled {
+    opacity: 0.6;
   }
 `;
 
@@ -174,6 +225,100 @@ function AddForm(props: ConvivesSectionProps) {
   );
 }
 
+// Ton du constat → rôle ARIA. `alert` (assertif) seulement quand une action est attendue de
+// l'utilisateur ; `status` (poli) pour ce sur quoi il ne peut rien.
+function RowNoticeView({ notice }: { notice: ConviveRow['notice'] }) {
+  if (notice === null) return null;
+  return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
+}
+
+function ConviveRowView({ row, actions }: { row: ConviveRow; actions: ConviveRowActions }) {
+  if (row.mode === 'editing') {
+    return (
+      <Row>
+        <Form
+          onSubmit={(event) => {
+            event.preventDefault();
+            actions.onRenameSubmit(row.id);
+          }}
+        >
+          <Label htmlFor={`rename-${row.id}`}>Nouveau prénom pour {row.name}</Label>
+          <FieldRow>
+            <Input
+              id={`rename-${row.id}`}
+              name={`rename-${row.id}`}
+              type="text"
+              value={actions.renameDraft}
+              disabled={row.editInputDisabled}
+              onChange={(event) => actions.onRenameDraftChange(event.target.value)}
+            />
+            <SubmitButton type="submit" disabled={row.saveDisabled}>
+              Enregistrer
+            </SubmitButton>
+            <RowButton type="button" onClick={actions.onEditCancel}>
+              Annuler
+            </RowButton>
+          </FieldRow>
+          <RowNoticeView notice={row.notice} />
+        </Form>
+      </Row>
+    );
+  }
+  if (row.mode === 'confirming-removal') {
+    return (
+      <Row>
+        {/* Question, pas avertissement : la confirmation existe parce que l'effacement est
+            définitif et sans undo, pas pour dramatiser un geste ordinaire. */}
+        <Note>Retirer {row.name} du foyer ?</Note>
+        <RowLine>
+          <RowButton type="button" onClick={actions.onRemoveCancel}>
+            Annuler
+          </RowButton>
+          <RowButton
+            type="button"
+            disabled={row.confirmDisabled}
+            onClick={() => actions.onRemoveConfirm(row.id)}
+          >
+            Retirer
+          </RowButton>
+        </RowLine>
+        <RowNoticeView notice={row.notice} />
+      </Row>
+    );
+  }
+  return (
+    <Row>
+      <RowLine>
+        {/* Le prénom a son propre élément, et son propre point d'accroche : la composition
+            du foyer se lit sans passer par le `textContent` de la ligne, que tout contrôle
+            ajouté ici pollue. */}
+        <RowName data-testid="convive-name">{row.name}</RowName>
+        {/* Le prénom est DANS le nom accessible mais PAS dans le libellé visible : « Renommer »
+            seul ne dit pas qui on renomme au lecteur d'écran, mais l'y écrire faisait grossir
+            le bouton avec le prénom, aux dépens du seul contenu qui compte. Le libellé visible
+            reste inclus dans le nom accessible (WCAG 2.5.3). */}
+        <RowButton
+          type="button"
+          aria-label={`Renommer ${row.name}`}
+          disabled={row.actionsDisabled}
+          onClick={() => actions.onEditRequest(row.id)}
+        >
+          Renommer
+        </RowButton>
+        <RowButton
+          type="button"
+          aria-label={`Retirer ${row.name}`}
+          disabled={row.actionsDisabled}
+          onClick={() => actions.onRemoveRequest(row.id)}
+        >
+          Retirer
+        </RowButton>
+      </RowLine>
+      <RowNoticeView notice={row.notice} />
+    </Row>
+  );
+}
+
 function Body(props: ConvivesSectionProps) {
   switch (props.status) {
     case 'loading':
@@ -203,7 +348,7 @@ function Body(props: ConvivesSectionProps) {
         <>
           <List>
             {props.convives.map((convive) => (
-              <Row key={convive.id}>{convive.name}</Row>
+              <ConviveRowView key={convive.id} row={convive} actions={props.rowActions} />
             ))}
           </List>
           <AddForm {...props} />

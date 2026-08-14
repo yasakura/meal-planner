@@ -1,4 +1,12 @@
-import { type Firestore, collection, doc, getDocsFromServer, setDoc } from 'firebase/firestore';
+import {
+  type Firestore,
+  collection,
+  deleteDoc,
+  doc,
+  getDocsFromServer,
+  runTransaction,
+  setDoc,
+} from 'firebase/firestore';
 
 import { type ConviveRepository } from '../domain/ports/convive-repository';
 import { type Convive } from '../domain/entities/convive';
@@ -42,8 +50,8 @@ export class FirestoreConviveRepository implements ConviveRepository {
     );
   }
 
-  private withAckDeadline(write: Promise<void>): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+  private withAckDeadline<T>(write: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       const deadline = setTimeout(
         () => reject(RepositoryUnavailableError.create()),
         this.ackTimeoutMs,
@@ -71,5 +79,40 @@ export class FirestoreConviveRepository implements ConviveRepository {
     return snapshot.docs.map((snapshotDoc) =>
       documentToConvive(snapshotDoc.id, snapshotDoc.data()),
     );
+  }
+
+  async updateExisting(
+    id: string,
+    transform: (existing: Convive) => Convive,
+  ): Promise<Convive | undefined> {
+    const ref = doc(this.db, 'convives', id);
+    // Une transaction, et non `getDocFromServer` puis `setDoc` : ces deux-là laissent entre
+    // eux un intervalle pendant lequel l'autre compte du board peut supprimer le convive,
+    // et l'écriture — un upsert — le ressusciterait. Ici la lecture et l'écriture sont
+    // indivisibles ; si le document a changé entre-temps, Firestore rejoue tout le corps.
+    //
+    // Aucune décision n'est prise ici : le domaine fournit `transform`, l'adapter ne fait
+    // que garantir l'atomicité et rapporter l'absence.
+    //
+    // Bornée comme `save` et `remove` : sur un réseau qui rampe, les cinq tentatives de
+    // Firestore peuvent s'étirer bien au-delà de ce que l'écran peut taire.
+    return await this.withAckDeadline(
+      runTransaction(this.db, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists()) return undefined;
+        const updated = transform(documentToConvive(snapshot.id, snapshot.data()));
+        transaction.set(ref, conviveToDocument(updated));
+        return updated;
+      }),
+    );
+  }
+
+  async remove(id: string): Promise<void> {
+    // Bornée comme `save`, et pour le même défaut mesuré : hors ligne `deleteDoc` ne rejette
+    // pas non plus, il met l'effacement en file locale et n'acquitte qu'au serveur — la
+    // promesse ne se règle jamais. Sans borne, l'écran resterait figé sur « suppression en
+    // cours », bouton verrouillé, sans jamais rien dire. La borne est ce qui permet à l'UI
+    // d'avouer qu'elle ne sait pas, au lieu de se taire indéfiniment.
+    await this.withAckDeadline(deleteDoc(doc(this.db, 'convives', id)));
   }
 }
