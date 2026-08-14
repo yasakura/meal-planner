@@ -1,0 +1,165 @@
+import { describe, it, expect } from 'vitest';
+import { renameConviveUseCase } from './rename-convive';
+import { InMemoryConviveRepository } from '../test-doubles/in-memory-convive-repository';
+import { ConviveBuilder } from '../test-builders/convive.builder';
+import { type ConviveRepository } from '../ports/convive-repository';
+import { RepositoryUnavailableError } from '../errors/repository-unavailable-error';
+
+async function foyerSeedeAvecRoryEtAurelie(): Promise<InMemoryConviveRepository> {
+  const conviveRepository = InMemoryConviveRepository.create();
+  await conviveRepository.save(ConviveBuilder.aConvive().withId('c1').withName('Rory').build());
+  await conviveRepository.save(ConviveBuilder.aConvive().withId('c2').withName('Aurélie').build());
+  return conviveRepository;
+}
+
+describe('renameConviveUseCase', () => {
+  it('rend le convive portant son nouveau prénom', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    const convive = await renameConvive({ id: 'c2', name: 'Aurélia' });
+
+    expect(convive.name).toBe('Aurélia');
+  });
+
+  it('renomme sans changer d’identité : le convive rendu garde son id', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    const convive = await renameConvive({ id: 'c2', name: 'Aurélia' });
+
+    expect(convive.id).toBe('c2');
+  });
+
+  it('persiste le nouveau prénom sur le convive existant', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await renameConvive({ id: 'c2', name: 'Aurélia' });
+
+    expect(conviveRepository.byId('c2')?.name).toBe('Aurélia');
+  });
+
+  it('remplace le convive visé, sans en ajouter un second ni toucher aux autres', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await renameConvive({ id: 'c2', name: 'Aurélia' });
+
+    // Attendu DÉRIVÉ de ce que le repository rend, jamais de l'ordre d'insertion : le port
+    // ne garantit aucun ordre et le double l'exerce activement (il inverse). Le tri par id
+    // ne compare donc que le CONTENU du foyer, jamais son ordre.
+    const foyer = await conviveRepository.findAll();
+    expect(foyer.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: 'c1', name: 'Rory' },
+      { id: 'c2', name: 'Aurélia' },
+    ]);
+  });
+
+  it('autorise un prénom déjà porté par un autre convive (les homonymes sont permis)', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await renameConvive({ id: 'c2', name: 'Rory' });
+
+    // Les deux convives coexistent sous le même prénom : aucune contrainte d'unicité,
+    // aucune déduplication, aucun suffixe inventé.
+    expect(conviveRepository.byId('c1')?.name).toBe('Rory');
+    expect(conviveRepository.byId('c2')?.name).toBe('Rory');
+  });
+
+  it('trime le nouveau prénom, comme à la création', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    const convive = await renameConvive({ id: 'c2', name: '  Aurélia  ' });
+
+    expect(convive.name).toBe('Aurélia');
+    expect(conviveRepository.byId('c2')?.name).toBe('Aurélia');
+  });
+
+  it('refuse un nouveau prénom vide, avec la même erreur qu’à la création', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await expect(renameConvive({ id: 'c2', name: '   ' })).rejects.toThrow(
+      'Le nom du convive est obligatoire',
+    );
+  });
+
+  it('ne persiste rien quand le nouveau prénom est invalide', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const saveCountAvant = conviveRepository.saveCount;
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await expect(renameConvive({ id: 'c2', name: '   ' })).rejects.toThrow();
+
+    expect(conviveRepository.saveCount).toBe(saveCountAvant);
+    expect(conviveRepository.byId('c2')?.name).toBe('Aurélie');
+  });
+
+  it('refuse de renommer un convive qui n’existe pas', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await expect(renameConvive({ id: 'inconnu', name: 'Aurélia' })).rejects.toThrow(
+      "Le convive à renommer n'existe pas",
+    );
+  });
+
+  it('ne ressuscite pas un convive supprimé entre-temps', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    await conviveRepository.remove('c2');
+    const saveCountAvant = conviveRepository.saveCount;
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow();
+
+    // `save` est un upsert : écrire sans vérifier l'existence recréerait le convive que
+    // l'autre compte du board vient de supprimer. Le foyer reste à un seul convive.
+    expect(conviveRepository.saveCount).toBe(saveCountAvant);
+    const foyer = await conviveRepository.findAll();
+    expect(foyer.map((c) => c.id)).toEqual(['c1']);
+  });
+
+  it('écrit exactement une fois', async () => {
+    const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
+    const saveCountAvant = conviveRepository.saveCount;
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await renameConvive({ id: 'c2', name: 'Aurélia' });
+
+    expect(conviveRepository.updateCount).toBe(1);
+    // Et JAMAIS par `save` : ce chemin-là est un upsert, il ressusciterait un convive
+    // supprimé entre la lecture et l'écriture. Le renommage n'a plus le droit d'y toucher.
+    expect(conviveRepository.saveCount).toBe(saveCountAvant);
+  });
+
+  it('propage la panne du dépôt, sans la traduire en absence', async () => {
+    const conviveRepository: ConviveRepository = {
+      save: () => Promise.resolve(),
+      findAll: () => Promise.resolve([]),
+      updateExisting: () => Promise.reject(RepositoryUnavailableError.create()),
+      remove: () => Promise.resolve(),
+    };
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    // Une panne n'est pas une absence : elle ne doit surtout pas devenir « ce convive
+    // n'existe pas », sinon l'écran accuserait l'utilisateur d'une coupure réseau.
+    await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow(
+      "Le dépôt n'a pas répondu.",
+    );
+  });
+
+  it('propage une erreur quelconque du dépôt', async () => {
+    const conviveRepository: ConviveRepository = {
+      save: () => Promise.resolve(),
+      findAll: () => Promise.resolve([]),
+      updateExisting: () => Promise.reject(new Error('boom')),
+      remove: () => Promise.resolve(),
+    };
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow('boom');
+  });
+});

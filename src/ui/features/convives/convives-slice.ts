@@ -1,9 +1,12 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import { compareConvivesByName, type Convive } from '../../../domain/entities/convive';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type AddConviveInput } from '../../../domain/use-cases/add-convive';
+import { type RemoveConviveInput } from '../../../domain/use-cases/remove-convive';
+import { type RenameConviveInput } from '../../../domain/use-cases/rename-convive';
 import { type AppThunkApiConfig, type RootState } from '../../store/store';
+import { elidedDe } from './french-elision';
 
 // `unavailable` : le dépôt n'a pas répondu. Ni un foyer vide, ni un échec de chargement —
 // les trois appellent trois constats différents à l'écran.
@@ -14,6 +17,40 @@ export type ConvivesStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavail
 // `unconfirmed` : le serveur n'a pas acquitté l'écriture dans la borne. Troisième issue,
 // qui n'affirme ni que la donnée est sauvegardée ni qu'elle est perdue.
 export type ConviveAddStatus = 'idle' | 'adding' | 'error' | 'unconfirmed';
+
+// Mêmes issues que l'ajout, sur les deux autres écritures. Le vocabulaire est délibérément
+// identique : les trois cycles de vie posent la même question à l'écran — est-ce fait, est-ce
+// refusé, ou ne sait-on pas ?
+export type ConviveRenameStatus = 'idle' | 'renaming' | 'error' | 'unconfirmed';
+export type ConviveRemoveStatus = 'idle' | 'removing' | 'error' | 'unconfirmed';
+
+export type RowNotice = { tone: 'error' | 'unconfirmed'; message: string };
+
+/**
+ * Ligne de foyer prête à afficher. TOUTES les décisions de ligne (mode d'affichage, constat,
+ * verrous) sont calculées ici, dans un `.ts` que la mutation couvre — et non dans le
+ * container, que Stryker ne mute pas. Le container n'a plus qu'à passer le plat.
+ */
+export type ConviveRow = {
+  id: string;
+  name: string;
+  mode: 'idle' | 'editing' | 'confirming-removal';
+  notice: RowNotice | null;
+  /**
+   * Verrou des actions d'une ligne AU REPOS pendant qu'une autre porte un cycle inachevé.
+   *
+   * Deux défauts d'un coup. Sans lui, ouvrir une autre ligne pendant une écriture en vol
+   * faisait diverger le brouillon local du `editingConviveId` que le reducer refusait de
+   * déplacer : la ligne éditée affichait un texte que personne n'avait tapé. Et un constat
+   * d'échec pouvait être effacé par ce même geste avant d'avoir été lu — hors ligne, un
+   * renommage échoue franchement (la transaction rejette), il n'y a que ce constat pour le
+   * dire.
+   */
+  actionsDisabled: boolean;
+  saveDisabled: boolean;
+  editInputDisabled: boolean;
+  confirmDisabled: boolean;
+};
 
 export type ConvivesState = {
   status: ConvivesStatus;
@@ -59,6 +96,36 @@ export type ConvivesState = {
    * la fraîcheur d'une réponse en vol.
    */
   latestAddRequestId: string | null;
+  renameStatus: ConviveRenameStatus;
+  /**
+   * Texte en cours de saisie dans la ligne éditée. Vit ICI et non dans le `useState` du
+   * container, parce qu'un container se démonte et que le store, lui, est un singleton de
+   * session : quand la sheet se referme pendant une écriture en vol, l'édition reste ouverte
+   * (on ne déverrouille pas une écriture partie) et le brouillon doit rester avec elle.
+   * Sinon la ligne se réaffiche en édition avec un champ vide et désactivé — un formulaire
+   * mort, sans le moindre indice que la saisie est toujours en vol.
+   * Corollaire : la décision « avec quoi pré-remplir » tombe sous la mutation.
+   */
+  renameDraft: string;
+  /**
+   * Convive dont la ligne est ouverte en édition. Vit dans le STORE et non dans le `useState`
+   * du container pour deux raisons : c'est une DÉCISION (quand l'édition s'ouvre, quand elle
+   * se referme), donc elle doit tomber sous la mutation ; et elle doit se remettre à zéro au
+   * même endroit que le constat qu'elle porte, sinon une ligne resterait ouverte en édition
+   * avec un constat effacé, ou l'inverse.
+   * Survit au rejet : la ligne reste ouverte pour que l'utilisateur puisse corriger.
+   */
+  editingConviveId: string | null;
+  /** Même rôle que `latestAddRequestId`, sur le cycle du renommage. */
+  latestRenameRequestId: string | null;
+  removeStatus: ConviveRemoveStatus;
+  /**
+   * Convive dont le retrait attend confirmation. La suppression est DÉFINITIVE et sans undo :
+   * aucun tap unique ne doit effacer une personne.
+   */
+  pendingRemovalId: string | null;
+  /** Même rôle que `latestAddRequestId`, sur le cycle du retrait. */
+  latestRemoveRequestId: string | null;
 };
 
 const initialState: ConvivesState = {
@@ -70,6 +137,13 @@ const initialState: ConvivesState = {
   addError: null,
   addSubjectName: null,
   latestAddRequestId: null,
+  renameStatus: 'idle',
+  renameDraft: '',
+  editingConviveId: null,
+  latestRenameRequestId: null,
+  removeStatus: 'idle',
+  pendingRemovalId: null,
+  latestRemoveRequestId: null,
 };
 
 export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>(
@@ -86,6 +160,20 @@ export const addConvive = createAsyncThunk<Convive, AddConviveInput, AppThunkApi
   },
 );
 
+export const renameConvive = createAsyncThunk<Convive, RenameConviveInput, AppThunkApiConfig>(
+  'convives/renameConvive',
+  async (input, thunkApi) => {
+    return await thunkApi.extra.renameConvive(input);
+  },
+);
+
+export const removeConvive = createAsyncThunk<void, RemoveConviveInput, AppThunkApiConfig>(
+  'convives/removeConvive',
+  async (input, thunkApi) => {
+    await thunkApi.extra.removeConvive(input);
+  },
+);
+
 /**
  * Repos du cycle de vie de l'ajout. Les trois champs `add*` se remettent à zéro ENSEMBLE et
  * nulle part ailleurs : un prénom orphelin ferait parler un constat d'un ajout qui n'existe
@@ -97,6 +185,25 @@ function restAddLifecycle(state: ConvivesState): void {
   state.addStatus = 'idle';
   state.addError = null;
   state.addSubjectName = null;
+}
+
+/**
+ * Repos du cycle de vie du renommage. Le statut ET la ligne ouverte se remettent à zéro
+ * ENSEMBLE : une ligne ouverte sans constat perdrait le motif de sa réouverture, et un
+ * constat sans ligne ouverte n'aurait nulle part où s'afficher.
+ * Contrairement à l'ajout, aucun prénom n'est mémorisé — la ligne le porte déjà, et
+ * `selectConviveRows` va le chercher là.
+ */
+function restRenameLifecycle(state: ConvivesState): void {
+  state.renameStatus = 'idle';
+  state.renameDraft = '';
+  state.editingConviveId = null;
+}
+
+/** Symétrique, sur le cycle du retrait : le statut et la confirmation ouverte vont de pair. */
+function restRemoveLifecycle(state: ConvivesState): void {
+  state.removeStatus = 'idle';
+  state.pendingRemovalId = null;
 }
 
 const convivesSlice = createSlice({
@@ -112,6 +219,44 @@ const convivesSlice = createSlice({
     conviveNameEdited(state) {
       if (state.addStatus === 'adding') return;
       restAddLifecycle(state);
+    },
+    /**
+     * Ouvre l'édition d'une ligne. Repart d'un constat propre : le précédent parlait d'un
+     * renommage qui n'est plus celui qu'on entreprend.
+     * Même garde que partout : une écriture en vol ne se laisse pas déplacer.
+     */
+    conviveEditRequested(state, action: PayloadAction<string>) {
+      if (state.renameStatus === 'renaming') return;
+      state.renameStatus = 'idle';
+      state.editingConviveId = action.payload;
+      // Pré-rempli avec le prénom affiché : corriger une faute de frappe est le cas courant.
+      // Le store connaît la liste, il n'a besoin de personne pour le retrouver — c'est
+      // exactement ce que le container faisait, et faisait diverger.
+      state.renameDraft =
+        state.convives.find((convive) => convive.id === action.payload)?.name ?? '';
+    },
+    conviveEditCancelled(state) {
+      if (state.renameStatus === 'renaming') return;
+      restRenameLifecycle(state);
+    },
+    /**
+     * DÉCLENCHEUR PRINCIPAL de remise à zéro du constat de renommage — un geste de
+     * l'utilisateur, donc indépendant de tout cycle de montage, que la sheet ne garantit pas.
+     * Ne referme PAS l'édition : l'utilisateur est justement en train d'y taper.
+     */
+    renameDraftEdited(state, action: PayloadAction<string>) {
+      if (state.renameStatus === 'renaming') return;
+      state.renameStatus = 'idle';
+      state.renameDraft = action.payload;
+    },
+    conviveRemovalRequested(state, action: PayloadAction<string>) {
+      if (state.removeStatus === 'removing') return;
+      state.removeStatus = 'idle';
+      state.pendingRemovalId = action.payload;
+    },
+    conviveRemovalCancelled(state) {
+      if (state.removeStatus === 'removing') return;
+      restRemoveLifecycle(state);
     },
   },
   extraReducers: (builder) => {
@@ -133,6 +278,13 @@ const convivesSlice = createSlice({
         // la borne passe par ici, et réarmer le bouton à cet instant rendrait un second
         // appui possible — donc un second id, donc le doublon.
         if (state.addStatus !== 'adding') restAddLifecycle(state);
+        // Mêmes filet et même exception pour les deux autres cycles : ré-entrer dans l'écran
+        // ne doit pas y retrouver une ligne ouverte en édition sur un brouillon vide (le
+        // container repart avec un `useState` neuf), ni une confirmation de suppression
+        // ouverte que personne n'a demandée. Sauf écriture en vol : la déverrouiller ici
+        // rendrait un second appui possible pendant les 5 s de la borne d'acquittement.
+        if (state.renameStatus !== 'renaming') restRenameLifecycle(state);
+        if (state.removeStatus !== 'removing') restRemoveLifecycle(state);
       })
       .addCase(loadConvives.fulfilled, (state, action) => {
         if (action.meta.requestId !== state.latestLoadRequestId) return;
@@ -183,11 +335,62 @@ const convivesSlice = createSlice({
         }
         state.addStatus = 'error';
         state.addError = action.error.message ?? null;
+      })
+      .addCase(renameConvive.pending, (state, action) => {
+        state.latestRenameRequestId = action.meta.requestId;
+        state.renameStatus = 'renaming';
+      })
+      .addCase(renameConvive.fulfilled, (state, action) => {
+        // Un renommage n'est PAS monotone : appliquer un succès périmé écraserait une valeur
+        // plus fraîche par une plus ancienne. Contrairement au retrait, la liste est donc
+        // laissée intacte — le prochain chargement resynchronise depuis le serveur.
+        if (action.meta.requestId !== state.latestRenameRequestId) return;
+        // Remplacement par projection, sans branche : un convive disparu de la liste
+        // entre-temps (supprimé par l'autre compte, puis rechargement) n'est simplement
+        // remplacé nulle part — il n'a pas à ressusciter ici.
+        state.convives = state.convives.map((convive) =>
+          convive.id === action.payload.id ? action.payload : convive,
+        );
+        // Même comparateur que le use-case : renommer déplace le convive dans l'ordre du
+        // foyer, sinon la liste cesse d'être triée jusqu'au prochain chargement.
+        state.convives.sort(compareConvivesByName);
+        restRenameLifecycle(state);
+      })
+      .addCase(renameConvive.rejected, (state, action) => {
+        if (action.meta.requestId !== state.latestRenameRequestId) return;
+        // Non acquitté ≠ refusé : la liste garde l'ancien prénom (rien ne prouve que le
+        // nouveau est enregistré) et le constat n'arme aucune alerte.
+        state.renameStatus = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
+      })
+      .addCase(removeConvive.pending, (state, action) => {
+        state.latestRemoveRequestId = action.meta.requestId;
+        state.removeStatus = 'removing';
+      })
+      .addCase(removeConvive.fulfilled, (state, action) => {
+        // Hors garde de fraîcheur, DÉLIBÉRÉMENT : un retrait est monotone — une fois effacé
+        // du serveur, le convive ne redevient jamais présent. Ignorer un succès périmé
+        // laisserait dans la liste quelqu'un qui n'existe plus, jusqu'au rechargement.
+        state.convives = state.convives.filter((convive) => convive.id !== action.meta.arg.id);
+        // Le CONSTAT, lui, appartient au retrait courant : un retrait périmé n'a pas à
+        // refermer la confirmation ouverte pour un autre convive.
+        if (action.meta.requestId !== state.latestRemoveRequestId) return;
+        restRemoveLifecycle(state);
+      })
+      .addCase(removeConvive.rejected, (state, action) => {
+        if (action.meta.requestId !== state.latestRemoveRequestId) return;
+        state.removeStatus = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
       });
   },
 });
 
-export const { conviveNameEdited } = convivesSlice.actions;
+export const {
+  conviveNameEdited,
+  conviveEditRequested,
+  conviveEditCancelled,
+  renameDraftEdited,
+  conviveRemovalRequested,
+  conviveRemovalCancelled,
+} = convivesSlice.actions;
 
 export const convivesReducer = convivesSlice.reducer;
 
@@ -202,3 +405,76 @@ export const selectConvives = (state: RootState): ConvivesState => state.convive
  */
 export const selectIsAddInFlight = (state: RootState): boolean =>
   state.convives.addStatus === 'adding';
+
+/**
+ * Constat porté par UNE ligne. Le prénom est lu sur la ligne elle-même, jamais mémorisé au
+ * moment de la soumission : c'est l'ANCIEN prénom qui doit être nommé — le renommage n'a
+ * rien changé, et c'est celui que l'écran affiche encore.
+ * Messages sobres, sans détail technique, et deux tons : `error` appelle une action de
+ * l'utilisateur, `unconfirmed` ne lui demande rien (le ton choisit le rôle ARIA côté rendu).
+ */
+function rowNotice(state: ConvivesState, convive: Convive): RowNotice | null {
+  if (state.editingConviveId === convive.id) {
+    if (state.renameStatus === 'error') {
+      return { tone: 'error', message: 'Impossible de renommer le convive.' };
+    }
+    if (state.renameStatus === 'unconfirmed') {
+      return {
+        tone: 'unconfirmed',
+        message: `Aucune connexion — le renommage ${elidedDe(convive.name)} n’a pas pu être confirmé.`,
+      };
+    }
+  }
+  if (state.pendingRemovalId === convive.id) {
+    if (state.removeStatus === 'error') {
+      return { tone: 'error', message: 'Impossible de retirer le convive.' };
+    }
+    if (state.removeStatus === 'unconfirmed') {
+      return {
+        tone: 'unconfirmed',
+        message: `Aucune connexion — le retrait ${elidedDe(convive.name)} n’a pas pu être confirmé.`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Projection PURE de l'état de tranche vers les lignes affichables. Prend `ConvivesState` et
+ * non `RootState` : ce n'est pas un sélecteur à passer à `useAppSelector` — il construit un
+ * tableau neuf à chaque appel, et react-redux re-rendrait en boucle. Le container l'appelle
+ * dans un `useMemo`, sur la référence stable de la tranche.
+ */
+export function conviveRowsOf(convives: ConvivesState): ConviveRow[] {
+  // « Au repos » = aucune écriture en vol, et aucun constat en attente d'être lu. Le verrou
+  // n'est pas une impasse : une frappe ou une annulation sur la ligne concernée le lève.
+  const cyclesAtRest = convives.renameStatus === 'idle' && convives.removeStatus === 'idle';
+  return convives.convives.map((convive) => {
+    const editing = convives.editingConviveId === convive.id;
+    const confirmingRemoval = convives.pendingRemovalId === convive.id;
+    const draft = convives.renameDraft.trim();
+    return {
+      id: convive.id,
+      name: convive.name,
+      mode: editing ? 'editing' : confirmingRemoval ? 'confirming-removal' : 'idle',
+      notice: rowNotice(convives, convive),
+      actionsDisabled: !editing && !confirmingRemoval && !cyclesAtRest,
+      // Verrouillé sur le prénom actuel : renommer « Lionel » en « Lionel » n'est pas un
+      // renommage. L'écriture partirait pour rien et, hors ligne, produirait un constat
+      // d'échec pour une opération qui ne changeait rien. Trimé comme le fait le domaine ;
+      // la casse, elle, est un vrai changement.
+      // Verrouillé aussi tant qu'un renommage n'est pas acquitté : l'écriture est réellement
+      // partie et atterrira au retour du réseau, un second envoi n'apporterait rien.
+      saveDisabled:
+        !editing ||
+        draft === '' ||
+        draft === convive.name ||
+        convives.renameStatus === 'renaming' ||
+        convives.renameStatus === 'unconfirmed',
+      // Le CHAMP se verrouille pendant l'écriture seulement : c'est la frappe qui efface le
+      // constat non acquitté, le verrouiller figerait l'écran définitivement.
+      editInputDisabled: editing && convives.renameStatus === 'renaming',
+      confirmDisabled: confirmingRemoval && convives.removeStatus === 'removing',
+    };
+  });
+}

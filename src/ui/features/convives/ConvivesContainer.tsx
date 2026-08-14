@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { ConvivesSection, type AddNotice, type ConvivesSectionProps } from './ConvivesSection';
 import { elidedDe } from './french-elision';
 import {
   addConvive,
+  conviveEditCancelled,
+  conviveEditRequested,
   conviveNameEdited,
+  conviveRemovalCancelled,
+  conviveRemovalRequested,
   loadConvives,
+  removeConvive,
+  renameConvive,
+  renameDraftEdited,
+  conviveRowsOf,
   selectConvives,
   selectIsAddInFlight,
   type ConviveAddStatus,
@@ -32,8 +40,12 @@ function addNoticeFor(addStatus: ConviveAddStatus, subjectName: string | null): 
 
 export function ConvivesContainer() {
   const [name, setName] = useState('');
-  const { status, convives, addStatus, addSubjectName } = useAppSelector(selectConvives);
+  // `useMemo` et non `useAppSelector` sur la projection : elle construit un tableau neuf à
+  // chaque appel, et react-redux re-rendrait en boucle sur une référence toujours différente.
+  const convivesState = useAppSelector(selectConvives);
+  const { status, convives, addStatus, addSubjectName, renameDraft } = convivesState;
   const isAddInFlight = useAppSelector(selectIsAddInFlight);
+  const rows = useMemo(() => conviveRowsOf(convivesState), [convivesState]);
   const dispatch = useAppDispatch();
 
   useEffect(() => {
@@ -45,6 +57,20 @@ export function ConvivesContainer() {
     // un échec viderait le champ exactement comme un succès (faux signal de succès).
     const result = await dispatch(addConvive({ name }));
     if (addConvive.fulfilled.match(result)) setName('');
+  };
+
+  // Le container ne DÉCIDE plus rien ici, et ne RETIENT plus rien : il rapporte le geste.
+  // Le brouillon vit dans le store — un `useState` se serait vidé au remontage pendant que
+  // le store, lui, gardait l'édition ouverte.
+  const rowActions = {
+    renameDraft,
+    onRenameDraftChange: (value: string) => dispatch(renameDraftEdited(value)),
+    onRenameSubmit: (id: string) => void dispatch(renameConvive({ id, name: renameDraft })),
+    onEditRequest: (id: string) => dispatch(conviveEditRequested(id)),
+    onEditCancel: () => dispatch(conviveEditCancelled()),
+    onRemoveRequest: (id: string) => dispatch(conviveRemovalRequested(id)),
+    onRemoveConfirm: (id: string) => void dispatch(removeConvive({ id })),
+    onRemoveCancel: () => dispatch(conviveRemovalCancelled()),
   };
 
   const form = {
@@ -84,11 +110,7 @@ export function ConvivesContainer() {
     props =
       convives.length === 0
         ? { ...form, status: 'empty' }
-        : {
-            ...form,
-            status: 'loaded',
-            convives: convives.map((convive) => ({ id: convive.id, name: convive.name })),
-          };
+        : { ...form, status: 'loaded', convives: rows, rowActions };
   } else {
     props = { ...form, status: 'loading' };
   }

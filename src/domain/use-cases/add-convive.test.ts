@@ -69,6 +69,8 @@ describe('addConviveUseCase', () => {
     const conviveRepository: ConviveRepository = {
       save: () => Promise.reject(new Error('boom')),
       findAll: () => Promise.resolve([]),
+      updateExisting: () => Promise.resolve(undefined),
+      remove: () => Promise.resolve(),
     };
     const addConvive = addConviveUseCase({
       idGenerator: StubIdGenerator.create(),

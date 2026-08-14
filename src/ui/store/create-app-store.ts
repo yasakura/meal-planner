@@ -10,6 +10,8 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
+import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { createStore } from './store';
 
 // Composition root : la couche ui/ est la seule autorisée à câbler les adapters
@@ -34,5 +36,7 @@ export function createAppStore() {
       idGenerator: IdGeneratorCuid2.create(),
       conviveRepository,
     }),
+    renameConvive: renameConviveUseCase({ conviveRepository }),
+    removeConvive: removeConviveUseCase({ conviveRepository }),
   });
 }
