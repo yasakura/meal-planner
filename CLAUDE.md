@@ -10,6 +10,21 @@
 
 Tout contrat entre couches passe par un port dans `domain/ports/`. Le "M" du MVC = `domain + data`. Le "V" = components dumb. Le "C" = containers Redux + thunks.
 
+## Flux de travail
+
+L'agent principal **orchestre**, il ne développe pas et il ne révise pas. Chaque rôle a son agent, à contexte frais.
+
+1. **Discussion** utilisateur ↔ agent principal, jusqu'à savoir quoi faire.
+2. **`tdd-clean-coder`** développe en TDD.
+3. **Agent mutation** — un agent distinct, PAS celui qui a écrit le code : il lance Stryker et **instruit chaque survivant** (équivalent toléré, ou vrai trou de test avec le scénario non couvert). La séparation n'est pas cosmétique : l'agent TDD rapportait son propre score, et deux fois ce chiffre s'est révélé faux — une fois mesuré sur une suite amputée, une fois gonflé par des timeouts.
+4. **Vérif Chrome** par l'agent principal, si la feature touche `src/ui/`.
+5. **Agent de revue** indépendant — il remonte ses findings à l'agent principal, qui les **vérifie** avant de les présenter à l'utilisateur.
+6. **Si des findings sont retenus → retour à l'étape 1.** Sinon, on avance.
+7. **L'utilisateur vérifie à la main** (features UI) et donne son **feu vert explicite**.
+8. **Commit.**
+
+L'ordre 3 → 4 → 5 est **séquentiel**, pas parallèle : la revue doit porter sur du code déjà validé au navigateur, sinon elle instruit un code qui va changer. Une revue lancée en parallèle de Chrome a coûté plusieurs tours inutiles.
+
 ## TDD Uncle Bob (règle absolue)
 
 - Toute ligne d'implémentation naît d'un **test rouge observé**. Jamais l'inverse.
@@ -144,20 +159,17 @@ La checklist DoD n'est **pas** un état figé au moment du 1er cycle : c'est un 
 
 ## Revue de code indépendante (AVANT chaque commit)
 
-Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
+Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts.
 
-La revue se fait en **deux moments**, pas un seul. Le premier bug de FR-3 — l'échec d'ajout silencieux — était visible dans la **forme** du container (`await dispatch()` suivi d'un reset inconditionnel), donc lisible sur la spec avant qu'une ligne d'implémentation existe. Le trouver au vert a coûté un cycle TDD complet, une re-vérif Chrome et une seconde revue.
-
-**Revue d'intention, au point de contrôle rouge** — légère, sur les tests rouges et la conception annoncée, pas sur du code. Elle cherche : décision placée au mauvais endroit, cas non spécifié, règle métier fausse.
-
-**Revue de code complète, avant commit** :
+La revue porte sur du **code écrit**, jamais sur une spec : elle intervient après le cycle TDD et après la vérif Chrome, à l'étape 5 du flux de travail. Conséquence assumée : les défauts de **forme** — comme l'échec d'ajout silencieux de FR-3, lisible dans `await dispatch()` suivi d'un reset inconditionnel — sont trouvés tard. C'est un coût accepté, pas un oubli.
 
 1. Lancer un **sous-agent de code review INDÉPENDANT** — contexte frais, **pas** l'agent (ni un fork de l'agent) qui a orchestré le code — sur le diff.
 2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles. **Lui demander explicitement d'instruire le cycle de vie et la rémanence d'état** — c'est par là que les trois bugs de la branche hors-ligne ont été trouvés, jamais par une lecture ligne à ligne.
-3. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
-4. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
-5. **Re-vérifier** (lint / test / mutation) après corrections.
-6. **Seulement ensuite : commit.**
+3. **L'agent principal vérifie chaque finding AVANT de le présenter** — reproduire le scénario dans le code ou dans Chrome. Les agents se trompent dans les deux sens : un finding sur des mutants survivants a été infirmé en lisant le rapport Stryker, plusieurs autres confirmés par la mesure. L'utilisateur tranche sur pièces, pas sur l'affirmation d'un agent.
+4. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
+5. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
+6. Si un finding a été appliqué, **le flux repart à l'étape 1** — nouveau cycle, nouvelle mutation, nouvelle vérif Chrome, re-revue sur le **delta**.
+7. **Vérification manuelle de l'utilisateur** (features UI uniquement), puis **son feu vert explicite**. Jamais de commit sans lui.
 
 Si le code rebouclé n'a changé que sur quelques points, la re-revue porte sur le **delta**, avec les findings précédents fournis en contexte et l'interdiction de les redécouvrir. Relancer une revue complète à chaque tour coûte un agent entier pour re-instruire ce qui est déjà tranché.
 
@@ -218,4 +230,5 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
 - [ ] **Revue de code indépendante** passée AVANT commit (findings pertinents traités, non-pertinents justifiés)
 - [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement + **sortie** de chacun d'eux)
+- [ ] **Vérification manuelle de l'utilisateur** (features `src/ui/`) et son **feu vert explicite** — jamais de commit sans lui
 - [ ] Commit conforme aux Conventional Commits
