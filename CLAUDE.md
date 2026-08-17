@@ -35,6 +35,10 @@ L'ordre 3 → 4 → 5 est **séquentiel**, pas parallèle : la revue doit porter
 
 **Batching autorisé, et recommandé.** Pour un ensemble cohérent de comportements : écrire **tous** les tests rouges, observer le rouge **en bloc**, puis implémenter jusqu'au vert. Un cycle unitaire par comportement n'apporte rien de plus et rejoue la suite complète à chaque pas.
 
+**Pas d'émergence pas à pas non plus.** Faire naître le code par micro-cycles est une discipline **humaine** : elle empêche d'écrire plus vite qu'on ne réfléchit. Un agent n'a pas ce problème — il écrit l'implémentation complète d'un seul tenant, puis refactore si utile.
+
+La contrainte n'est donc pas la **taille** du pas, c'est que **rien ne dépasse la spec** : aucune ligne qu'aucun test du lot n'exige. Pas de garde défensif « au cas où », pas de généralisation anticipée, pas de branche que rien n'emprunte. Ce qu'aucun test ne demande est du code mort en puissance, et la mutation le révèle — la bonne réponse est alors de **supprimer le code**, pas d'écrire un test pour le justifier. _(Vécu : un garde défensif dans `isNetworkUnavailable` où six mutants survivaient, et un retrait de diacritiques rendu inutile par la normalisation qui le précédait — les deux supprimés, 2026-08-13 et 2026-08-14.)_
+
 Quand un test ne **peut pas** naître rouge — filet posé sur un comportement déjà correct, réponse à un mutant survivant — la confrontation se fait par **sabotage** : casser volontairement la ligne que le nom du test désigne, observer le rouge, restaurer. Saboter _une_ ligne quelconque ne suffit pas : il faut saboter **celle que le nom promet de protéger**. _(Vécu : un test container nommé « ne déverrouille pas Ajouter » sabotait le container et passait, alors qu'il ne pouvait pas détecter la régression du garde qu'il annonçait — `user.type()` sur un champ `disabled` est un no-op, 2026-08-12.)_
 
 ## Point de contrôle « rouge » (use-cases & logique métier)
