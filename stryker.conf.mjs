@@ -13,6 +13,11 @@ export default {
     '!src/**/*.test.{ts,tsx}',
     '!src/domain/test-doubles/**',
     '!src/domain/test-builders/**',
+    // Adapters du mode e2e : infra de SCÉNARIO, pas du code que l'utilisateur exécute — la
+    // branche qui les charge est éliminée du bundle de production. Les muter mesurerait la
+    // solidité de l'outillage de test, pas celle du produit, et noierait le score.
+    // Leur contrat de port reste tenu par leurs propres tests unitaires.
+    '!src/data/e2e/**',
   ],
   // break aligné sur la règle CLAUDE.md « mutation domain/ >= 80 % ».
   // Tant que seul domain/ est muté, ce seuil global applique la règle.

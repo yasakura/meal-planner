@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host --mode dev",
+    "dev:e2e": "vite --host --mode e2e --port 5174 --strictPort",
     "build": "tsc -b && vite build --mode prod",
     "preview": "vite preview --host --mode prod",
     "qr": "node scripts/qr.mjs",
