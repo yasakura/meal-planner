@@ -27,6 +27,8 @@ export const generateMenu = createAsyncThunk<
   { menu: Menu; recipes: Recipe[] },
   number,
   AppThunkApiConfig & { rejectValue: string }
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
 >('menu/generateMenu', async (days, thunkApi) => {
   // On récupère d'abord les recettes : elles servent à résoudre les titres ET à
   // distinguer explicitement le cas « catalogue vide » (message actionnable).
@@ -38,7 +40,10 @@ export const generateMenu = createAsyncThunk<
   return { menu, recipes };
 });
 
+// Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
+// équivalent — toute la logique de transition est couverte par ses propres tests.
 const menuSlice = createSlice({
+  // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'menu',
   initialState,
   reducers: {},

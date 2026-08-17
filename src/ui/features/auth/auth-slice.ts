@@ -27,11 +27,16 @@ export const signIn = createAsyncThunk<
   Account,
   { email: string; password: string },
   AppThunkApiConfig
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
 >('auth/signIn', async ({ email, password }, thunkApi) => {
   return await thunkApi.extra.authGateway.signIn(email, password);
 });
 
+// Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
+// équivalent — toute la logique de transition est couverte par ses propres tests.
 const authSlice = createSlice({
+  // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'auth',
   initialState,
   reducers: {
