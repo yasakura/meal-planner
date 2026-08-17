@@ -34,6 +34,42 @@ jobs:
       - name: Build (TypeScript + Vite + PWA)
         run: npm run build
 
+  # Job SÉPARÉ du gate « Lint + Test + Build », délibérément. Un scénario navigateur dépend
+  # d'un serveur, d'un moteur de rendu et d'horloges qu'on ne maîtrise pas : son instabilité
+  # ne doit pas pouvoir bloquer une PR par ailleurs saine. Il reste un check visible — la
+  # décision de l'exiger ou non appartient à la protection de branche, pas à ce fichier.
+  e2e:
+    name: Scénarios navigateur (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `--with-deps` installe les bibliothèques système de Chromium : le runner est root,
+      # contrairement à un poste de développement où cette étape se fait une fois à la main.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # `npm run e2e` démarre lui-même `dev:e2e` via `webServer` — aucune étape de serveur ici.
+      - name: Playwright
+        run: npm run e2e
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
   mutation:
     name: Mutation testing (Stryker)
     runs-on: ubuntu-latest
