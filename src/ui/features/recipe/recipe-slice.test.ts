@@ -7,6 +7,7 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import {
   createRecipe,
+  recipeFormOpened,
   recipeReducer,
   selectRecipeCreation,
   type RecipeState,
@@ -88,5 +89,30 @@ describe('recipe slice', () => {
     const next = recipeReducer(errored, createRecipe.fulfilled(savedRecipe, 'req-1', anInput()));
 
     expect(next).toEqual({ status: 'success', error: null });
+  });
+
+  // Le statut d'enregistrement est un état transitoire dans un store qui, lui, est un singleton
+  // de session : resté à 'success', il fait renavigüer le formulaire à peine rouvert (issue #27).
+  // C'est le REDUCER qui décide d'appliquer la remise à zéro, pas le container : le slice est
+  // muté par Stryker, le .tsx ne l'est pas.
+  it('l’ouverture d’un formulaire remet à idle un enregistrement déjà réussi', () => {
+    const succeeded: RecipeState = { status: 'success', error: null };
+
+    expect(recipeReducer(succeeded, recipeFormOpened())).toEqual({ status: 'idle', error: null });
+  });
+
+  it('l’ouverture d’un formulaire remet à idle un enregistrement en échec et efface son erreur', () => {
+    const errored: RecipeState = { status: 'error', error: 'Firestore indisponible' };
+
+    expect(recipeReducer(errored, recipeFormOpened())).toEqual({ status: 'idle', error: null });
+  });
+
+  // Un thunk RTK n'est pas annulé par un démontage : remettre à zéro pendant un enregistrement
+  // en vol déverrouillerait le bouton d'une opération encore en cours, et le 'fulfilled' à venir
+  // ressusciterait un succès sur un formulaire déjà rouvert.
+  it('l’ouverture d’un formulaire ne touche pas à un enregistrement encore en vol', () => {
+    const saving: RecipeState = { status: 'saving', error: null };
+
+    expect(recipeReducer(saving, recipeFormOpened())).toEqual({ status: 'saving', error: null });
   });
 });

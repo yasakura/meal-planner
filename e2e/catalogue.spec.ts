@@ -102,6 +102,53 @@ test.describe('Catalogue', () => {
     await expect(ingredients.nth(1)).toContainText('Crème');
     await expect(ingredients.nth(1)).toContainText('200 ml');
   });
+
+  /**
+   * Le statut d'enregistrement est un état transitoire du store, et le store est un singleton
+   * de session : resté à `success`, il fait renavigüer vers le catalogue le formulaire à peine
+   * monté. Tout se joue donc en navigation CLIENT — jamais de `page.goto()` entre les deux
+   * ouvertures, qui recréerait le store et masquerait le défaut.
+   */
+  test('après une création, le formulaire se rouvre vierge et utilisable', async ({ page }) => {
+    await page.goto('/catalogue');
+
+    await page.getByRole('link', { name: 'Ajouter une recette' }).click();
+    await page.getByLabel('Titre').fill('Tarte aux poireaux');
+    await page.locator('#ingredient-name-0').fill('Poireaux');
+    await page.locator('#ingredient-quantity-0').fill('3');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page).toHaveURL('/catalogue');
+
+    await page.getByRole('link', { name: 'Ajouter une recette' }).click();
+
+    // Le défaut vécu : le formulaire se montait puis renvoyait aussitôt au catalogue.
+    await expect(page).toHaveURL('/catalogue/nouvelle');
+    const titre = page.getByLabel('Titre');
+    await expect(titre).toBeVisible();
+
+    // Ré-assertion de l'URL, et c'est ELLE qui porte la garantie. Les deux assertions ci-dessus
+    // réessaient jusqu'à trouver : le montage FUGACE du formulaire, juste avant que le défaut ne
+    // renvoie au catalogue, les satisfait l'une comme l'autre. Ici en revanche l'URL est
+    // définitivement revenue à `/catalogue` sous le défaut, donc le rouge tombe à la ligne qui
+    // l'annonce, et il le dit — au lieu d'un « element(s) not found » sur le champ trois lignes
+    // plus bas, ou d'un `fill()` d'élément détaché vingt lignes plus loin.
+    await expect(page).toHaveURL('/catalogue/nouvelle');
+
+    await expect(titre).toHaveValue('');
+
+    // Vierge ne suffit pas : il doit aussi resservir de bout en bout.
+    await titre.fill('Soupe de courge');
+    await page.locator('#ingredient-name-0').fill('Courge');
+    await page.locator('#ingredient-quantity-0').fill('800');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    await expect(page).toHaveURL('/catalogue');
+    await expect(titresDuCatalogue(page)).toHaveText([
+      ...TITRES_TRIES,
+      'Soupe de courge',
+      'Tarte aux poireaux',
+    ]);
+  });
 });
 
 test.describe('Catalogue hors ligne', () => {

@@ -31,7 +31,16 @@ const recipeSlice = createSlice({
   // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'recipe',
   initialState,
-  reducers: {},
+  reducers: {
+    // Le container SIGNALE qu'un formulaire s'ouvre ; c'est ici qu'on décide d'en tenir compte.
+    // Un enregistrement en vol n'est pas annulé par le démontage du formulaire : le remettre à
+    // zéro déverrouillerait une opération encore en cours.
+    recipeFormOpened(state) {
+      if (state.status === 'saving') return;
+      state.status = 'idle';
+      state.error = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(createRecipe.pending, (state) => {
@@ -48,6 +57,8 @@ const recipeSlice = createSlice({
       });
   },
 });
+
+export const { recipeFormOpened } = recipeSlice.actions;
 
 export const recipeReducer = recipeSlice.reducer;
 

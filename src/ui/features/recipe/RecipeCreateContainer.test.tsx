@@ -22,16 +22,23 @@ beforeEach(() => {
   mockNavigate.mockClear();
 });
 
-function renderWithStore(createRecipe?: CreateRecipe) {
-  const store = createTestStore(createRecipe ? { createRecipe } : undefined);
-  const view = render(
+type TestStore = ReturnType<typeof createTestStore>;
+
+// Monter sur une instance de store DONNÉE est la seule façon de reproduire la rémanence :
+// le store applicatif est un singleton de session, un store neuf par montage la masque.
+function renderOn(store: TestStore) {
+  return render(
     <Provider store={store}>
       <MemoryRouter>
         <RecipeCreateContainer />
       </MemoryRouter>
     </Provider>,
   );
-  return { store, ...view };
+}
+
+function renderWithStore(createRecipe?: CreateRecipe) {
+  const store = createTestStore(createRecipe ? { createRecipe } : undefined);
+  return { store, ...renderOn(store) };
 }
 
 function capturingSpy() {
@@ -345,5 +352,65 @@ describe('RecipeCreateContainer', () => {
 
     expect(await screen.findByRole('status')).toBeInTheDocument();
     expect(spy.state.captured?.instructions).toBe('');
+  });
+
+  // Cycle de vie : le bouton « Enregistrer » est verrouillé pendant l'enregistrement, la barre de
+  // navigation du bas ne l'est PAS. L'utilisateur peut donc quitter le formulaire pendant que la
+  // sauvegarde est en vol. L'enregistrement aboutit normalement — la recette est bien créée, le
+  // statut passe à 'success' —, mais un geste de navigation explicite prime sur la suite d'une
+  // opération de fond : l'application ne le ramène pas au catalogue.
+  it('un enregistrement qui aboutit après le départ de l’utilisateur ne le ramène pas au catalogue', async () => {
+    const user = userEvent.setup();
+    let resolveSave: ((recipe: Recipe) => void) | undefined;
+    const deferred: CreateRecipe = () =>
+      new Promise<Recipe>((resolve) => {
+        resolveSave = resolve;
+      });
+    const { store, unmount } = renderWithStore(deferred);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    // L'utilisateur quitte la page pendant que l'enregistrement est en vol.
+    unmount();
+    if (!resolveSave) throw new Error('l’enregistrement n’a pas été déclenché');
+    resolveSave(RecipeBuilder.aRecipe().build());
+
+    // L'enregistrement aboutit bel et bien : c'est ce qui rend l'absence de navigation ci-dessous
+    // discriminante — la promesse s'est résolue, la suite du `then` a eu lieu.
+    await vi.waitFor(() => expect(store.getState().recipe.status).toBe('success'));
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // Rémanence (issue #27) : en session réelle, revenir au catalogue puis rouvrir « + » est une
+  // navigation CLIENT — le store survit, le container se remonte sur un statut resté 'success'.
+  // Le montage doit donc repartir d'un formulaire neuf : pas de renavigation, pas de
+  // confirmation périmée. Le store est délibérément RÉUTILISÉ d'un render à l'autre : un store
+  // recréé ferait de chaque montage un « premier de la session » et ne pourrait rien détecter.
+  it('remonté sur le MÊME store après une création réussie, rouvre un formulaire neuf sans renavigüer', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    const { store, unmount } = renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    // Le localisateur de la confirmation, vu ici en train de la trouver : c'est ce qui rend
+    // son absence plus bas discriminante plutôt que décorative.
+    expect(await screen.findByRole('status')).toHaveTextContent('Recette enregistrée.');
+    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue'));
+
+    unmount();
+    mockNavigate.mockClear();
+    renderOn(store);
+
+    expect(screen.getByLabelText(/titre/i)).toHaveValue('');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
