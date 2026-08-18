@@ -227,6 +227,10 @@ Une revue trouve **toujours** quelque chose : c'est sa fonction, pas un signal q
 
 Quand la règle s'applique, **ne pas soumettre le choix à l'utilisateur comme une option ouverte** : annoncer que le finding est reporté, avec son motif, et le tracer. Lui présenter « corriger maintenant » comme une alternative d'égale dignité fabrique la décision coûteuse en la rendant raisonnable. Il reste libre de trancher l'inverse — mais sur une proposition, pas sur un menu.
 
+**« Tracer » veut dire OUVRIR UNE ISSUE GitHub, pas l'écrire dans un rapport.** Tout finding reporté part en issue, sans exception et sans attendre qu'on le demande. Un finding qui ne vit que dans un message de conversation, un corps de PR ou un message de commit est **perdu** : la session se ferme, le contexte disparaît, et personne ne relit un commit pour y chercher du travail à faire. _(Vécu 2026-08-18 : « tracé » écrit trois fois de suite sur onze findings de revue, sans qu'aucune issue n'existe — l'utilisateur a dû le réclamer.)_
+
+L'issue porte le **scénario concret**, les références `fichier:ligne`, et le classement (introduit/pré-existant, bloquant/non bloquant) : elle doit être reprenable sans le contexte de la session qui l'a produite. Regrouper est permis et souvent préférable — plusieurs findings qui se referment dans la même passe font une seule issue, pas cinq. Ouvrir onze tickets pour onze remarques est du bruit ; en ouvrir zéro est une perte.
+
 **L'agent principal ne rejoue pas systématiquement `lint`/`test`/`build` après chaque rapport d'agent** : sur une dizaine de rejeux, aucun n'a jamais contredit le rapport. Un seul passage complet avant commit suffit. En revanche le **run de mutation isolé reste rejoué** — lui a révélé de vrais écarts (100 % annoncé, 85 % réel).
 
 ## Quand consulter l'utilisateur, quand trancher
@@ -272,6 +276,7 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] **Si nouvel état transitoire** (constat, statut d'opération ponctuelle) : déclencheur de remise à zéro spécifié + test de remontage sur le **même** store
 - [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
 - [ ] **Revue de code indépendante** passée AVANT commit (findings pertinents traités, non-pertinents justifiés)
+- [ ] **Findings reportés → issues GitHub ouvertes**, avec scénario, `fichier:ligne` et classement. « Tracé » dans un rapport ne compte pas : ce qui n'est pas dans une issue est perdu à la fermeture de la session
 - [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement + **sortie** de chacun d'eux)
 - [ ] `npm run e2e` OK — les parcours qui ne sont PAS la feature du jour tiennent toujours. Un scénario rouge relève du protocole anti test-tampering : classifier avant de toucher
 - [ ] **Vérification manuelle de l'utilisateur** (features `src/ui/`) et son **feu vert explicite** — jamais de commit sans lui
