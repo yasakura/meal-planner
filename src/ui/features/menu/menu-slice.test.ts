@@ -8,7 +8,13 @@ import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
-import { generateMenu, menuReducer, selectMenu, type MenuState } from './menu-slice';
+import {
+  generateMenu,
+  menuReducer,
+  menuWindowSelected,
+  selectMenu,
+  type MenuState,
+} from './menu-slice';
 
 function aMenu(): Menu {
   return createMenu({
@@ -35,6 +41,7 @@ describe('menu slice', () => {
       menu: null,
       recipes: null,
       error: null,
+      selectedDays: 14,
     });
   });
 
@@ -52,6 +59,9 @@ describe('menu slice', () => {
       menu,
       recipes,
       error: null,
+      // Jamais touchée par le cycle de génération : la fenêtre choisie reste celle de départ,
+      // et NON l'argument passé au thunk.
+      selectedDays: 14,
     });
   });
 
@@ -84,6 +94,10 @@ describe('menu slice', () => {
       listRecipes: async () => twoRecipes(),
     });
 
+    // Fenêtre NON-défaut : sans ce gage, l'assertion sur selectedDays passerait aussi bien
+    // si la transition rejected remettait le champ à sa valeur par défaut.
+    store.dispatch(menuWindowSelected(7));
+
     await store.dispatch(generateMenu(7));
     // état peuplé : un menu et des recettes sont affichés
     expect(selectMenu(store.getState()).menu).not.toBeNull();
@@ -97,6 +111,7 @@ describe('menu slice', () => {
       menu: null,
       recipes: null,
       error: 'Boom firestore',
+      selectedDays: 7,
     });
   });
 
@@ -125,6 +140,7 @@ describe('menu slice', () => {
       menu: null,
       recipes: null,
       error: null,
+      selectedDays: 14,
     });
   });
 
@@ -136,6 +152,9 @@ describe('menu slice', () => {
     };
     const store = createTestStore({ generateMenu: generate, listRecipes: async () => [] });
 
+    // Fenêtre NON-défaut : gage l'assertion sur selectedDays contre un reset en rejected.
+    store.dispatch(menuWindowSelected(7));
+
     await store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
@@ -143,6 +162,7 @@ describe('menu slice', () => {
       menu: null,
       recipes: null,
       error: 'no-recipes',
+      selectedDays: 7,
     });
     expect(generateCalled).toBe(false);
   });
@@ -157,11 +177,12 @@ describe('menu slice', () => {
       menu: null,
       recipes: null,
       error: 'Impossible de générer un menu sans recette',
+      selectedDays: 7,
     };
 
     const next = menuReducer(errored, generateMenu.fulfilled({ menu, recipes }, 'req-1', 7));
 
-    expect(next).toEqual({ status: 'success', menu, recipes, error: null });
+    expect(next).toEqual({ status: 'success', menu, recipes, error: null, selectedDays: 7 });
   });
 
   // [guard] tue les mutants de reset de la transition PENDING (`state.error = null`,
@@ -174,10 +195,72 @@ describe('menu slice', () => {
       menu: aMenu(),
       recipes: twoRecipes(),
       error: 'Impossible de générer un menu sans recette',
+      selectedDays: 7,
     };
 
     const next = menuReducer(dirty, generateMenu.pending('req-1', 7));
 
-    expect(next).toEqual({ status: 'loading', menu: null, recipes: null, error: null });
+    expect(next).toEqual({
+      status: 'loading',
+      menu: null,
+      recipes: null,
+      error: null,
+      // La transition qui efface TOUT le reste n'efface pas la fenêtre choisie.
+      selectedDays: 7,
+    });
+  });
+
+  it('la fenêtre choisie par défaut est « 2 semaines » (14 jours)', () => {
+    const store = createTestStore();
+
+    expect(selectMenu(store.getState()).selectedDays).toBe(14);
+  });
+
+  it('choisir une fenêtre met à jour la fenêtre choisie', () => {
+    const store = createTestStore();
+
+    store.dispatch(menuWindowSelected(7));
+
+    expect(selectMenu(store.getState()).selectedDays).toBe(7);
+  });
+
+  /**
+   * Règle au cœur de l'issue #28 : la fenêtre choisie est une PRÉFÉRENCE, pas un état
+   * transitoire. Aucune transition du cycle de génération ne la remet à sa valeur par défaut —
+   * ni `pending`, qui efface pourtant menu, recettes et erreur, ni `fulfilled`.
+   */
+  it('la fenêtre choisie survit à un cycle de génération complet (pending → fulfilled)', async () => {
+    const menu = aMenu();
+    const recipes = twoRecipes();
+    let resolveGenerate!: (menu: Menu) => void;
+    const generated = new Promise<Menu>((resolve) => {
+      resolveGenerate = resolve;
+    });
+    const store = createTestStore({
+      generateMenu: () => generated,
+      listRecipes: async () => recipes,
+    });
+
+    store.dispatch(menuWindowSelected(7));
+    const inFlight = store.dispatch(generateMenu(7));
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'loading',
+      menu: null,
+      recipes: null,
+      error: null,
+      selectedDays: 7,
+    });
+
+    resolveGenerate(menu);
+    await inFlight;
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'success',
+      menu,
+      recipes,
+      error: null,
+      selectedDays: 7,
+    });
   });
 });
