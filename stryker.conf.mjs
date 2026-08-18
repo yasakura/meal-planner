@@ -52,6 +52,12 @@ export default {
   // L'état vit dans `reports/`, qui est gitignoré : le bénéfice est LOCAL, chaque machine
   // et chaque run de CI repart de zéro. C'est la boucle de développement qu'on optimise,
   // pas la CI.
+  //
+  // ATTENTION, effet de bord non évident : ce mode CASSE `npx stryker run --mutate '<fichier>'`
+  // comme moyen d'obtenir un run isolé. Stryker relit ce cache et fusionne les résultats des
+  // AUTRES fichiers dans le tableau et dans le score — le chiffre affiché reste plausible, mais
+  // ce n'est pas celui du fichier demandé. Passer par `npm run test:mutation:isolated`, qui
+  // détourne le cache vers un fichier jetable et le supprime avant chaque run.
   incremental: true,
   vitest: {
     configFile: 'vitest.config.ts',
