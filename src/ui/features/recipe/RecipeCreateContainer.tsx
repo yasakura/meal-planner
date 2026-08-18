@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { createIngredient } from '../../../domain/entities/ingredient';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { RecipeCreateScreen, type IngredientRow } from './RecipeCreateScreen';
-import { createRecipe, selectRecipeCreation } from './recipe-slice';
+import { createRecipe, recipeFormOpened, selectRecipeCreation } from './recipe-slice';
 
 function emptyRow(): IngredientRow {
   return { name: '', quantity: '', unit: 'g' };
@@ -25,11 +25,24 @@ export function RecipeCreateContainer() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
-  // Enregistrement réussi → retour à la liste, qui se remonte et re-fetch (nouvelle recette
-  // visible). Sur erreur, on reste sur la page pour afficher le message.
+  // Un formulaire s'ouvre : on le SIGNALE au slice, qui décide seul s'il remet le statut à zéro.
   useEffect(() => {
-    if (status === 'success') navigate('/catalogue');
-  }, [status, navigate]);
+    dispatch(recipeFormOpened());
+  }, [dispatch]);
+
+  // Le seul lien au cycle de vie dont dispose la suite du `then` plus bas : une promesse n'est pas
+  // démontée avec son composant, et `useNavigate` ne s'en protège pas non plus (son garde interne
+  // est posé par un effet SANS nettoyage, donc il reste ouvert après le démontage et la navigation
+  // part quand même, sans warning). La réaffectation à `true` n'est pas redondante avec la valeur
+  // initiale : StrictMode rejoue montage/démontage, et sans elle le drapeau resterait à `false`
+  // pour toute la vie du formulaire en dev.
+  const monte = useRef(true);
+  useEffect(() => {
+    monte.current = true;
+    return () => {
+      monte.current = false;
+    };
+  }, []);
 
   const validRows = rows.filter(isValidRow);
   const submitDisabled = status === 'saving' || title.trim() === '' || validRows.length === 0;
@@ -37,11 +50,21 @@ export function RecipeCreateContainer() {
   const confirmation = status === 'success' ? 'Recette enregistrée.' : null;
   const errorMessage = status === 'error' ? 'Impossible d’enregistrer la recette.' : null;
 
+  // Retour à la liste sur l'ISSUE de l'enregistrement, jamais sur l'observation du statut :
+  // un effet qui regarde `status === 'success'` renavigue au remontage suivant, avant même que
+  // la remise à zéro signalée plus haut n'ait pu être lue (les effets d'un même commit voient
+  // tous le statut de leur rendu). Sur erreur, on reste sur la page pour afficher le message.
+  // Si l'utilisateur a quitté le formulaire entre-temps, l'enregistrement aboutit quand même
+  // (rien ne l'annule), mais son geste de navigation prime : on ne le ramène pas au catalogue.
   const handleSubmit = () => {
     const ingredients = validRows.map((row) =>
       createIngredient({ name: row.name, quantity: Number(row.quantity), unit: row.unit }),
     );
-    dispatch(createRecipe({ title, ingredients, convivesReference: convives, instructions }));
+    void dispatch(
+      createRecipe({ title, ingredients, convivesReference: convives, instructions }),
+    ).then((result) => {
+      if (createRecipe.fulfilled.match(result) && monte.current) navigate('/catalogue');
+    });
   };
 
   const handleRowChange = (index: number, patch: Partial<IngredientRow>) => {
