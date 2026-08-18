@@ -343,6 +343,38 @@ describe('MenuContainer', () => {
     ]);
   });
 
+  /**
+   * La relecture est un geste que l'utilisateur n'a PAS demandé : elle ne doit rien faire
+   * clignoter. La règle n'était gagée que par un effet de bord — le `toEqual` final d'un test de
+   * slice, vrai seulement parce que `fulfilled` ne touche pas `status`. Un refactor ajoutant
+   * `pending → loading` ET `fulfilled → success` réintroduirait le clignotement en gardant la
+   * suite verte. Le clignotement est un fait de CONTAINER, et les `.tsx` ne sont pas mutés :
+   * c'est ici, et nulle part ailleurs, que le trou se bouche.
+   */
+  it('une relecture en vol n’affiche aucun indicateur de chargement par-dessus le menu', async () => {
+    const user = userEvent.setup();
+    let relectureEnVol = false;
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: () =>
+        relectureEnVol ? new Promise<Recipe[]>(() => {}) : Promise.resolve(twoRecipes()),
+    });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
+
+    unmount();
+    // Le remontage relance la relecture, qui ne se règle JAMAIS : l'écran reste sous une
+    // lecture en vol aussi longtemps qu'on l'observe.
+    relectureEnVol = true;
+    renderOn(store);
+
+    // GAGE de l'absence affirmée ensuite : le menu est bel et bien à l'écran, avec ses titres.
+    // Sans lui, « pas d'indicateur » serait tout aussi vrai sur un écran vide.
+    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('sans menu généré, arriver sur l’écran ne relit pas les recettes', async () => {
     let listCalls = 0;
     renderWithStore({

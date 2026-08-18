@@ -8,6 +8,7 @@ import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
+import { deferred } from '../../test-utils/deferred';
 import {
   generateMenu,
   menuReducer,
@@ -33,6 +34,21 @@ function twoRecipes(): Recipe[] {
   ];
 }
 
+// Menu dont un créneau porte une recette ABSENTE du catalogue d'origine : c'est elle qui
+// retombe sur « Recette inconnue » si un catalogue périmé écrase le catalogue courant.
+function aMenuAvecR3(): Menu {
+  return createMenu({
+    repas: [
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r3' })] }),
+      createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+    ],
+  });
+}
+
+function threeRecipes(): Recipe[] {
+  return [...twoRecipes(), RecipeBuilder.aRecipe().withId('r3').withTitle('Tarte').build()];
+}
+
 describe('menu slice', () => {
   it('un store neuf est idle, sans menu ni recettes ni erreur', () => {
     const store = createTestStore();
@@ -43,6 +59,8 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 14,
+      // Aucune lecture n'a été lancée : il n'y a pas de « dernière » à mémoriser.
+      latestRecipesRequestId: null,
     });
   });
 
@@ -53,7 +71,7 @@ describe('menu slice', () => {
     const list: ListRecipes = async () => recipes;
     const store = createTestStore({ generateMenu: generate, listRecipes: list });
 
-    await store.dispatch(generateMenu(7));
+    const generated = await store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'success',
@@ -63,6 +81,8 @@ describe('menu slice', () => {
       // Jamais touchée par le cycle de génération : la fenêtre choisie reste celle de départ,
       // et NON l'argument passé au thunk.
       selectedDays: 14,
+      // La génération lit le catalogue : c'est ELLE la dernière lecture lancée.
+      latestRecipesRequestId: generated.meta.requestId,
     });
   });
 
@@ -104,7 +124,7 @@ describe('menu slice', () => {
     expect(selectMenu(store.getState()).menu).not.toBeNull();
 
     failPhase = true;
-    await store.dispatch(generateMenu(7));
+    const failed = await store.dispatch(generateMenu(7));
 
     // le null vient de la transition (pending), pas de l'initialState : rejected ne reset pas.
     expect(selectMenu(store.getState())).toEqual({
@@ -113,6 +133,8 @@ describe('menu slice', () => {
       recipes: null,
       error: 'Boom firestore',
       selectedDays: 7,
+      // La SECONDE génération, celle qui a échoué : la mémoire suit la dernière lancée.
+      latestRecipesRequestId: failed.meta.requestId,
     });
   });
 
@@ -134,7 +156,7 @@ describe('menu slice', () => {
     expect(selectMenu(store.getState()).menu).not.toBeNull();
 
     pendingPhase = true;
-    void store.dispatch(generateMenu(7));
+    const inFlight = store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'loading',
@@ -142,6 +164,7 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 14,
+      latestRecipesRequestId: inFlight.requestId,
     });
   });
 
@@ -156,7 +179,7 @@ describe('menu slice', () => {
     // Fenêtre NON-défaut : gage l'assertion sur selectedDays contre un reset en rejected.
     store.dispatch(menuWindowSelected(7));
 
-    await store.dispatch(generateMenu(7));
+    const refused = await store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'error',
@@ -164,6 +187,7 @@ describe('menu slice', () => {
       recipes: null,
       error: 'no-recipes',
       selectedDays: 7,
+      latestRecipesRequestId: refused.meta.requestId,
     });
     expect(generateCalled).toBe(false);
   });
@@ -179,11 +203,21 @@ describe('menu slice', () => {
       recipes: null,
       error: 'Impossible de générer un menu sans recette',
       selectedDays: 7,
+      latestRecipesRequestId: 'req-0',
     };
 
     const next = menuReducer(errored, generateMenu.fulfilled({ menu, recipes }, 'req-1', 7));
 
-    expect(next).toEqual({ status: 'success', menu, recipes, error: null, selectedDays: 7 });
+    expect(next).toEqual({
+      status: 'success',
+      menu,
+      recipes,
+      error: null,
+      selectedDays: 7,
+      // `fulfilled` ne touche PAS la mémoire de fraîcheur : elle est posée au départ de la
+      // lecture, pas à son arrivée. Elle reste donc sur 'req-0', pas sur l'id de cette action.
+      latestRecipesRequestId: 'req-0',
+    });
   });
 
   // [guard] tue les mutants de reset de la transition PENDING (`state.error = null`,
@@ -197,6 +231,7 @@ describe('menu slice', () => {
       recipes: twoRecipes(),
       error: 'Impossible de générer un menu sans recette',
       selectedDays: 7,
+      latestRecipesRequestId: 'req-0',
     };
 
     const next = menuReducer(dirty, generateMenu.pending('req-1', 7));
@@ -208,6 +243,8 @@ describe('menu slice', () => {
       error: null,
       // La transition qui efface TOUT le reste n'efface pas la fenêtre choisie.
       selectedDays: 7,
+      // Le départ d'une génération PREND la main sur la lecture précédente ('req-0').
+      latestRecipesRequestId: 'req-1',
     });
   });
 
@@ -251,6 +288,7 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 7,
+      latestRecipesRequestId: inFlight.requestId,
     });
 
     resolveGenerate(menu);
@@ -262,6 +300,7 @@ describe('menu slice', () => {
       recipes,
       error: null,
       selectedDays: 7,
+      latestRecipesRequestId: inFlight.requestId,
     });
   });
   /**
@@ -272,8 +311,12 @@ describe('menu slice', () => {
   it('rafraîchir les recettes met à jour les recettes sans toucher au menu ni à la fenêtre choisie', async () => {
     const menu = aMenu();
     let catalogue = twoRecipes();
+    let generations = 0;
     const store = createTestStore({
-      generateMenu: async () => menu,
+      generateMenu: async () => {
+        generations += 1;
+        return menu;
+      },
       listRecipes: async () => catalogue,
     });
 
@@ -288,8 +331,12 @@ describe('menu slice', () => {
       RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
     ];
 
-    await store.dispatch(refreshMenuRecipes());
+    const refreshed = await store.dispatch(refreshMenuRecipes());
 
+    // Le double rend un menu STABLE : une implémentation qui régénérerait EN PLUS produirait un
+    // état structurellement égal et passerait le `toEqual` ci-dessous. Seul le compte d'appels
+    // tient la promesse du nom.
+    expect(generations).toBe(1);
     expect(selectMenu(store.getState())).toEqual({
       status: 'success',
       // Le MÊME menu, intact : le rafraîchissement ne rejoue pas la génération.
@@ -297,6 +344,8 @@ describe('menu slice', () => {
       recipes: catalogue,
       error: null,
       selectedDays: 7,
+      // La relecture a pris la main sur la génération qui la précède.
+      latestRecipesRequestId: refreshed.meta.requestId,
     });
   });
 
@@ -310,9 +359,15 @@ describe('menu slice', () => {
     const menu = aMenu();
     const recipes = twoRecipes();
     let failPhase = false;
+    let generations = 0;
+    let lectures = 0;
     const store = createTestStore({
-      generateMenu: async () => menu,
+      generateMenu: async () => {
+        generations += 1;
+        return menu;
+      },
       listRecipes: async () => {
+        lectures += 1;
         if (failPhase) throw new Error('Boom firestore');
         return recipes;
       },
@@ -322,8 +377,17 @@ describe('menu slice', () => {
     await store.dispatch(generateMenu(7));
 
     failPhase = true;
-    await store.dispatch(refreshMenuRecipes());
+    const result = await store.dispatch(refreshMenuRecipes());
 
+    // Ce test est l'UNIQUE gage de l'absence de cas `rejected`. Sans les deux lignes qui
+    // suivent, il deviendrait vide en restant vert — une invariance après une action qui ne
+    // fait rien : le compte de lectures prouve que la relecture est PARTIE (un `condition`
+    // resserré la bloquerait sans que rien ne le signale), et le match prouve qu'elle a
+    // REJETÉ (une lecture qui cesserait d'échouer rendrait l'invariance triviale).
+    expect(lectures).toBe(2);
+    expect(refreshMenuRecipes.rejected.match(result)).toBe(true);
+    // Même gage que le test voisin : un rafraîchissement ne rejoue pas la génération.
+    expect(generations).toBe(1);
     expect(selectMenu(store.getState())).toEqual({
       status: 'success',
       menu,
@@ -331,6 +395,8 @@ describe('menu slice', () => {
       // Pas de message d'erreur : l'utilisateur n'a rien demandé.
       error: null,
       selectedDays: 7,
+      // La relecture a bien pris la main au DÉPART, alors même qu'elle a échoué à l'arrivée.
+      latestRecipesRequestId: result.meta.requestId,
     });
   });
 
@@ -352,6 +418,95 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 14,
+      // Relecture bloquée au départ : `pending` n'a pas tourné, rien n'est mémorisé.
+      latestRecipesRequestId: null,
+    });
+  });
+  /**
+   * Le `condition` filtre le DÉPART d'une relecture, jamais son ARRIVÉE : deux lectures peuvent
+   * être en vol et se régler dans le désordre. Arriver sur /menu (relecture lente), filer au
+   * catalogue renommer une recette, revenir (seconde relecture, qui se règle en premier) — la
+   * réponse tardive de la première remettait l'ANCIEN titre à l'écran, soit exactement le défaut
+   * que ce cycle vient de fermer, revenu par la fenêtre.
+   */
+  it('la relecture tardive d’un écran quitté ne fait pas revenir un ancien titre', async () => {
+    const menu = aMenu();
+    const ancien = twoRecipes();
+    const aJour = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+    const lente = deferred<Recipe[]>();
+    let lectures = 0;
+    const list: ListRecipes = () => {
+      lectures += 1;
+      if (lectures === 1) return Promise.resolve(ancien);
+      if (lectures === 2) return lente.promise;
+      return Promise.resolve(aJour);
+    };
+    const store = createTestStore({ generateMenu: async () => menu, listRecipes: list });
+
+    // Fenêtre NON-défaut : gage l'assertion sur selectedDays contre un reset.
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    const abandonnee = store.dispatch(refreshMenuRecipes());
+    const courante = store.dispatch(refreshMenuRecipes());
+    await courante;
+    // Deux lectures RÉELLEMENT en vol, réglées dans le désordre : la tardive porte l'ANCIEN
+    // catalogue et arrive APRÈS que la courante a rendu les titres à jour.
+    lente.resolve(ancien);
+    await abandonnee;
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'success',
+      menu,
+      recipes: aJour,
+      error: null,
+      selectedDays: 7,
+      latestRecipesRequestId: courante.requestId,
+    });
+  });
+
+  /**
+   * Deux producteurs écrivent `recipes` : la relecture ET la génération. Une régénération relit
+   * un catalogue à jour et pose menu + recettes COHÉRENTS ; si la relecture périmée se règle
+   * après, elle rend un catalogue amputé de la recette créée entre-temps, et les créneaux de
+   * celle-ci retombent sur « Recette inconnue » sur un menu qui vient pourtant de réussir.
+   */
+  it('la relecture tardive ne remplace pas le catalogue d’une régénération plus récente', async () => {
+    const menu = aMenu();
+    const menuAvecR3 = aMenuAvecR3();
+    const ancien = twoRecipes();
+    const aJour = threeRecipes();
+    const lente = deferred<Recipe[]>();
+    let lectures = 0;
+    const list: ListRecipes = () => {
+      lectures += 1;
+      if (lectures === 1) return Promise.resolve(ancien);
+      if (lectures === 2) return lente.promise;
+      return Promise.resolve(aJour);
+    };
+    let rendu = menu;
+    const store = createTestStore({ generateMenu: async () => rendu, listRecipes: list });
+
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    const abandonnee = store.dispatch(refreshMenuRecipes());
+    // R3 a été créée entre-temps : la régénération la fait entrer au menu ET au catalogue.
+    rendu = menuAvecR3;
+    const regeneration = await store.dispatch(generateMenu(7));
+    lente.resolve(ancien);
+    await abandonnee;
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'success',
+      menu: menuAvecR3,
+      recipes: aJour,
+      error: null,
+      selectedDays: 7,
+      latestRecipesRequestId: regeneration.meta.requestId,
     });
   });
 });
