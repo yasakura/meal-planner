@@ -71,7 +71,13 @@ describe('menu slice', () => {
     const list: ListRecipes = async () => recipes;
     const store = createTestStore({ generateMenu: generate, listRecipes: list });
 
-    const generated = await store.dispatch(generateMenu(7));
+    // TROIS valeurs distinctes — défaut 14, préférence 7, argument du thunk 5 — parce que
+    // l'assertion sur selectedDays porte DEUX promesses, et qu'une valeur partagée n'en gage
+    // qu'une : `= DEFAULT_DAYS` dans fulfilled rendrait 14, `= action.meta.arg` rendrait 5.
+    // Les deux tombent sur le 7 attendu, aucune ne peut se cacher derrière l'autre.
+    store.dispatch(menuWindowSelected(7));
+
+    const generated = await store.dispatch(generateMenu(5));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'success',
@@ -80,7 +86,7 @@ describe('menu slice', () => {
       error: null,
       // Jamais touchée par le cycle de génération : la fenêtre choisie reste celle de départ,
       // et NON l'argument passé au thunk.
-      selectedDays: 14,
+      selectedDays: 7,
       // La génération lit le catalogue : c'est ELLE la dernière lecture lancée.
       latestRecipesRequestId: generated.meta.requestId,
     });
@@ -151,19 +157,25 @@ describe('menu slice', () => {
       listRecipes: async () => twoRecipes(),
     });
 
-    await store.dispatch(generateMenu(7));
+    // TROIS valeurs distinctes — défaut 14, préférence 7, argument du thunk 5 — parce que
+    // l'assertion sur selectedDays porte DEUX promesses, et qu'une valeur partagée n'en gage
+    // qu'une : `= DEFAULT_DAYS` dans pending rendrait 14, `= action.meta.arg` rendrait 5.
+    // Les deux tombent sur le 7 attendu, aucune ne peut se cacher derrière l'autre.
+    store.dispatch(menuWindowSelected(7));
+
+    await store.dispatch(generateMenu(5));
     // état peuplé
     expect(selectMenu(store.getState()).menu).not.toBeNull();
 
     pendingPhase = true;
-    const inFlight = store.dispatch(generateMenu(7));
+    const inFlight = store.dispatch(generateMenu(5));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'loading',
       menu: null,
       recipes: null,
       error: null,
-      selectedDays: 14,
+      selectedDays: 7,
       latestRecipesRequestId: inFlight.requestId,
     });
   });

@@ -35,6 +35,11 @@ export type RecipeCreateScreenProps = {
 };
 
 const Page = styled.div`
+  /* PAS de flex:1 ici, contrairement à tous les autres Page — et c'est délibéré : ce formulaire
+     déborde toujours, rien n'a de hauteur à distribuer, aucun état centré n'y vit. Le jour où
+     on y met un état plein écran (constat de chargement, recette introuvable), il faudra
+     l'ajouter : sans lui, l'écran épouse son contenu et l'état se colle sous le lien de retour,
+     la moitié basse restant vide. C'est le défaut fermé par les issues #32/#37 ailleurs. */
   background: ${colors.creme};
   display: flex;
   flex-direction: column;

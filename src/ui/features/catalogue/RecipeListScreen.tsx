@@ -88,6 +88,13 @@ const StateText = styled.p`
 `;
 
 const ErrorBox = styled.div`
+  /* Aligné sur CenteredState : loading, unavailable, empty et notFound se centrent tous dans la
+     hauteur offerte, error était le seul à rester collé sous l'en-tête. L'écart n'a jamais été
+     décidé — il est né le jour où Page a pris flex:1 et où il y a enfin eu une hauteur à
+     distribuer. L'alignement horizontal, lui, ne bouge pas : « Réessayer » est une commande,
+     elle reste au fil du texte. */
+  flex: 1;
+  justify-content: center;
   display: flex;
   flex-direction: column;
   gap: ${space.md}px;

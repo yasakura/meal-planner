@@ -45,6 +45,10 @@ async function defilementDeLaPage(page: Page): Promise<{ offerte: number; viewpo
  * commence qu'une fois l'icône épuisée, quand l'interligne du libellé excède à lui seul la
  * boîte ; rien ne le rogne alors (`overflow` est visible), il se voit à l'écran.
  *
+ * D'où `hauteurDeLIcone`, mesurée À PART : les marges ci-dessus ne peuvent RIEN dire de la
+ * compression, puisque c'est justement en cédant que l'icône les maintient positives. Une icône
+ * rabotée en silence est le seul état où tout le reste de ce scénario reste vert.
+ *
  * Les DEUX marges sont rendues parce que `justify-content: center` répartit l'excès des deux
  * côtés : le bas mord sous le viewport, le haut sort par-dessus la bordure dans le contenu. Un
  * débordement par le haut ne fait pas défiler la page — aucun autre scénario ne le verrait.
@@ -52,6 +56,7 @@ async function defilementDeLaPage(page: Page): Promise<{ offerte: number; viewpo
 type ContenuDOnglet = {
   onglet: string;
   hauteurDuBloc: number;
+  hauteurDeLIcone: number;
   margeAuDessus: number;
   margeEnDessous: number;
 };
@@ -73,10 +78,12 @@ async function contenuDesOnglets(
         const enfants = [...onglet.children].map((enfant) => enfant.getBoundingClientRect());
         const haut = Math.min(...enfants.map((rectangle) => rectangle.top));
         const bas = Math.max(...enfants.map((rectangle) => rectangle.bottom));
+        const icone = onglet.querySelector('svg') as SVGElement;
 
         return {
           onglet: (onglet.textContent ?? '').trim(),
           hauteurDuBloc: bas - haut,
+          hauteurDeLIcone: icone.getBoundingClientRect().height,
           margeAuDessus: haut - hautDeLaBoite,
           margeEnDessous: basDeLaBoite - bas,
         };
@@ -89,9 +96,15 @@ async function contenuDesOnglets(
  * Centrage vertical d'un état plein écran (constat, état vide) dans la hauteur qui lui est
  * OFFERTE — et non dans sa propre boîte, qui l'épouserait et rendrait la mesure tautologique.
  *
- * La zone offerte va du bas de ce qui précède l'état (en-tête ou lien retour, marge comprise)
- * au bas de la boîte de contenu de l'écran. Le bloc mesuré est l'union des ENFANTS de l'état :
- * `justify-content: center` les centre dans la zone, et c'est cette position-là que l'œil voit.
+ * La zone offerte va du bord HAUT de l'état au bas de la boîte de contenu de `main`. Ces deux
+ * bords viennent de sources différentes, et c'est tout l'intérêt : l'état ne borne que le haut,
+ * jamais le bas. Un état qui aurait perdu sa hauteur épouserait ses enfants et se poserait sous
+ * l'en-tête, laissant la moitié basse de la page vide — le bas venant de `main`, l'écart entre
+ * les deux bords reste alors entier, il se retrouve en totalité SOUS le bloc, et l'égalité des
+ * espaces tombe. C'est ce qui empêche la mesure d'être tautologique.
+ *
+ * Le bloc mesuré est l'union des ENFANTS de l'état : `justify-content: center` les centre dans
+ * la zone, et c'est cette position-là que l'œil voit.
  */
 type Centrage = {
   hauteurDuBloc: number;
@@ -104,10 +117,11 @@ async function centrageVertical(etat: Locator): Promise<Centrage> {
     const ecran = element.parentElement as HTMLElement;
     const region = element.closest('main') as HTMLElement;
 
-    const precedent = element.previousElementSibling as HTMLElement;
-    const hautDeLaZone =
-      precedent.getBoundingClientRect().bottom +
-      parseFloat(getComputedStyle(precedent).marginBottom);
+    // Le haut de la zone est le bord haut de l'état lui-même : ce que l'espacement qui le
+    // précède a déjà repoussé est, par construction, hors de la zone offerte. Rien n'est donc
+    // à mesurer sur le frère précédent, et le véhicule de cet espacement — marge, `gap` — n'a
+    // aucune prise sur le résultat.
+    const hautDeLaZone = element.getBoundingClientRect().top;
     // Le bas de la zone se lit sur `main`, PAS sur l'écran : un écran qui a perdu sa hauteur
     // épouse son contenu, et mesurer dans sa boîte rendrait « centré » vrai alors que la moitié
     // basse de la page est vide. La marge basse que l'écran se réserve est retranchée, sans quoi
@@ -273,6 +287,10 @@ test.describe('Mise en page', () => {
 
     for (const onglet of mesure.onglets) {
       expect(onglet.hauteurDuBloc, onglet.onglet).toBeGreaterThan(0);
+      // L'icône est peinte à la taille qu'elle DÉCLARE (22px), et non à celle que le libellé
+      // lui laisse : sans cette égalité, un interligne plus haut la rabote sans que les marges
+      // ci-dessous ne bougent d'un pixel.
+      expect(onglet.hauteurDeLIcone, onglet.onglet).toBe(22);
       expect(onglet.margeAuDessus, onglet.onglet).toBeGreaterThanOrEqual(0);
       expect(onglet.margeEnDessous, onglet.onglet).toBeGreaterThanOrEqual(0);
     }
@@ -361,6 +379,29 @@ test.describe('Mise en page', () => {
     await expect(page.getByText('Recette introuvable')).toBeVisible();
 
     const mesure = await centrageVertical(page.getByText('Recette introuvable').locator('..'));
+
+    expect(mesure.hauteurDuBloc).toBeGreaterThan(0);
+    expect(mesure.espaceAuDessus).toBeGreaterThan(0);
+    expect(Math.abs(mesure.espaceAuDessus - mesure.espaceEnDessous)).toBeLessThanOrEqual(1);
+  });
+
+  /**
+   * Issue #41 — l'état `error` était le SEUL à ne pas être centré, alors que `loading`,
+   * `unavailable`, `empty` et `notFound` le sont tous. L'écart ne date pas d'une décision : il
+   * date du jour où `Page` a pris `flex: 1` et où il y a enfin eu une hauteur à distribuer.
+   *
+   * C'est le menu qui l'exerce, parce que c'est le seul `error` ATTEIGNABLE par un parcours :
+   * un catalogue vide fait refuser la génération. Le commutateur e2e ne sait produire qu'un
+   * `RepositoryUnavailableError`, donc l'`error` du catalogue reste hors de portée d'ici.
+   */
+  test('le menu sans recette centre son constat dans la hauteur offerte', async ({ page }) => {
+    await page.goto('/menu?recipes=0');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.getByRole('alert')).toHaveText(
+      "Ajoute d'abord des recettes pour générer un menu.",
+    );
+
+    const mesure = await centrageVertical(page.getByRole('alert').locator('..'));
 
     expect(mesure.hauteurDuBloc).toBeGreaterThan(0);
     expect(mesure.espaceAuDessus).toBeGreaterThan(0);
