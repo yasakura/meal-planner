@@ -13,7 +13,15 @@ import { tokens } from './theme/tokens';
 
 const { colors, space } = tokens;
 
+// `--tabbar-h` publie la hauteur occupée par la tab bar à tout le sous-arbre de l'application.
+// Le scrollport, lui, se termine au bas du viewport — donc SOUS la tab bar : un écran qui veut
+// poser une commande collante en bas doit la décaler de cette hauteur, sans quoi `bottom: 0` la
+// glisserait derrière la tab bar. La valeur vit ici, en un seul endroit ; la tab bar la reprend
+// comme HAUTEUR déclarée, et le scénario « la barre d'action se pose exactement sur le haut de la
+// tab bar » confronte les deux à la géométrie réelle à chaque exécution : elle ne peut pas dériver
+// en silence.
 const Shell = styled.div`
+  --tabbar-h: calc(56px + env(safe-area-inset-bottom));
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -22,6 +30,11 @@ const Shell = styled.div`
 
 const Content = styled.main`
   flex: 1;
+  /* Colonne flex, et non un bloc : le flex:1 ci-dessus prend toute la hauteur restante du Shell,
+     mais un <main> en display:block ne la transmet pas — l'écran de la route l'épouserait, et ses
+     états centrés se colleraient sous l'en-tête. La colonne rend cette hauteur distribuable. */
+  display: flex;
+  flex-direction: column;
   /* Respiration en bas de contenu avant la tab bar (confort de lecture, pas anti-recouvrement :
      la tab bar est sticky et réserve sa propre place dans le flux). */
   padding-bottom: ${space.xl}px;

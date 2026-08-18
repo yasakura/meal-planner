@@ -5,7 +5,13 @@ import { tokens } from './theme/tokens';
 
 const { colors, space, fonts } = tokens;
 
+// La hauteur est DÉCLARÉE, et déclarée par la variable que le reste de l'application consomme
+// pour se poser au-dessus de la tab bar. Émergente (bordure + paddings + icône + interligne d'un
+// libellé à 11px), elle dépendait de la police effectivement résolue : `-apple-system` n'existe
+// ni sur Linux ni en CI, et le même empilement pouvait valoir 57px ailleurs — un pixel de
+// recouvrement invisible pour tout filet tournant sur Chromium.
 const Bar = styled.nav`
+  height: var(--tabbar-h);
   background: ${colors.white};
   border-top: 1px solid ${colors.hairline};
   padding-bottom: env(safe-area-inset-bottom);

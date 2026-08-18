@@ -23,7 +23,10 @@ export type RecipeDetailScreenProps =
     };
 
 const Page = styled.div`
-  min-height: 100dvh;
+  /* Prend la hauteur offerte par Content : c'est elle que CenteredState distribue pour centrer
+     ses constats. Sans elle, l'écran épouse son contenu et le flex:1 de l'état ne répartit plus
+     rien — le constat se colle sous l'en-tête, la moitié basse de l'écran reste vide. */
+  flex: 1;
   background: ${colors.creme};
   display: flex;
   flex-direction: column;

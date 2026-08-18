@@ -31,7 +31,6 @@ export type RecipeCreateScreenProps = {
 };
 
 const Page = styled.div`
-  min-height: 100dvh;
   background: ${colors.creme};
   display: flex;
   flex-direction: column;
@@ -154,25 +153,47 @@ const SubmitButton = styled.button`
   padding: ${space.md}px;
   font-family: ${fonts.body};
   font-size: 16px;
-  margin-top: ${space.sm}px;
 
   &:disabled {
     opacity: 0.6;
   }
 `;
 
+// Barre d'action collante : le formulaire est plus haut que l'écran, la commande d'enregistrement
+// doit rester visible sans que l'utilisateur ait à deviner qu'il faut défiler. `bottom` vaut la
+// hauteur de la tab bar publiée par Layout (`--tabbar-h`) : le scrollport va jusqu'au bas du
+// viewport, donc `bottom: 0` collerait le bouton SOUS la tab bar.
+//
+// Elle porte AUSSI les constats d'enregistrement, et c'est sa raison d'être la plus importante :
+// laissés à leur position naturelle dans le flux, ils restaient sous le pli pendant que le bouton
+// remontait avec le collant. L'utilisateur cliquait une commande atteignable, l'écriture échouait,
+// et il ne voyait rien — puis recliquait.
+//
+// Le fond n'est pas un ornement : la barre ne réserve pas sa place, le formulaire défile DERRIÈRE
+// elle. Sans fond opaque, les champs se voient au travers de sa marge. Fond de la page, aucune
+// bordure : la barre disparaît en tant qu'objet, on ne voit que le bouton qui respire.
+const ActionBar = styled.div`
+  position: sticky;
+  bottom: var(--tabbar-h);
+  display: flex;
+  flex-direction: column;
+  gap: ${space.sm}px;
+  padding: ${space.md}px 0;
+  background: ${colors.creme};
+`;
+
 const Confirmation = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
   color: ${colors.sage};
-  margin: ${space.sm}px 0 0;
+  margin: 0;
 `;
 
 const ErrorMessage = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
   color: ${colors.terracotta};
-  margin: ${space.sm}px 0 0;
+  margin: 0;
 `;
 
 function unitLabel(unit: Unit): string {
@@ -279,16 +300,17 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
           />
         </Field>
 
-        <SubmitButton type="submit" disabled={props.submitDisabled}>
-          {props.submitLabel}
-        </SubmitButton>
-
-        {props.confirmation !== null && (
-          <Confirmation role="status">{props.confirmation}</Confirmation>
-        )}
-        {props.errorMessage !== null && (
-          <ErrorMessage role="alert">{props.errorMessage}</ErrorMessage>
-        )}
+        <ActionBar>
+          {props.confirmation !== null && (
+            <Confirmation role="status">{props.confirmation}</Confirmation>
+          )}
+          {props.errorMessage !== null && (
+            <ErrorMessage role="alert">{props.errorMessage}</ErrorMessage>
+          )}
+          <SubmitButton type="submit" disabled={props.submitDisabled}>
+            {props.submitLabel}
+          </SubmitButton>
+        </ActionBar>
       </Form>
     </Page>
   );
