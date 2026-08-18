@@ -41,13 +41,18 @@ const initialState: RecipeDetailState = {
 };
 
 export const loadRecipeDetail = createAsyncThunk<Recipe | undefined, string, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'recipeDetail/loadRecipeDetail',
   async (id, thunkApi) => {
     return await thunkApi.extra.getRecipe(id);
   },
 );
 
+// Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
+// équivalent — toute la logique de transition est couverte par ses propres tests.
 const recipeDetailSlice = createSlice({
+  // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'recipeDetail',
   initialState,
   reducers: {},

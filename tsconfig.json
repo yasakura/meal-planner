@@ -21,5 +21,8 @@
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src", "vite.config.ts", "vitest.config.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  // `tsconfig.e2e.json` : sans cette référence, `npm run build` ne typecheckerait PAS les
+  // scénarios Playwright — ils vivent hors de `src` — et une erreur de types n'y apparaîtrait
+  // qu'à l'exécution du scénario.
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.e2e.json" }]
 }

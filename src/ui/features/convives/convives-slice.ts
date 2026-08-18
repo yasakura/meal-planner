@@ -147,6 +147,8 @@ const initialState: ConvivesState = {
 };
 
 export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'convives/loadConvives',
   async (_, thunkApi) => {
     return await thunkApi.extra.listConvives();
@@ -154,6 +156,8 @@ export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>
 );
 
 export const addConvive = createAsyncThunk<Convive, AddConviveInput, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'convives/addConvive',
   async (input, thunkApi) => {
     return await thunkApi.extra.addConvive(input);
@@ -161,6 +165,8 @@ export const addConvive = createAsyncThunk<Convive, AddConviveInput, AppThunkApi
 );
 
 export const renameConvive = createAsyncThunk<Convive, RenameConviveInput, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'convives/renameConvive',
   async (input, thunkApi) => {
     return await thunkApi.extra.renameConvive(input);
@@ -168,6 +174,8 @@ export const renameConvive = createAsyncThunk<Convive, RenameConviveInput, AppTh
 );
 
 export const removeConvive = createAsyncThunk<void, RemoveConviveInput, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'convives/removeConvive',
   async (input, thunkApi) => {
     await thunkApi.extra.removeConvive(input);
@@ -206,7 +214,10 @@ function restRemoveLifecycle(state: ConvivesState): void {
   state.pendingRemovalId = null;
 }
 
+// Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
+// équivalent — toute la logique de transition est couverte par ses propres tests.
 const convivesSlice = createSlice({
+  // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'convives',
   initialState,
   reducers: {

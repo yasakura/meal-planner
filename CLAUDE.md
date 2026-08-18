@@ -10,6 +10,45 @@
 
 Tout contrat entre couches passe par un port dans `domain/ports/`. Le "M" du MVC = `domain + data`. Le "V" = components dumb. Le "C" = containers Redux + thunks.
 
+## Un garde-fou qu'on n'a jamais vu échouer n'est pas un garde-fou
+
+Un garde-fou est le seul dispositif du projet dont le fonctionnement normal est **le silence**. Un test qui ne teste rien finit par se voir ; une règle de lint qui n'évalue rien produit exactement la même sortie que la conformité parfaite. Rien ne la distingue d'un succès, et la confiance qu'elle inspire n'a aucune contrepartie.
+
+**Tout garde-fou déclaré est donc confronté une fois, à son introduction** : introduire délibérément la violation qu'il annonce, **observer le rouge**, retirer. C'est le sabotage de la section TDD, appliqué à l'outillage plutôt qu'au code — et pour la même raison : ce qui compte n'est pas qu'il soit configuré, c'est qu'il ait été **vu mordre**. Un garde-fou ajouté sans ce rouge est à considérer comme absent.
+
+Le coût de l'omission est particulièrement élevé ici, parce qu'il est **rétroactif** : le jour où on branche enfin la règle, elle ne signale pas les violations commises depuis, elle les fait toutes remonter d'un coup, longtemps après que leurs auteurs ont oublié le contexte.
+
+- _Vécu 2026-08-11 : la collection `convives` n'était déclarée dans aucun bloc `match` de `firestore.rules`. 355 tests verts, écran mort. D'où le test statique compensatoire, qui embarque lui-même sa preuve de morsure._
+- _Vécu 2026-08-17 : `boundaries/element-types` était **inerte sur tout le dépôt** depuis l'origine. `eslint-import-resolver-node` ne résout par défaut que `.mjs/.js/.json/.node` — aucun `.ts` n'était résolu, donc aucun import n'était classé, donc aucune règle n'était évaluée. Le tout premier invariant de ce document était décoratif. Mesuré : `import { tokens } from '../../ui/theme/tokens'` dans `src/domain/entities/convive.ts` passait `npm run lint` sans un mot. Corrigé par `settings['import/resolver'].node.extensions`. Circonstance heureuse et non reproductible : **aucune violation dormante** ne s'était accumulée._
+
+## Flux de travail
+
+L'agent principal **orchestre**, il ne développe pas et il ne révise pas. Chaque rôle a son agent, à contexte frais.
+
+**La frontière n'est pas « qui tape au clavier », c'est ce que le geste laisse derrière lui.** Un geste qui **produit un artefact** — code, test, configuration, documentation — part en délégation, parce qu'il entrera dans le dépôt et doit donc passer par l'agent qui a la discipline de le confronter. Un geste qui **ne produit rien** reste à l'agent principal : il collecte une preuve, et cette preuve meurt avec la session.
+
+D'où les deux seules choses que l'agent principal exécute lui-même, et qui n'en font qu'une : la **vérif Chrome** (étape 4) et la **vérification des findings** (étape 5). Toutes deux répondent à la même question — « est-ce vrai ? » —, aucune n'écrit dans le dépôt. Un script de reproduction jetable vit dans le scratchpad ; il n'est pas un livrable et n'a pas à être délégué. Déléguer la vérification à un troisième agent ne ferait que déplacer le problème d'un cran : il faudrait vérifier _son_ rapport.
+
+Corollaire : quand une revue débouche sur des corrections, l'agent principal **vérifie** les findings puis **délègue** les corrections — y compris sur des fichiers de test, y compris quand elles paraissent triviales. Une correction qui « ne fait que » resserrer une assertion demande exactement la confrontation que l'agent TDD sait produire, et que l'orchestrateur n'a aucune raison d'improviser.
+
+1. **Discussion** utilisateur ↔ agent principal, jusqu'à savoir quoi faire.
+2. **`tdd-clean-coder`** développe en TDD.
+3. **Agent mutation** — un agent distinct, PAS celui qui a écrit le code : il lance Stryker et **instruit chaque survivant** (équivalent toléré, ou vrai trou de test avec le scénario non couvert). La séparation n'est pas cosmétique : l'agent TDD rapportait son propre score, et deux fois ce chiffre s'est révélé faux — une fois mesuré sur une suite amputée, une fois gonflé par des timeouts.
+4. **Vérification navigateur**, deux volets complémentaires qui ne font pas le même travail :
+   - **Chrome MCP** par l'agent principal, si la feature touche `src/ui/` — il regarde **la feature en cours**, y compris ses états non-nominaux et leurs sorties.
+   - **`npm run e2e`** (Playwright, sur le mode e2e) — il vérifie que **tout le reste** tient encore. C'est le seul filet des parcours qui ne sont pas la feature du jour : sans lui, un refactor qui casse la création de recette pendant qu'on travaille sur les convives n'est attrapé par personne.
+
+   La suite tourne sur les adapters in-memory : pas de réseau, pas de base partagée, identifiants séquentiels. L'essentiel des causes de fragilité des suites e2e est écarté par construction.
+
+5. **Agent de revue** indépendant — il remonte ses findings à l'agent principal, qui les **vérifie** avant de les présenter à l'utilisateur.
+6. **Si des findings sont retenus → retour à l'étape 1.** Sinon, on avance.
+7. **L'utilisateur vérifie à la main** (features UI) et donne son **feu vert explicite**.
+8. **Commit.**
+
+L'ordre 3 → 4 → 5 est **séquentiel**, pas parallèle : la revue doit porter sur du code déjà validé au navigateur, sinon elle instruit un code qui va changer. Une revue lancée en parallèle de Chrome a coûté plusieurs tours inutiles.
+
+La CI rejoue les scénarios Playwright dans un **job séparé**, à côté de Stryker et non dans le check bloquant. C'est un filet contre l'oubli et les différences de machine, pas le premier endroit où on découvre une régression — la découvrir après le commit, la revue et ta vérification manuelle est le moment le plus cher.
+
 ## TDD Uncle Bob (règle absolue)
 
 - Toute ligne d'implémentation naît d'un **test rouge observé**. Jamais l'inverse.
@@ -20,7 +59,20 @@ Tout contrat entre couches passe par un port dans `domain/ports/`. Le "M" du MVC
 
 **Batching autorisé, et recommandé.** Pour un ensemble cohérent de comportements : écrire **tous** les tests rouges, observer le rouge **en bloc**, puis implémenter jusqu'au vert. Un cycle unitaire par comportement n'apporte rien de plus et rejoue la suite complète à chaque pas.
 
+**Pas d'émergence pas à pas non plus.** Faire naître le code par micro-cycles est une discipline **humaine** : elle empêche d'écrire plus vite qu'on ne réfléchit. Un agent n'a pas ce problème — il écrit l'implémentation complète d'un seul tenant, puis refactore si utile.
+
+La contrainte n'est donc pas la **taille** du pas, c'est que **rien ne dépasse la spec** : aucune ligne qu'aucun test du lot n'exige. Pas de garde défensif « au cas où », pas de généralisation anticipée, pas de branche que rien n'emprunte. Ce qu'aucun test ne demande est du code mort en puissance, et la mutation le révèle — la bonne réponse est alors de **supprimer le code**, pas d'écrire un test pour le justifier. _(Vécu : un garde défensif dans `isNetworkUnavailable` où six mutants survivaient, et un retrait de diacritiques rendu inutile par la normalisation qui le précédait — les deux supprimés, 2026-08-13 et 2026-08-14.)_
+
 Quand un test ne **peut pas** naître rouge — filet posé sur un comportement déjà correct, réponse à un mutant survivant — la confrontation se fait par **sabotage** : casser volontairement la ligne que le nom du test désigne, observer le rouge, restaurer. Saboter _une_ ligne quelconque ne suffit pas : il faut saboter **celle que le nom promet de protéger**. _(Vécu : un test container nommé « ne déverrouille pas Ajouter » sabotait le container et passait, alors qu'il ne pouvait pas détecter la régression du garde qu'il annonçait — `user.type()` sur un champ `disabled` est un no-op, 2026-08-12.)_
+
+**Quand une forme permanente existe, elle est préférable au sabotage.** Un sabotage prouve **une fois**, à un instant, et ne laisse rien d'exécutable derrière lui : six mois plus tard, rien dans le dépôt ne dit que la confrontation a eu lieu, ni si elle tiendrait encore. Une assertion qui se **gage elle-même** prouve à chaque exécution.
+
+Le cas le plus fréquent est l'**assertion d'absence** — `toHaveCount(0)`, `queryBy… === null` —, qui passe tout aussi bien quand le sélecteur est faux, le libellé renommé ou l'écran vide. Elle doit être adossée à l'une de ces deux formes :
+
+- le **même localisateur** asserté présent (`toHaveCount(1)`) plus tôt dans le même test, avant que l'absence ne soit exigée ;
+- un **scénario témoin** voisin, qui montre ce localisateur trouvant son texte là où ce texte a le droit d'exister.
+
+Le sabotage reste le recours quand aucune forme permanente n'est possible, et la règle du nom continue de s'appliquer. Ce qui ne change pas : une assertion qu'aucun des deux dispositifs ne couvre n'est pas un filet, c'est une décoration. _(Vécu iter-9 : `press('Backspace')` n'effaçait rien — `focus()` replace le curseur en tête de champ —, et le scénario « une frappe efface le constat » était vert sans qu'aucune frappe n'ait rien modifié. Fermé en assertant la valeur résultante du champ, donc de façon permanente, 2026-08-17.)_
 
 ## Point de contrôle « rouge » (use-cases & logique métier)
 
@@ -42,6 +94,8 @@ Un test qui passe de vert à rouge suite à une modif de code productif n'est **
 **STOP → diagnostiquer → classifier** (régression involontaire vs rupture volontaire) **→ présenter impact → décider avec l'utilisateur → agir**.
 
 Toute modification d'un test hors périmètre requiert une justification explicite dans le message de commit.
+
+**Le protocole vaut aussi pour les scénarios Playwright.** Une branche qui touche l'UI en cassera légitimement — ajouter deux boutons par ligne casse tout scénario qui lisait le texte d'une ligne, et ce rouge est un changement voulu, pas une régression. Mais c'est précisément là que les suites e2e meurent : pas de lenteur, de complaisance. Le premier scénario « réparé » d'un coup d'éditeur sans diagnostic ouvre la voie à tous les suivants, et la suite se met à mentir en silence. Même cycle qu'ailleurs : STOP, diagnostiquer, classifier, décider, agir.
 
 **Exception pré-autorisée — rupture de FORME uniquement.** Ajouter un champ à un état casse mécaniquement tout `toEqual` exhaustif écrit sur l'ancienne forme. Ce cas est répétitif, prévisible, et son arbitrage a toujours été le même. L'agent **applique et rapporte** au lieu de s'arrêter, à trois conditions cumulatives :
 
@@ -66,7 +120,9 @@ Tout le reste continue de déclencher le STOP : sémantique modifiée, assertion
   - `ui/` containers : RTL + store Redux réel + ports mockés.
 - **Mutation testing sur le code de PRODUCTION** : `domain/`, `data/`, et la **logique UI** (`src/ui/features/**/*.ts` — slices/thunks). **Exclus du `mutate`** : les fichiers de test ET l'**infra de test** (`domain/test-doubles/**`, `domain/test-builders/**`) — sinon elle pollue le score avec des mutants équivalents. Gate **bloquant global** `break: 80` (`stryker.conf.mjs`). Les mutants équivalents de boilerplate RTK (nom du type d'action, `name` de slice, objet de config `createSlice`) sont tolérés dès lors que **toute la logique de transition est couverte** — le seuil étant global, ils ne fragilisent pas le gate.
 - **Le score global n'est PAS reproductible : le run isolé fait foi.** Avec `timeoutMS: 10000` et la concurrence par défaut, un même mutant est compté « tué par timeout » quand la machine est chargée et « survivant » quand elle respire. Sur un même commit, `convives-slice.ts` est sorti à **100 % en run complet et 85 % en run ciblé** (2026-08-12). Pour **tout fichier modifié dans un cycle**, rejouer `npx stryker run --mutate '<fichier>'` et **rapporter ce chiffre-là** ; le global ne vaut que comme signal de fumée. Conséquence : un survivant réel peut se cacher derrière un timeout, et le score global ne vaut rien comme mesure de progression.
-- **Les `.tsx` ne sont pas mutés du tout.** `mutate` ne couvre que `src/ui/features/**/*.ts` : containers et composants n'ont **aucun** filet de mutation, seule la RTL les protège. Un chiffre de mutation flatteur ne dit donc **rien** sur un container. Corollaire de design : une décision (quand vider un champ, quand verrouiller un bouton) appartient au slice, qui est muté — pas au container, qui ne l'est pas. _(Vécu FR-3 : échec d'ajout silencieux et double-soumission vivaient tous deux dans un `.tsx`, à 99 % de mutation — trouvés par la revue indépendante, 2026-08-11.)_
+- **Le run global est incrémental** (`incremental: true`) : il ne rejoue que les mutants des fichiers modifiés et des tests affectés. Mesuré le 2026-08-17 : **7 min 31 → 44 s** sur un arbre inchangé, **1 min 23** avec un gros slice invalidé. L'état vit dans `reports/`, gitignoré : le bénéfice est **local**, la CI repart de zéro à chaque fois.
+- **Le boilerplate RTK est désactivé à la source**, par des `// Stryker disable next-line` ciblés par mutateur : préfixes de types d'action, `name` de slice, objet de config `createSlice`. Ce ne sont plus des survivants à réexpliquer à chaque rapport — **tout survivant restant demande donc une explication**. Corollaire : le score monte mécaniquement (98,87 % → 99,36 % sans qu'une ligne de test change), ce qui affaiblit encore le seuil comme indicateur.
+- **Les `.tsx` ne sont pas mutés du tout.** `mutate` ne couvre que `src/ui/features/**/*.ts` : containers et composants n'ont **aucun** filet de mutation. Deux filets seulement les protègent, et ni l'un ni l'autre n'est la mutation : la **RTL**, qui remonte un composant par test avec des ports mockés, et la **suite Playwright**, qui exerce l'application assemblée — vrai routeur, vrai store, vrai CSS, vrais cycles de montage. C'est l'argument principal de cette suite : elle est le seul endroit où un `.tsx` est mis à l'épreuve autrement qu'unitairement. Un chiffre de mutation flatteur ne dit donc toujours **rien** sur un container. Corollaire de design : une décision (quand vider un champ, quand verrouiller un bouton) appartient au slice, qui est muté — pas au container, qui ne l'est pas. _(Vécu FR-3 : échec d'ajout silencieux et double-soumission vivaient tous deux dans un `.tsx`, à 99 % de mutation — trouvés par la revue indépendante, 2026-08-11.)_
 
 ## Diff d'architecture (fin de cycle)
 
@@ -142,20 +198,17 @@ La checklist DoD n'est **pas** un état figé au moment du 1er cycle : c'est un 
 
 ## Revue de code indépendante (AVANT chaque commit)
 
-Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts :
+Quand le travail semble fini et que **tous les checks passent** (lint / test / **build** / mutation), **avant de commit** — jamais de commit automatique dans la foulée des checks verts.
 
-La revue se fait en **deux moments**, pas un seul. Le premier bug de FR-3 — l'échec d'ajout silencieux — était visible dans la **forme** du container (`await dispatch()` suivi d'un reset inconditionnel), donc lisible sur la spec avant qu'une ligne d'implémentation existe. Le trouver au vert a coûté un cycle TDD complet, une re-vérif Chrome et une seconde revue.
-
-**Revue d'intention, au point de contrôle rouge** — légère, sur les tests rouges et la conception annoncée, pas sur du code. Elle cherche : décision placée au mauvais endroit, cas non spécifié, règle métier fausse.
-
-**Revue de code complète, avant commit** :
+La revue porte sur du **code écrit**, jamais sur une spec : elle intervient après le cycle TDD et après la vérif Chrome, à l'étape 5 du flux de travail. Conséquence assumée : les défauts de **forme** — comme l'échec d'ajout silencieux de FR-3, lisible dans `await dispatch()` suivi d'un reset inconditionnel — sont trouvés tard. C'est un coût accepté, pas un oubli.
 
 1. Lancer un **sous-agent de code review INDÉPENDANT** — contexte frais, **pas** l'agent (ni un fork de l'agent) qui a orchestré le code — sur le diff.
 2. Le sous-agent **rapporte ses findings, ne corrige rien**. Il traque en priorité ce que la mutation ne voit pas : **tests qui valident la mauvaise intention métier**, entorses aux frontières de couche, assertions trop faibles. **Lui demander explicitement d'instruire le cycle de vie et la rémanence d'état** — c'est par là que les trois bugs de la branche hors-ligne ont été trouvés, jamais par une lecture ligne à ligne.
-3. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
-4. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
-5. **Re-vérifier** (lint / test / mutation) après corrections.
-6. **Seulement ensuite : commit.**
+3. **L'agent principal vérifie chaque finding AVANT de le présenter** — reproduire le scénario dans le code ou dans Chrome. Les agents se trompent dans les deux sens : un finding sur des mutants survivants a été infirmé en lisant le rapport Stryker, plusieurs autres confirmés par la mesure. L'utilisateur tranche sur pièces, pas sur l'affirmation d'un agent.
+4. **Discuter chaque finding avec l'utilisateur** : pertinent vs non-pertinent.
+5. Appliquer **seulement les findings pertinents** (via `tdd-clean-coder` si code productif, protocole habituel) ; écarter les autres avec justification explicite.
+6. Si un finding a été appliqué, **le flux repart à l'étape 1** — nouveau cycle, nouvelle mutation, nouvelle vérif Chrome, re-revue sur le **delta**.
+7. **Vérification manuelle de l'utilisateur** (features UI uniquement), puis **son feu vert explicite**. Jamais de commit sans lui.
 
 Si le code rebouclé n'a changé que sur quelques points, la re-revue porte sur le **delta**, avec les findings précédents fournis en contexte et l'interdiction de les redécouvrir. Relancer une revue complète à chaque tour coûte un agent entier pour re-instruire ce qui est déjà tranché.
 
@@ -216,4 +269,6 @@ Aucune case n'est cochée "définitivement" avant que **toutes** le soient sur l
 - [ ] Diff d'architecture fourni (créé/déplacé par couche + dépendances justifiées)
 - [ ] **Revue de code indépendante** passée AVANT commit (findings pertinents traités, non-pertinents justifiés)
 - [ ] **Si feature `src/ui/`** : vérif Chrome MCP jointe au report (screenshot + console check + interactions + **états non-nominaux** vide/erreur/chargement + **sortie** de chacun d'eux)
+- [ ] `npm run e2e` OK — les parcours qui ne sont PAS la feature du jour tiennent toujours. Un scénario rouge relève du protocole anti test-tampering : classifier avant de toucher
+- [ ] **Vérification manuelle de l'utilisateur** (features `src/ui/`) et son **feu vert explicite** — jamais de commit sans lui
 - [ ] Commit conforme aux Conventional Commits

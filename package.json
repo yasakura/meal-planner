@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host --mode dev",
+    "dev:e2e": "vite --host --mode e2e --port 5174 --strictPort",
     "build": "tsc -b && vite build --mode prod",
     "preview": "vite preview --host --mode prod",
     "qr": "node scripts/qr.mjs",
@@ -14,6 +15,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "stryker run",
+    "e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
     "prepare": "husky"
@@ -31,11 +33,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",

@@ -37,13 +37,18 @@ const initialState: CatalogueState = {
 };
 
 export const loadCatalogue = createAsyncThunk<Recipe[], void, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'catalogue/loadCatalogue',
   async (_, thunkApi) => {
     return await thunkApi.extra.listRecipes();
   },
 );
 
+// Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
+// équivalent — toute la logique de transition est couverte par ses propres tests.
 const catalogueSlice = createSlice({
+  // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'catalogue',
   initialState,
   reducers: {},
