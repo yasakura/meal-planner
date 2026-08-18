@@ -29,10 +29,10 @@ function anInput(): UpdateRecipeInput {
  * formulaire à peine rouvert. Un statut par opération, aucune cohabitation possible.
  */
 describe('recipe edit slice', () => {
-  it('un store neuf est idle, sans erreur', () => {
+  it('un store neuf est idle', () => {
     const store = createTestStore();
 
-    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'idle', error: null });
+    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'idle' });
   });
 
   it('updateRecipe réussi passe le store en success et forwarde l’input au use case injecté', async () => {
@@ -48,19 +48,16 @@ describe('recipe edit slice', () => {
     await store.dispatch(updateRecipe(input));
 
     expect(captured).toEqual(input);
-    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'success', error: null });
+    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'success' });
   });
 
-  it('updateRecipe en échec passe le store en error avec le message du use case', async () => {
+  it('updateRecipe en échec passe le store en error', async () => {
     const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({ updateRecipe: failing });
 
     await store.dispatch(updateRecipe(anInput()));
 
-    expect(selectRecipeEdition(store.getState())).toEqual({
-      status: 'error',
-      error: 'Firestore indisponible',
-    });
+    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'error' });
   });
 
   it('pendant un updateRecipe en vol, le status passe à saving', () => {
@@ -69,62 +66,30 @@ describe('recipe edit slice', () => {
 
     void store.dispatch(updateRecipe(anInput()));
 
-    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'saving', error: null });
-  });
-
-  // Le reset d'erreur de la transition FULFILLED ne peut pas être isolé par le flux réel :
-  // `pending` efface déjà l'erreur avant lui. On exerce donc le reducer sur un état SALE.
-  it('updateRecipe réussi depuis un état en erreur efface l’erreur périmée', () => {
-    const errored: RecipeEditState = { status: 'error', error: 'Firestore indisponible' };
-    const savedRecipe: Recipe = RecipeBuilder.aRecipe().build();
-
-    const next = recipeEditReducer(
-      errored,
-      updateRecipe.fulfilled(savedRecipe, 'req-1', anInput()),
-    );
-
-    expect(next).toEqual({ status: 'success', error: null });
-  });
-
-  // Même reset, transition PENDING : partir d'un état en erreur et vérifier qu'il est effacé.
-  it('un nouvel updateRecipe efface l’erreur de la tentative précédente', () => {
-    const errored: RecipeEditState = { status: 'error', error: 'Firestore indisponible' };
-
-    const next = recipeEditReducer(errored, updateRecipe.pending('req-1', anInput()));
-
-    expect(next).toEqual({ status: 'saving', error: null });
+    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'saving' });
   });
 
   // Rémanence : le store est un singleton de session. Resté à 'success', le statut ferait
   // renavigüer vers le détail un formulaire d'édition à peine rouvert. C'est le REDUCER qui
   // décide de la remise à zéro — il est muté par Stryker, le container ne l'est pas.
   it('l’ouverture d’un formulaire remet à idle une modification déjà réussie', () => {
-    const succeeded: RecipeEditState = { status: 'success', error: null };
+    const succeeded: RecipeEditState = { status: 'success' };
 
-    expect(recipeEditReducer(succeeded, recipeEditFormOpened())).toEqual({
-      status: 'idle',
-      error: null,
-    });
+    expect(recipeEditReducer(succeeded, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 
-  it('l’ouverture d’un formulaire remet à idle une modification en échec et efface son erreur', () => {
-    const errored: RecipeEditState = { status: 'error', error: 'Firestore indisponible' };
+  it('l’ouverture d’un formulaire remet à idle une modification en échec', () => {
+    const errored: RecipeEditState = { status: 'error' };
 
-    expect(recipeEditReducer(errored, recipeEditFormOpened())).toEqual({
-      status: 'idle',
-      error: null,
-    });
+    expect(recipeEditReducer(errored, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 
   // Un thunk RTK n'est pas annulé par un démontage : remettre à zéro pendant une modification
   // en vol déverrouillerait le bouton d'une opération encore en cours.
   it('l’ouverture d’un formulaire ne touche pas à une modification encore en vol', () => {
-    const saving: RecipeEditState = { status: 'saving', error: null };
+    const saving: RecipeEditState = { status: 'saving' };
 
-    expect(recipeEditReducer(saving, recipeEditFormOpened())).toEqual({
-      status: 'saving',
-      error: null,
-    });
+    expect(recipeEditReducer(saving, recipeEditFormOpened())).toEqual({ status: 'saving' });
   });
 
   // La séparation des slices n'est pas décorative : une modification ne doit RIEN dire du
@@ -136,6 +101,6 @@ describe('recipe edit slice', () => {
 
     await store.dispatch(updateRecipe(anInput()));
 
-    expect(store.getState().recipe).toEqual({ status: 'idle', error: null });
+    expect(store.getState().recipe).toEqual({ status: 'idle' });
   });
 });

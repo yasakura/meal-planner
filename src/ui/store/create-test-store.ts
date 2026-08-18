@@ -17,26 +17,22 @@ import { type AppDependencies, createStore } from './store';
 // Helper de test (pas une classe constructible) : fournit des défauts stub pour
 // TOUTES les deps du store, écrasables au cas par cas via `overrides`.
 export function createTestStore(overrides?: Partial<AppDependencies>) {
-  // Comme en prod (create-app-store) : les use-cases convives partagent un seul
-  // repository, sinon « ajouter puis recharger » serait faussement vert.
+  // Comme en prod (create-app-store) et en e2e (create-e2e-store) : UN seul repository par
+  // agrégat, partagé par tous ses use-cases. Un dépôt par use-case rend « écrire puis relire »
+  // faussement vert côté convives, et faussement ROUGE côté recettes — sans indice sur la cause.
   const conviveRepository = InMemoryConviveRepository.create();
+  const recipeRepository = InMemoryRecipeRepository.create();
   const defaults: AppDependencies = {
     authGateway: StubAuthGateway.withoutSession(),
     createRecipe: createRecipeUseCase({
       idGenerator: StubIdGenerator.create(),
-      recipeRepository: InMemoryRecipeRepository.create(),
+      recipeRepository,
     }),
-    updateRecipe: updateRecipeUseCase({
-      recipeRepository: InMemoryRecipeRepository.create(),
-    }),
-    listRecipes: listRecipesUseCase({
-      recipeRepository: InMemoryRecipeRepository.create(),
-    }),
-    getRecipe: getRecipeUseCase({
-      recipeRepository: InMemoryRecipeRepository.create(),
-    }),
+    updateRecipe: updateRecipeUseCase({ recipeRepository }),
+    listRecipes: listRecipesUseCase({ recipeRepository }),
+    getRecipe: getRecipeUseCase({ recipeRepository }),
     generateMenu: generateMenuUseCase({
-      recipeRepository: InMemoryRecipeRepository.create(),
+      recipeRepository,
       randomPicker: MathRandomPicker.create(() => 0),
     }),
     listConvives: listConvivesUseCase({ conviveRepository }),

@@ -16,12 +16,10 @@ export type RecipeEditStatus = 'idle' | 'saving' | 'success' | 'error';
 
 export type RecipeEditState = {
   status: RecipeEditStatus;
-  error: string | null;
 };
 
 const initialState: RecipeEditState = {
   status: 'idle',
-  error: null,
 };
 
 export const updateRecipe = createAsyncThunk<Recipe, UpdateRecipeInput, AppThunkApiConfig>(
@@ -46,22 +44,18 @@ const recipeEditSlice = createSlice({
     recipeEditFormOpened(state) {
       if (state.status === 'saving') return;
       state.status = 'idle';
-      state.error = null;
     },
   },
   extraReducers: (builder) => {
     builder
       .addCase(updateRecipe.pending, (state) => {
         state.status = 'saving';
-        state.error = null;
       })
       .addCase(updateRecipe.fulfilled, (state) => {
         state.status = 'success';
-        state.error = null;
       })
-      .addCase(updateRecipe.rejected, (state, action) => {
+      .addCase(updateRecipe.rejected, (state) => {
         state.status = 'error';
-        state.error = action.error.message ?? null;
       });
   },
 });

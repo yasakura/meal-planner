@@ -12,11 +12,20 @@ test.describe('Menu', () => {
     await expect(jours).toHaveCount(14);
     await expect(page.locator('main section li')).toHaveCount(28);
 
-    // `Recette inconnue` est le repli affiché quand un créneau référence une recette que la
-    // page n'a pas su retrouver : un menu entièrement rempli de replis serait vert sur les
-    // seuls comptes ci-dessus. Vérifié AVANT les titres, pour que ce soit cette assertion-là
-    // qui parle si la correspondance id → titre se casse.
-    await expect(page.getByText('Recette inconnue')).toHaveCount(0);
+    // Les 28 créneaux portent TOUS un titre du vivier, et ils se répartissent exactement :
+    // le tirage du mode e2e est déterministe (toujours la tête du vivier) et le vivier de 3
+    // recettes se répète en cycle sur les 28 créneaux, d'où 10 + 9 + 9 = 28. Un créneau retombé
+    // sur le repli « Recette inconnue » ferait chuter l'un de ces comptes.
+    //
+    // C'est la forme PERMANENTE de ce que disait `getByText('Recette inconnue')).toHaveCount(0)`,
+    // qui l'a remplacée ici : ce localisateur-là n'était vu trouver son texte NULLE PART dans la
+    // suite, donc son absence passait aussi bien sur un sélecteur faux, un libellé renommé ou un
+    // écran vide. Ces trois-ci sont des assertions de PRÉSENCE : elles se gagent à chaque
+    // exécution. Vérifiées AVANT les titres du premier jour, pour que ce soit cette
+    // répartition-là qui parle si la correspondance id → titre se casse.
+    await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
+    await expect(page.getByText('Gratin dauphinois')).toHaveCount(9);
+    await expect(page.getByText('Curry de pois chiches')).toHaveCount(9);
 
     await expect(jours.first().getByRole('heading', { level: 2 })).toHaveText('Jour 1');
     await expect(jours.last().getByRole('heading', { level: 2 })).toHaveText('Jour 14');
@@ -120,10 +129,14 @@ test.describe('Menu et modification de recette', () => {
     await expect(nouveauTitre).toHaveCount(9);
     await expect(ancienTitre).toHaveCount(0);
     await expect(premierJour.nth(1)).toContainText('Aubergines farcies');
-    // Le menu n'a pas été rejoué : la quinzaine entière est toujours là, et aucun créneau n'est
-    // retombé sur le repli « Recette inconnue ».
+    // Le menu n'a pas été rejoué : la quinzaine entière est toujours là. Et les deux AUTRES
+    // recettes, que la modification n'a pas touchées, occupent toujours leurs créneaux —
+    // 9 + 10 + 9 = 28, soit tous les créneaux comptés juste au-dessus. Aucun n'est donc retombé
+    // sur le repli « Recette inconnue », dit par une assertion de PRÉSENCE qui se gage seule
+    // plutôt que par un `toHaveCount(0)` sur un localisateur jamais vu trouver son texte.
     await expect(page.locator('main section')).toHaveCount(14);
     await expect(page.locator('main section li')).toHaveCount(28);
-    await expect(page.getByText('Recette inconnue')).toHaveCount(0);
+    await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
+    await expect(page.getByText('Curry de pois chiches')).toHaveCount(9);
   });
 });
