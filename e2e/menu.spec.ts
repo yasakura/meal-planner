@@ -69,3 +69,61 @@ test.describe('Menu', () => {
     await expect(deuxSemaines).toHaveAttribute('aria-pressed', 'false');
   });
 });
+
+/**
+ * Le menu affichait un INSTANTANÉ des recettes, figé à la génération : `generateMenu` lisait le
+ * catalogue une fois et stockait le tableau, et l'écran résolvait ses titres depuis ce tableau-là.
+ * Tant qu'aucun titre ne pouvait changer, l'instantané ne pouvait pas devenir périmé ; la feature
+ * de modification l'a rendu observable — menu généré, titre modifié, ancien titre toujours au menu.
+ *
+ * Navigation CLIENTE de bout en bout. Un `page.goto('/menu')` au retour recréerait le store, donc
+ * le menu lui-même disparaîtrait : il n'y aurait plus rien de périmé à observer, et le scénario
+ * serait vert sans avoir rien vérifié.
+ *
+ * La vérif navigateur n'a pas vu le défaut parce qu'elle REGÉNÉRAIT le menu après la modification.
+ * Ce scénario ne clique jamais « Régénérer » — c'est tout son objet.
+ */
+test.describe('Menu et modification de recette', () => {
+  test('modifier le titre d’une recette rafraîchit le menu déjà généré, sans le régénérer', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+
+    // GAGE de l'absence affirmée à la fin : le MÊME localisateur, vu trouver son texte 9 fois
+    // avant modification. Le tirage du mode e2e est déterministe (toujours la tête du vivier) et
+    // le vivier de 3 recettes se répète en cycle sur les 28 créneaux de la quinzaine : le gratin
+    // occupe le 2e de chaque cycle, soit 9 créneaux sur 28. Sans ce gage, `toHaveCount(0)`
+    // passerait aussi bien sur un sélecteur faux ou sur un écran vide.
+    const ancienTitre = page.getByText('Gratin dauphinois');
+    const nouveauTitre = page.getByText('Aubergines farcies');
+    await expect(ancienTitre).toHaveCount(9);
+    await expect(nouveauTitre).toHaveCount(0);
+
+    const premierJour = page.locator('main section').first().locator('li');
+    await expect(premierJour.nth(1)).toContainText('Gratin dauphinois');
+
+    // Détour par le catalogue pour modifier le titre — par les liens, jamais par l'URL.
+    await page.click('nav a[href="/catalogue"]');
+    await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
+    await page.getByRole('link', { name: 'Modifier' }).click();
+    await page.getByLabel('Titre').fill('Aubergines farcies');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois');
+
+    // Retour au menu SANS le régénérer : « Régénérer » est là, on ne le clique pas.
+    await page.click('nav a[href="/menu"]');
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
+
+    // Les mêmes repas, aux mêmes jours, avec les bons noms : le compte est identique — 9 créneaux,
+    // toujours le 2e de chaque cycle — seul le nom a changé.
+    await expect(nouveauTitre).toHaveCount(9);
+    await expect(ancienTitre).toHaveCount(0);
+    await expect(premierJour.nth(1)).toContainText('Aubergines farcies');
+    // Le menu n'a pas été rejoué : la quinzaine entière est toujours là, et aucun créneau n'est
+    // retombé sur le repli « Recette inconnue ».
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.locator('main section li')).toHaveCount(28);
+    await expect(page.getByText('Recette inconnue')).toHaveCount(0);
+  });
+});

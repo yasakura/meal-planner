@@ -250,4 +250,44 @@ describe('RecipeDetailContainer', () => {
     expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
     expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
   });
+  /**
+   * Point d'entrée de la modification (FR — « Modifier une recette »). C'est un LIEN et non un
+   * <button> : il ne fait que changer de route, et l'application ouvre déjà la création par un
+   * lien (« Ajouter une recette »). L'affordance visuelle est celle d'un bouton ; la sémantique
+   * reste celle d'une navigation, donc adressable, ouvrable dans un onglet, empilée dans
+   * l'historique.
+   */
+  it('offre un accès « Modifier » vers le formulaire d’édition de CETTE recette', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+
+    renderAt('r-1', async () => recipe);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(
+      'href',
+      '/catalogue/r-1/modifier',
+    );
+  });
+
+  it('vise la recette RÉELLEMENT affichée, pas un identifiant figé', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-42').withTitle('Ratatouille').build();
+
+    renderAt('r-42', async () => recipe);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(
+      'href',
+      '/catalogue/r-42/modifier',
+    );
+  });
+
+  // Une recette qu'on n'a pas pu lire n'est pas modifiable : proposer « Modifier » ouvrirait un
+  // formulaire sur du vide. Le localisateur est vu trouver son lien dans les deux tests
+  // ci-dessus — c'est ce qui rend cette absence discriminante.
+  it('n’offre pas « Modifier » quand la recette est introuvable', async () => {
+    renderAt('r-inconnue', async () => undefined);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Recette introuvable');
+    expect(screen.queryByRole('link', { name: 'Modifier' })).not.toBeInTheDocument();
+  });
 });

@@ -7,6 +7,7 @@ import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
+import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
 import { InMemoryConviveRepository } from '../../domain/test-doubles/in-memory-convive-repository';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
 import { StubAuthGateway } from '../../domain/test-doubles/stub-auth-gateway';
@@ -23,6 +24,9 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
     authGateway: StubAuthGateway.withoutSession(),
     createRecipe: createRecipeUseCase({
       idGenerator: StubIdGenerator.create(),
+      recipeRepository: InMemoryRecipeRepository.create(),
+    }),
+    updateRecipe: updateRecipeUseCase({
       recipeRepository: InMemoryRecipeRepository.create(),
     }),
     listRecipes: listRecipesUseCase({

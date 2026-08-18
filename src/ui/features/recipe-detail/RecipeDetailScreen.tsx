@@ -20,6 +20,9 @@ export type RecipeDetailScreenProps =
       convivesLabel: string;
       ingredients: RecipeDetailIngredient[];
       instructions: string | null;
+      // Route du formulaire de modification de CETTE recette. L'écran est dumb : il ne sait pas
+      // fabriquer une URL, le container la lui donne.
+      editHref: string;
     };
 
 const Page = styled.div`
@@ -52,7 +55,27 @@ const Convives = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
   color: ${colors.inkSecondary};
-  margin: 0 0 ${space.xl}px;
+  margin: 0 0 ${space.md}px;
+`;
+
+// « Modifier » est un LIEN et non un <button> : il ne fait que changer de route. L'application
+// ouvre déjà la création par un lien, et la sémantique de navigation garde l'adresse partageable,
+// l'ouverture dans un onglet et l'empilement dans l'historique. L'affordance, elle, est celle
+// d'un bouton — c'est ce que l'utilisateur voit.
+//
+// Placé HAUT dans l'écran, sous le nombre de personnes : la commande est ainsi au-dessus du pli
+// sans aucune barre collante, quelle que soit la longueur de la recette en dessous.
+const EditLink = styled(Link)`
+  align-self: flex-start;
+  background: none;
+  border: 1px solid ${colors.hairline};
+  border-radius: 8px;
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 14px;
+  text-decoration: none;
+  padding: ${space.sm}px ${space.md}px;
+  margin-bottom: ${space.xl}px;
 `;
 
 const SectionTitle = styled.h2`
@@ -185,6 +208,7 @@ function Body(props: RecipeDetailScreenProps) {
         <>
           <Title>{props.title}</Title>
           <Convives>{props.convivesLabel}</Convives>
+          <EditLink to={props.editHref}>Modifier</EditLink>
 
           <SectionTitle>Ingrédients</SectionTitle>
           <List>

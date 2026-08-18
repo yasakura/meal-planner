@@ -10,6 +10,7 @@ import {
   loadRecipeDetail,
   selectRecipeDetail,
 } from '../features/recipe-detail/recipe-detail-slice';
+import { updateRecipe } from '../features/recipe/recipe-edit-slice';
 import { createRecipe } from '../features/recipe/recipe-slice';
 import { createE2eStore, type E2eHost } from './create-e2e-store';
 
@@ -120,6 +121,26 @@ describe('createE2eStore', () => {
 
     expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
       'Tarte aux poireaux',
+    ]);
+  });
+
+  it('câble la modification sur le MÊME dépôt : une recette modifiée est relue au catalogue', async () => {
+    const store = createE2eStore(hostAt(''));
+
+    await store.dispatch(
+      updateRecipe({
+        id: 'recipe-gratin-dauphinois',
+        title: 'Gratin de courgettes',
+        ingredients: [IngredientBuilder.anIngredient().build()],
+      }),
+    );
+    await store.dispatch(loadCatalogue());
+
+    // La modification REMPLACE : l'ancien titre a disparu, aucune quatrième recette n'est née.
+    expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
+      'Curry de pois chiches',
+      'Gratin de courgettes',
+      'Omelette aux herbes',
     ]);
   });
 

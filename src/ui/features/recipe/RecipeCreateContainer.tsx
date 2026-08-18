@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { createIngredient } from '../../../domain/entities/ingredient';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { RecipeCreateScreen, type IngredientRow } from './RecipeCreateScreen';
+import { RecipeCreateScreen } from './RecipeCreateScreen';
+import {
+  INCOMPLETE_ROW_MESSAGE,
+  emptyRow,
+  hasIncompleteRow,
+  toIngredients,
+  validRowsOf,
+  type IngredientRow,
+} from './ingredient-rows';
 import { createRecipe, recipeFormOpened, selectRecipeCreation } from './recipe-slice';
-
-function emptyRow(): IngredientRow {
-  return { name: '', quantity: '', unit: 'g' };
-}
-
-function isValidRow(row: IngredientRow): boolean {
-  const quantity = Number(row.quantity);
-  return row.name.trim() !== '' && Number.isFinite(quantity) && quantity > 0;
-}
 
 export function RecipeCreateContainer() {
   const [title, setTitle] = useState('');
   const [convives, setConvives] = useState(4);
   const [rows, setRows] = useState<IngredientRow[]>([emptyRow()]);
   const [instructions, setInstructions] = useState('');
+  // Le constat de saisie vit ICI, avec les lignes dont il parle et pour exactement leur durée de
+  // vie : dans un slice il survivrait au formulaire, comme le statut d'ajout de FR-3. La règle
+  // qu'il annonce, elle, vit dans `ingredient-rows.ts` — le seul des deux que la mutation voit.
+  const [rowsConstat, setRowsConstat] = useState<string | null>(null);
 
   const { status } = useAppSelector(selectRecipeCreation);
   const dispatch = useAppDispatch();
@@ -44,11 +46,13 @@ export function RecipeCreateContainer() {
     };
   }, []);
 
-  const validRows = rows.filter(isValidRow);
+  const validRows = validRowsOf(rows);
   const submitDisabled = status === 'saving' || title.trim() === '' || validRows.length === 0;
   const submitLabel = status === 'saving' ? 'Enregistrement…' : 'Enregistrer';
   const confirmation = status === 'success' ? 'Recette enregistrée.' : null;
-  const errorMessage = status === 'error' ? 'Impossible d’enregistrer la recette.' : null;
+  // Le constat de saisie prime sur celui de la panne : c'est le dernier geste de l'utilisateur.
+  const errorMessage =
+    rowsConstat ?? (status === 'error' ? 'Impossible d’enregistrer la recette.' : null);
 
   // Retour à la liste sur l'ISSUE de l'enregistrement, jamais sur l'observation du statut :
   // un effet qui regarde `status === 'success'` renavigue au remontage suivant, avant même que
@@ -57,27 +61,41 @@ export function RecipeCreateContainer() {
   // Si l'utilisateur a quitté le formulaire entre-temps, l'enregistrement aboutit quand même
   // (rien ne l'annule), mais son geste de navigation prime : on ne le ramène pas au catalogue.
   const handleSubmit = () => {
-    const ingredients = validRows.map((row) =>
-      createIngredient({ name: row.name, quantity: Number(row.quantity), unit: row.unit }),
-    );
+    // Le bouton reste ACTIF face à une ligne incomplète : c'est le clic qui refuse, et il le dit.
+    // Rien ne part vers le dépôt — même règle et même message qu'à la modification.
+    if (hasIncompleteRow(rows)) {
+      setRowsConstat(INCOMPLETE_ROW_MESSAGE);
+      return;
+    }
     void dispatch(
-      createRecipe({ title, ingredients, convivesReference: convives, instructions }),
+      createRecipe({
+        title,
+        ingredients: toIngredients(rows),
+        convivesReference: convives,
+        instructions,
+      }),
     ).then((result) => {
       if (createRecipe.fulfilled.match(result) && monte.current) navigate('/catalogue');
     });
   };
 
   const handleRowChange = (index: number, patch: Partial<IngredientRow>) => {
+    setRowsConstat(null);
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
   const handleAddRow = () => setRows((current) => [...current, emptyRow()]);
 
-  const handleRemoveRow = (index: number) =>
+  const handleRemoveRow = (index: number) => {
+    setRowsConstat(null);
     setRows((current) => current.filter((_, i) => i !== index));
+  };
 
   return (
     <RecipeCreateScreen
+      heading="Nouvelle recette"
+      backTo="/catalogue"
+      backLabel="← Recettes"
       title={title}
       convives={convives}
       rows={rows}

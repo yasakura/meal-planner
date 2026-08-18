@@ -9,16 +9,19 @@ import { type ListConvives } from '../../domain/use-cases/list-convives';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
 import { type RemoveConvive } from '../../domain/use-cases/remove-convive';
 import { type RenameConvive } from '../../domain/use-cases/rename-convive';
+import { type UpdateRecipe } from '../../domain/use-cases/update-recipe';
 import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
 import { convivesReducer } from '../features/convives/convives-slice';
 import { menuReducer } from '../features/menu/menu-slice';
 import { recipeDetailReducer } from '../features/recipe-detail/recipe-detail-slice';
+import { recipeEditReducer } from '../features/recipe/recipe-edit-slice';
 import { recipeReducer } from '../features/recipe/recipe-slice';
 
 export type AppDependencies = {
   authGateway: AuthGateway;
   createRecipe: CreateRecipe;
+  updateRecipe: UpdateRecipe;
   listRecipes: ListRecipes;
   getRecipe: GetRecipe;
   generateMenu: GenerateMenu;
@@ -31,6 +34,7 @@ export type AppDependencies = {
 const rootReducer = combineReducers({
   auth: authReducer,
   recipe: recipeReducer,
+  recipeEdit: recipeEditReducer,
   catalogue: catalogueReducer,
   recipeDetail: recipeDetailReducer,
   menu: menuReducer,

@@ -4,8 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { App } from './App';
+import { type AppDependencies } from './store/store';
 import { createTestStore } from './store/create-test-store';
 
 // App rend désormais <Routes> (routing) → montage sous <Router> requis en plus du <Provider>.
@@ -16,8 +18,8 @@ import { createTestStore } from './store/create-test-store';
 // dans un bandeau texte toujours visible, mais derrière l'icône Compte de la TopBar, dans une
 // sheet fermée par défaut. Les assertions correspondantes ont été reciblées sur ce parcours
 // (ouvrir la sheet puis vérifier). Intention préservée, pas affaiblie.
-function renderAppAt(path: string) {
-  const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
+function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
+  const store = createTestStore({ authGateway: StubAuthGateway.withoutSession(), ...overrides });
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
@@ -87,6 +89,22 @@ describe('App', () => {
 
     expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
     expect(screen.queryByText(/introuvable/i)).not.toBeInTheDocument();
+  });
+
+  it('rend le formulaire de modification sur /catalogue/:id/modifier', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+    renderAppAt('/catalogue/r-1/modifier', { getRecipe: async () => recipe });
+
+    expect(await screen.findByRole('heading', { name: 'Modifier la recette' })).toBeInTheDocument();
+  });
+
+  it('/catalogue/:id rend le détail, pas le formulaire de modification', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+    renderAppAt('/catalogue/r-1', { getRecipe: async () => recipe });
+
+    expect(await screen.findByRole('heading', { name: 'Ratatouille' })).toBeInTheDocument();
+    // Même localisateur que le test ci-dessus, où il trouve bien son titre.
+    expect(screen.queryByText('Modifier la recette')).not.toBeInTheDocument();
   });
 
   it('/catalogue/:id rend le détail (route dynamique), pas le formulaire', async () => {
