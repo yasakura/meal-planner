@@ -3,16 +3,20 @@ import { Link } from 'react-router-dom';
 
 import { UNITS, type Unit } from '../../../domain/entities/ingredient';
 import { tokens } from '../../theme/tokens';
+import { type IngredientRow } from './ingredient-rows';
 
 const { colors, radii, space, fonts } = tokens;
 
-export type IngredientRow = {
-  name: string;
-  quantity: string;
-  unit: Unit;
-};
-
 export type RecipeCreateScreenProps = {
+  // Ce qui distingue la création de la modification : l'écran est partagé, il ne décide pas
+  // lequel des deux il sert. Le bouton de soumission, lui, dit « Enregistrer » dans les deux
+  // cas — c'est le même geste.
+  heading: string;
+  // Le retour rend l'écran d'où l'on vient, que l'écran ne connaît pas : le catalogue à la
+  // création, le détail de la recette à la modification. Destination ET libellé viennent donc
+  // du container, comme le titre.
+  backTo: string;
+  backLabel: string;
   title: string;
   convives: number;
   rows: IngredientRow[];
@@ -203,8 +207,8 @@ function unitLabel(unit: Unit): string {
 export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
   return (
     <Page>
-      <BackLink to="/catalogue">← Recettes</BackLink>
-      <Title>Nouvelle recette</Title>
+      <BackLink to={props.backTo}>{props.backLabel}</BackLink>
+      <Title>{props.heading}</Title>
 
       <Form
         onSubmit={(event) => {

@@ -12,6 +12,7 @@ import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
+import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
 import { createStore } from './store';
 
 // Composition root : la couche ui/ est la seule autorisée à câbler les adapters
@@ -25,6 +26,7 @@ export function createAppStore() {
       idGenerator: IdGeneratorCuid2.create(),
       recipeRepository,
     }),
+    updateRecipe: updateRecipeUseCase({ recipeRepository }),
     listRecipes: listRecipesUseCase({ recipeRepository }),
     getRecipe: getRecipeUseCase({ recipeRepository }),
     generateMenu: generateMenuUseCase({

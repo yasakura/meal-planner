@@ -278,6 +278,108 @@ describe('RecipeCreateContainer', () => {
     ]);
   });
 
+  /**
+   * Même règle qu'à la modification, même message, un seul endroit qui décide : une ligne
+   * AMORCÉE mais incomplète n'est pas jetée en silence. Le bouton reste actif — il y a bien une
+   * ligne valide —, c'est le clic qui refuse.
+   */
+  it('refuse d’enregistrer une ligne amorcée mais incomplète, sans rien envoyer', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Tomates');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /ajouter un ingrédient/i }));
+
+    const noms = screen.getAllByLabelText(/nom/i);
+    const seconde = noms[1];
+    if (!seconde) throw new Error('seconde ligne introuvable');
+    await user.type(seconde, 'Basilic');
+
+    const submit = screen.getByRole('button', { name: /enregistrer/i });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Complète ou retire les lignes d’ingrédient incomplètes.',
+    );
+    expect(spy.state.captured).toBeUndefined();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  /** La SORTIE du constat, remède n° 1 : la ligne complétée, il s'efface et le submit repart. */
+  it('la quantité saisie efface le constat et l’enregistrement repart', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Tomates');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /ajouter un ingrédient/i }));
+    const secondNom = screen.getAllByLabelText(/nom/i)[1];
+    if (!secondNom) throw new Error('seconde ligne introuvable');
+    await user.type(secondNom, 'Basilic');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    // Le localisateur de l'absence affirmée juste après, vu ici en train de trouver son texte.
+    expect(
+      await screen.findByText('Complète ou retire les lignes d’ingrédient incomplètes.'),
+    ).toBeInTheDocument();
+
+    const secondeQuantite = screen.getAllByLabelText(/quantité/i)[1];
+    if (!secondeQuantite) throw new Error('seconde quantité introuvable');
+    await user.type(secondeQuantite, '10');
+
+    expect(
+      screen.queryByText('Complète ou retire les lignes d’ingrédient incomplètes.'),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(spy.state.captured?.ingredients).toEqual([
+      { name: 'Tomates', quantity: 500, unit: 'g' },
+      { name: 'Basilic', quantity: 10, unit: 'g' },
+    ]);
+  });
+
+  /** La SORTIE du constat, remède n° 2 : retirer la ligne l'efface aussi. */
+  it('retirer la ligne incomplète efface le constat et laisse enregistrer', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Tomates');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    await user.click(screen.getByRole('button', { name: /ajouter un ingrédient/i }));
+    const secondNom = screen.getAllByLabelText(/nom/i)[1];
+    if (!secondNom) throw new Error('seconde ligne introuvable');
+    await user.type(secondNom, 'Basilic');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    expect(
+      await screen.findByText('Complète ou retire les lignes d’ingrédient incomplètes.'),
+    ).toBeInTheDocument();
+
+    const retirer = screen.getAllByRole('button', { name: /retirer l'ingrédient/i })[1];
+    if (!retirer) throw new Error('bouton « Retirer » introuvable');
+    await user.click(retirer);
+
+    expect(
+      screen.queryByText('Complète ou retire les lignes d’ingrédient incomplètes.'),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(spy.state.captured?.ingredients).toEqual([
+      { name: 'Tomates', quantity: 500, unit: 'g' },
+    ]);
+  });
+
   // [guard] vert à l'écriture. Verrouille la borne stricte de quantité :
   // quantité = 0 => ligne non valide => bouton désactivé.
   // Tue : `quantity > 0` dans isValidRow (l.14) muté en `>= 0`.

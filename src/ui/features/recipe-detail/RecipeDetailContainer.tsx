@@ -5,6 +5,7 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { type Unit } from '../../../domain/entities/ingredient';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { loadRecipeDetail, selectRecipeDetail } from './recipe-detail-slice';
+import { toPropsWithoutRecipe } from './recipe-detail-states';
 import {
   RecipeDetailScreen,
   type RecipeDetailIngredient,
@@ -27,6 +28,7 @@ function toLoadedProps(recipe: Recipe): RecipeDetailScreenProps {
     convivesLabel: `Pour ${convives} personne${convives > 1 ? 's' : ''}`,
     ingredients,
     instructions: recipe.instructions ?? null,
+    editHref: `/catalogue/${recipe.id}/modifier`,
   };
 }
 
@@ -39,21 +41,8 @@ export function RecipeDetailContainer() {
     if (id !== undefined) dispatch(loadRecipeDetail(id));
   }, [dispatch, id]);
 
-  let props: RecipeDetailScreenProps;
-  if (status === 'success' && recipe !== null) {
-    props = toLoadedProps(recipe);
-  } else if (status === 'unavailable') {
-    props = {
-      status: 'unavailable',
-      message: 'Aucune connexion — la recette n’a pas pu être chargée.',
-    };
-  } else if (status === 'notFound') {
-    props = { status: 'notFound' };
-  } else if (status === 'error') {
-    props = { status: 'error', message: 'Impossible de charger la recette.' };
-  } else {
-    props = { status: 'loading' };
-  }
+  const props: RecipeDetailScreenProps =
+    status === 'success' && recipe !== null ? toLoadedProps(recipe) : toPropsWithoutRecipe(status);
 
   return <RecipeDetailScreen {...props} />;
 }

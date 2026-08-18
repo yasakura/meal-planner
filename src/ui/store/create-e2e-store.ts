@@ -14,6 +14,7 @@ import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
+import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
 import { type AppStore, createStore } from './store';
 
 /**
@@ -38,6 +39,7 @@ export function createE2eStore(host: E2eHost): AppStore {
       idGenerator: SequentialIdGenerator.withPrefix('e2e-recipe'),
       recipeRepository,
     }),
+    updateRecipe: updateRecipeUseCase({ recipeRepository }),
     listRecipes: listRecipesUseCase({ recipeRepository }),
     getRecipe: getRecipeUseCase({ recipeRepository }),
     generateMenu: generateMenuUseCase({
