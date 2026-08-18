@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
@@ -66,6 +66,25 @@ function renderWithStore(
     ...(overrides?.updateRecipe ? { updateRecipe: overrides.updateRecipe } : {}),
   });
   return { store, ...renderOn(store, id) };
+}
+
+/**
+ * Monte le container avec un lien de navigation CLIENTE vers un autre `/catalogue/:id/modifier`.
+ * Cliquer ce lien change le paramètre de route sans démonter l'élément — React Router conserve
+ * l'instance quand seul le paramètre change. C'est le seul montage capable d'observer un effet
+ * dont les dépendances ignorent `id`.
+ */
+function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
+  return render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={[`/catalogue/${depuis}/modifier`]}>
+        <Link to={`/catalogue/${cible}/modifier`}>Autre recette</Link>
+        <Routes>
+          <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
+        </Routes>
+      </MemoryRouter>
+    </Provider>,
+  );
 }
 
 function capturingSpy() {
@@ -457,5 +476,34 @@ describe('RecipeEditContainer', () => {
     // discriminante — la promesse s'est résolue, la suite du `then` a eu lieu.
     await vi.waitFor(() => expect(store.getState().recipeEdit.status).toBe('success'));
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Amorce fermée avant qu'elle ne morde. React Router conserve l'élément quand SEUL le
+   * paramètre de route change : passer d'un `/catalogue/:id/modifier` à un autre ne démonte
+   * pas le container. La recette était bien rechargée (`[dispatch, id]`), mais l'ouverture du
+   * formulaire n'était pas signalée au slice (`[dispatch]`) — le nouveau formulaire s'ouvrait
+   * donc sur le constat d'échec HÉRITÉ de la recette précédente.
+   */
+  it('changer d’identifiant sans démontage remet le statut d’édition à zéro', async () => {
+    const user = userEvent.setup();
+    const omelette = RecipeBuilder.aRecipe().withId('r-2').withTitle('Omelette aux herbes').build();
+    const store = createTestStore({
+      getRecipe: async (id) => (id === 'r-2' ? omelette : GRATIN),
+      updateRecipe: () => Promise.reject(new Error('Firestore indisponible')),
+    });
+    renderOnWithLinkTo(store, 'r-2');
+
+    await screen.findByLabelText(/titre/i);
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+    // Gage du localisateur de l'absence affirmée plus bas : vu ici en train de trouver son texte.
+    expect(await screen.findByText('Impossible d’enregistrer la recette.')).toBeInTheDocument();
+    expect(store.getState().recipeEdit.status).toBe('error');
+
+    await user.click(screen.getByRole('link', { name: 'Autre recette' }));
+
+    expect(await screen.findByDisplayValue('Omelette aux herbes')).toBeInTheDocument();
+    expect(store.getState().recipeEdit.status).toBe('idle');
+    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
   });
 });

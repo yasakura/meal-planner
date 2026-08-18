@@ -34,6 +34,23 @@ export type MenuState = {
    * lancée », pas « lecture en vol ». Le remettre à null rouvrirait le trou — une réponse
    * tardive arrivant après le règlement de la lecture courante ne correspondrait plus à rien
    * et serait acceptée.
+   *
+   * DÉPENDANCE IMPLICITE, à ne pas casser sans rouvrir la course fermée par la PR #42.
+   * `generateMenu.fulfilled` n'est délibérément PAS gardé par cette mémoire : deux générations
+   * qui se chevaucheraient se courraient après. Ce non-garde n'est sûr QUE parce que ce
+   * chevauchement est inatteignable depuis l'interface, et il l'est par une seule ligne —
+   * `state.menu = null` dans `generateMenu.pending`, quelques lignes plus bas. Elle produit
+   * deux effets dont dépend toute la sûreté de l'ensemble :
+   *
+   * 1. le `condition` de `refreshMenuRecipes` (`getState().menu.menu !== null`) bloque, donc
+   *    aucune relecture ne part pendant une génération, `useEffect` de remontage compris ;
+   * 2. `MenuContainer` rend `{ status: 'loading' }`, donc ni « Générer », ni « Régénérer », ni
+   *    « Réessayer » n'existent à l'écran — aucune seconde génération ne peut être lancée.
+   *
+   * Retirer ce blanchiment (évolution d'ergonomie parfaitement plausible : garder le menu
+   * affiché pendant une régénération) fait de `generateMenu.fulfilled` un écrivain concurrent
+   * non gardé, et AUCUN test ne le signalerait. Qui le retire doit, dans la même passe, garder
+   * `generateMenu.fulfilled` par cette mémoire.
    */
   latestRecipesRequestId: string | null;
 };

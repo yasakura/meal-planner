@@ -69,6 +69,11 @@ function RecipeEditForm(props: {
   const [rowsConstat, setRowsConstat] = useState<string | null>(null);
 
   const patch = (change: Partial<FormState>) => setForm((current) => ({ ...current, ...change }));
+  // Les lignes se dérivent de l'état COURANT, jamais du `form` de la clôture — comme
+  // `setRows(current => ...)` côté création : deux mises à jour émises dans un même événement
+  // verraient sinon la seconde écraser la première.
+  const patchRows = (update: (rows: IngredientRow[]) => IngredientRow[]) =>
+    setForm((current) => ({ ...current, rows: update(current.rows) }));
 
   return (
     <RecipeCreateScreen
@@ -84,12 +89,12 @@ function RecipeEditForm(props: {
       onInstructionsChange={(instructions) => patch({ instructions })}
       onRowChange={(index, rowPatch) => {
         setRowsConstat(null);
-        patch({ rows: form.rows.map((row, i) => (i === index ? { ...row, ...rowPatch } : row)) });
+        patchRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...rowPatch } : row)));
       }}
-      onAddRow={() => patch({ rows: [...form.rows, emptyRow()] })}
+      onAddRow={() => patchRows((rows) => [...rows, emptyRow()])}
       onRemoveRow={(index) => {
         setRowsConstat(null);
-        patch({ rows: form.rows.filter((_, i) => i !== index) });
+        patchRows((rows) => rows.filter((_, i) => i !== index));
       }}
       // Le bouton reste ACTIF face à une ligne incomplète : c'est le clic qui refuse, et il le
       // dit. Rien ne part vers le dépôt — une ligne écartée en silence détruirait un ingrédient.
@@ -129,9 +134,13 @@ export function RecipeEditContainer() {
   const navigate = useNavigate();
 
   // Un formulaire s'ouvre : on le SIGNALE au slice, qui décide seul s'il remet le statut à zéro.
+  // Dépend de `id`, exactement comme la lecture juste en dessous : React Router conserve
+  // l'élément quand SEUL le paramètre change, donc passer d'une recette à l'autre ne démonte
+  // rien. Sans `id`, la recette serait rechargée et le statut ne le serait pas — le nouveau
+  // formulaire s'ouvrirait sur le constat d'échec hérité de la précédente.
   useEffect(() => {
     dispatch(recipeEditFormOpened());
-  }, [dispatch]);
+  }, [dispatch, id]);
 
   useEffect(() => {
     if (id !== undefined) dispatch(loadRecipeDetail(id));
