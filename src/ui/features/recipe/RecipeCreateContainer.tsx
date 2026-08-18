@@ -8,9 +8,9 @@ import {
   emptyRow,
   hasIncompleteRow,
   toIngredients,
-  validRowsOf,
   type IngredientRow,
 } from './ingredient-rows';
+import { isSubmitDisabled } from './recipe-form-submission';
 import { createRecipe, recipeFormOpened, selectRecipeCreation } from './recipe-slice';
 
 export function RecipeCreateContainer() {
@@ -46,8 +46,9 @@ export function RecipeCreateContainer() {
     };
   }, []);
 
-  const validRows = validRowsOf(rows);
-  const submitDisabled = status === 'saving' || title.trim() === '' || validRows.length === 0;
+  // Le VERROU du bouton vit dans `recipe-form-submission.ts`, partagé avec la modification et
+  // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas.
+  const submitDisabled = isSubmitDisabled({ saving: status === 'saving', title, rows });
   const submitLabel = status === 'saving' ? 'Enregistrement…' : 'Enregistrer';
   const confirmation = status === 'success' ? 'Recette enregistrée.' : null;
   // Le constat de saisie prime sur celui de la panne : c'est le dernier geste de l'utilisateur.

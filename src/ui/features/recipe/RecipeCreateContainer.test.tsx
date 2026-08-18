@@ -134,7 +134,7 @@ describe('RecipeCreateContainer', () => {
     expect(screen.getAllByLabelText(/nom/i)).toHaveLength(1);
   });
 
-  // [guard] vert à l'écriture (activation dérivée du calcul submitDisabled de #2).
+  // [guard] vert à l'écriture (activation dérivée du verrou de #2).
   // Verrouille la direction complémentaire + le câblage onChange→state des 3 champs
   // (titre + nom + quantité) qui pilotent l'activation.
   it('active « Enregistrer » une fois titre + nom + quantité (>0) saisis', async () => {
@@ -213,7 +213,8 @@ describe('RecipeCreateContainer', () => {
 
   // [guard] vert à l'écriture (l'état saving existe déjà). Verrouille que pendant que
   // le save est en vol le bouton est désactivé ET porte le label « Enregistrement… ».
-  // Tue : `status === 'saving'` dans submitDisabled ET/OU dans submitLabel (l.26-27).
+  // Tue : le statut d'enregistrement non transmis à `isSubmitDisabled`
+  // (`recipe-form-submission.ts`) ET/OU perdu dans `submitLabel`, resté dans ce container.
   it('désactive « Enregistrer » et affiche « Enregistrement… » pendant que le save est en vol', async () => {
     const user = userEvent.setup();
     const pending: CreateRecipe = () => new Promise<Recipe>(() => {});
@@ -230,7 +231,7 @@ describe('RecipeCreateContainer', () => {
 
   // [guard] vert à l'écriture. Verrouille que le titre est requis isolément :
   // une ligne valide ne suffit pas si le titre est vide.
-  // Tue : `title.trim() === ''` dans submitDisabled (l.26).
+  // Tue : le titre non transmis à `isSubmitDisabled` (`recipe-form-submission.ts`).
   it('garde « Enregistrer » désactivé si le titre est vide malgré une ligne valide', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -243,7 +244,7 @@ describe('RecipeCreateContainer', () => {
 
   // [guard] vert à l'écriture. Verrouille qu'au moins une ligne valide est requise :
   // un titre ne suffit pas si aucune ligne n'est complète (nom sans quantité).
-  // Tue : `validRows.length === 0` dans submitDisabled (l.26).
+  // Tue : les lignes non transmises à `isSubmitDisabled` (`recipe-form-submission.ts`).
   it('garde « Enregistrer » désactivé si le titre est rempli mais aucune ligne valide', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -257,7 +258,8 @@ describe('RecipeCreateContainer', () => {
 
   // [guard] vert à l'écriture. Verrouille que la ligne résiduelle vide est filtrée au submit :
   // elle ne bloque pas l'activation ET n'est PAS mappée en ingrédient.
-  // Tue : `.filter(isValidRow)` (l.25/32) -> createIngredient({name:''}) throw ou 2 ingrédients.
+  // Tue : `validRowsOf` (`ingredient-rows.ts`) court-circuité -> createIngredient({name:''})
+  // throw, ou 2 ingrédients forwardés.
   it('filtre la ligne vide résiduelle au submit : une seule ligne valide est forwardée', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -382,7 +384,7 @@ describe('RecipeCreateContainer', () => {
 
   // [guard] vert à l'écriture. Verrouille la borne stricte de quantité :
   // quantité = 0 => ligne non valide => bouton désactivé.
-  // Tue : `quantity > 0` dans isValidRow (l.14) muté en `>= 0`.
+  // Tue : `quantity > 0` dans `isValidRow` (`ingredient-rows.ts`) muté en `>= 0`.
   it('garde « Enregistrer » désactivé si la quantité vaut 0', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -396,7 +398,7 @@ describe('RecipeCreateContainer', () => {
 
   // [guard] vert à l'écriture. Verrouille que le titre est trimé :
   // un titre composé uniquement d'espaces est traité comme vide => bouton désactivé.
-  // Tue : `.trim()` sur le titre dans submitDisabled (l.26).
+  // Tue : le `.trim()` du titre dans `isSubmitDisabled` (`recipe-form-submission.ts`).
   it('garde « Enregistrer » désactivé si le titre ne contient que des espaces', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -436,7 +438,7 @@ describe('RecipeCreateContainer', () => {
     expect(spy.state.captured?.instructions).toBe('Étape 1\n\n- sel\n- poivre');
   });
 
-  // [guard] vert à l'écriture : submitDisabled ne référence pas instructions.
+  // [guard] vert à l'écriture : `isSubmitDisabled` ne référence pas instructions.
   // Verrouille que la préparation ne gate PAS le submit et que l'input est forwardé
   // avec instructions vide (chaîne brute, non normalisée) quand rien n'est saisi.
   it('n’exige pas la préparation : submit activé et forwardé avec instructions vide', async () => {
