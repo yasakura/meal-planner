@@ -13,9 +13,9 @@ import {
   emptyRow,
   hasIncompleteRow,
   toIngredients,
-  validRowsOf,
   type IngredientRow,
 } from './ingredient-rows';
+import { isSubmitDisabled } from './recipe-form-submission';
 import { recipeEditFormOpened, selectRecipeEdition, updateRecipe } from './recipe-edit-slice';
 import { recipeForRoute } from './recipe-for-route';
 
@@ -105,9 +105,13 @@ function RecipeEditForm(props: {
           instructions: form.instructions,
         });
       }}
-      submitDisabled={
-        props.saving || form.title.trim() === '' || validRowsOf(form.rows).length === 0
-      }
+      // Le VERROU du bouton vit dans `recipe-form-submission.ts`, partagé avec la création et
+      // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas.
+      submitDisabled={isSubmitDisabled({
+        saving: props.saving,
+        title: form.title,
+        rows: form.rows,
+      })}
       submitLabel={props.saving ? 'Enregistrement…' : 'Enregistrer'}
       // La modification renvoie au détail : une confirmation n'aurait le temps de rien dire, et
       // l'écran d'arrivée montre déjà le résultat. Seul l'échec a quelque chose à annoncer.

@@ -32,15 +32,21 @@ async function ouvrirLaModificationDuGratin(page: Page) {
 /**
  * Relire une recette DEPUIS le dépôt, et non depuis ce que le store porte encore.
  *
- * L'écran de détail n'a aucun garde d'identité : au premier rendu il repeint la recette
- * précédemment consultée, quelle qu'elle soit. Sur un « rien n'a bougé », cette peinture périmée
- * porte justement l'ancienne valeur — elle satisfait l'assertion sans qu'aucune lecture n'ait eu
- * lieu, et le filet ne retient plus rien. (Mesuré : un dépôt qui écrit AVANT son garde de panne
- * passait au travers.)
+ * Au premier rendu, l'écran de détail repeint ce que le store porte : la recette précédemment
+ * consultée, sous un statut qui dit déjà « succès ». Sur un « rien n'a bougé », cette peinture
+ * périmée porte justement l'ancienne valeur — elle satisfait l'assertion sans qu'aucune lecture
+ * n'ait eu lieu, et le filet ne retient plus rien. (Mesuré : un dépôt qui écrit AVANT son garde
+ * de panne passait au travers.)
  *
  * Le détour par une autre recette rend cette peinture périmée incapable de satisfaire quoi que
  * ce soit : Playwright doit attendre la lecture réelle. Et pas de `page.goto()` — il recréerait
  * le store, donc le dépôt en mémoire, et rendrait la vérification vide de sens.
+ *
+ * Le garde d'identité de `recipe-for-route.ts` ne dispense PAS de ce détour, il le rend efficace.
+ * Ce garde filtre une péremption d'IDENTITÉ — « la recette du store n'est pas celle de la route » ;
+ * revenir du formulaire au détail de LA MÊME recette lui présente le bon identifiant sur un
+ * contenu périmé, et il laisse passer, par construction. C'est le passage par l'omelette qui fait
+ * diverger les identifiants, donc mordre le garde, donc blanchir la frame.
  *
  * Appelé depuis le FORMULAIRE, dont le retour rend maintenant le détail de la recette modifiée
  * et non plus le catalogue : deux liens pour rejoindre la liste, là où un seul suffisait. Le

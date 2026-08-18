@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type Unit } from '../../../domain/entities/ingredient';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { recipeForRoute } from '../recipe/recipe-for-route';
 import { loadRecipeDetail, selectRecipeDetail } from './recipe-detail-slice';
 import { toPropsWithoutRecipe } from './recipe-detail-states';
 import {
@@ -41,8 +42,14 @@ export function RecipeDetailContainer() {
     if (id !== undefined) dispatch(loadRecipeDetail(id));
   }, [dispatch, id]);
 
+  // La règle « quelle recette a le droit d'alimenter cet écran » vit dans un module pur et muté,
+  // pas ici : voir `recipe-for-route.ts`. Sans elle, le premier rendu repeint la recette
+  // PRÉCÉDEMMENT consultée — le store la porte encore, avec un statut qui dit déjà « succès » —
+  // sous l'URL de la nouvelle, lien « Modifier » compris.
+  const aMontrer = recipeForRoute(status, recipe, id);
+
   const props: RecipeDetailScreenProps =
-    status === 'success' && recipe !== null ? toLoadedProps(recipe) : toPropsWithoutRecipe(status);
+    aMontrer !== null ? toLoadedProps(aMontrer) : toPropsWithoutRecipe(status);
 
   return <RecipeDetailScreen {...props} />;
 }

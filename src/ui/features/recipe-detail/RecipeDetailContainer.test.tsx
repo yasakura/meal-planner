@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
@@ -8,8 +9,10 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { type GetRecipe } from '../../../domain/use-cases/get-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
+import { useAppSelector } from '../../store/hooks';
 import { createTestStore } from '../../store/create-test-store';
 import { RecipeDetailContainer } from './RecipeDetailContainer';
+import { selectRecipeDetail } from './recipe-detail-slice';
 
 const OFFLINE_NOTICE = 'Aucune connexion — la recette n’a pas pu être chargée.';
 
@@ -31,6 +34,46 @@ function renderAtWith(store: ReturnType<typeof createTestStore>, id: string) {
       </MemoryRouter>
     </Provider>,
   );
+}
+
+type Frame = { texte: string; liensModifier: (string | null)[] };
+
+/**
+ * Le DOM tel qu'il est PEINT, frame par frame. `useLayoutEffect` s'exécute une fois le DOM du
+ * commit posé et AVANT tout `useEffect` passif du même commit : la sonde voit donc l'écran tel
+ * qu'il est rendu au montage, avant que le chargement déclenché par le container n'ait remis la
+ * recette du store à `null`. C'est la seule fenêtre où la frame périmée existe — la RTL, qui
+ * n'inspecte le DOM qu'une fois les effets purgés, ne peut pas l'observer autrement.
+ *
+ * La sonde s'abonne au MÊME état que le container, pour être re-rendue dans les mêmes commits
+ * que lui et ne manquer aucune frame.
+ */
+function SondeDeFrames(props: { frames: Frame[] }) {
+  useAppSelector(selectRecipeDetail);
+  useLayoutEffect(() => {
+    props.frames.push({
+      texte: document.body.textContent ?? '',
+      liensModifier: Array.from(document.querySelectorAll('a'))
+        .filter((lien) => lien.textContent === 'Modifier')
+        .map((lien) => lien.getAttribute('href')),
+    });
+  });
+  return null;
+}
+
+function renderAvecSonde(store: ReturnType<typeof createTestStore>, id: string) {
+  const frames: Frame[] = [];
+  const vue = render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={[`/catalogue/${id}`]}>
+        <Routes>
+          <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
+        </Routes>
+        <SondeDeFrames frames={frames} />
+      </MemoryRouter>
+    </Provider>,
+  );
+  return { frames, ...vue };
 }
 
 describe('RecipeDetailContainer', () => {
@@ -289,5 +332,71 @@ describe('RecipeDetailContainer', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Recette introuvable');
     expect(screen.queryByRole('link', { name: 'Modifier' })).not.toBeInTheDocument();
+  });
+  /**
+   * Catalogue → détail `r-1` → catalogue → détail `r-2`. Au montage du second écran, et AVANT
+   * que l'effet n'ait lancé le chargement, le store porte encore `success` et la recette `r-1` :
+   * l'écran peint une frame du détail de `r-1` sous l'URL de `r-2`, lien « Modifier » compris.
+   *
+   * La règle qui l'interdit — « c'est bien CELLE de la route » — vit dans `recipe-for-route.ts`,
+   * dans un `.ts` que Stryker mute. Ce test-ci ne juge que sa CONSOMMATION par le container.
+   */
+  it('ne peint jamais, fût-ce une frame, la recette précédente sous l’URL de la suivante', async () => {
+    const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
+    const r2 = RecipeBuilder.aRecipe().withId('r-2').withTitle('Recette Deux').build();
+    const getRecipe: GetRecipe = async (id) => (id === 'r-1' ? r1 : r2);
+    const store = createTestStore({ getRecipe });
+
+    const { unmount } = renderAtWith(store, 'r-1');
+    await screen.findByText('Recette Une');
+    unmount();
+
+    const { frames } = renderAvecSonde(store, 'r-2');
+    await screen.findByText('Recette Deux');
+
+    // TÉMOIN des deux absences affirmées ensuite : la MÊME sonde, avec les MÊMES localisateurs,
+    // vue trouver un titre et un lien « Modifier » là où ils ont le droit d'être. Sans lui, une
+    // sonde aveugle rendrait les deux `toHaveLength(0)` verts sans rien garantir.
+    expect(
+      frames.filter(
+        (frame) =>
+          frame.texte.includes('Recette Deux') &&
+          frame.liensModifier.includes('/catalogue/r-2/modifier'),
+      ).length,
+    ).toBeGreaterThan(0);
+
+    expect(frames.filter((frame) => frame.texte.includes('Recette Une'))).toHaveLength(0);
+    expect(
+      frames.filter((frame) => frame.liensModifier.includes('/catalogue/r-1/modifier')),
+    ).toHaveLength(0);
+  });
+
+  /**
+   * Second volet de la branche `id === undefined` déjà caractérisée plus haut : sans identifiant
+   * aucun chargement n'est lancé, donc RIEN ne vient chasser du store la recette précédemment
+   * consultée. C'est le seul cas où la frame périmée est PERMANENTE — et le seul que la RTL
+   * observe sans sonde.
+   */
+  it('sous une route sans identifiant, ne montre pas la dernière recette consultée', async () => {
+    const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
+    const store = createTestStore({ getRecipe: async () => r1 });
+
+    const { unmount } = renderAtWith(store, 'r-1');
+    // Le localisateur de l'absence affirmée plus bas, vu ici trouver son texte.
+    expect(await screen.findByText('Recette Une')).toBeInTheDocument();
+    unmount();
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/sans-id']}>
+          <Routes>
+            <Route path="/sans-id" element={<RecipeDetailContainer />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    expect(screen.getByText('Chargement…')).toBeInTheDocument();
+    expect(screen.queryByText('Recette Une')).not.toBeInTheDocument();
   });
 });
