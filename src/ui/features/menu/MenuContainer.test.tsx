@@ -308,4 +308,53 @@ describe('MenuContainer', () => {
 
     expect(daysReceived).toEqual([7, 7]);
   });
+  /**
+   * Le menu résout ses titres depuis les recettes STOCKÉES à la génération. En arrivant sur
+   * l'écran, elles sont relues — sinon un titre modifié ailleurs reste périmé au menu jusqu'à la
+   * prochaine génération. Le remontage se fait sur le MÊME store : c'est la seule façon de
+   * rejouer une arrivée sur l'écran en cours de session (le store est un singleton en prod).
+   */
+  it('arriver sur l’écran avec un menu déjà généré relit les recettes et rafraîchit les titres', async () => {
+    const user = userEvent.setup();
+    let catalogue = twoRecipes();
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => catalogue,
+    });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    // GAGE de l'absence affirmée plus bas : le même localisateur, vu trouver l'ancien titre sur
+    // ses DEUX créneaux (r1 occupe Jour 1 Midi et Jour 2 Midi).
+    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
+
+    unmount();
+    catalogue = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+    renderOn(store);
+
+    expect(await screen.findAllByText('Tian de légumes')).toHaveLength(2);
+    expect(screen.queryAllByText('Ratatouille')).toHaveLength(0);
+    // Le menu lui-même n'a pas bougé : mêmes repas, mêmes jours.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Jour 1',
+      'Jour 2',
+    ]);
+  });
+
+  it('sans menu généré, arriver sur l’écran ne relit pas les recettes', async () => {
+    let listCalls = 0;
+    renderWithStore({
+      listRecipes: async () => {
+        listCalls += 1;
+        return twoRecipes();
+      },
+    });
+
+    // Le container est bien monté sur l'état « pas de menu » : sans ce gage, un compte à zéro
+    // serait tout aussi vrai sur un écran qui ne s'est jamais affiché.
+    expect(await screen.findByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
+    expect(listCalls).toBe(0);
+  });
 });

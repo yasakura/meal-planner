@@ -1,7 +1,15 @@
+import { useEffect } from 'react';
+
 import { type Menu } from '../../../domain/entities/menu';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { generateMenu, menuWindowSelected, NO_RECIPES, selectMenu } from './menu-slice';
+import {
+  generateMenu,
+  menuWindowSelected,
+  NO_RECIPES,
+  refreshMenuRecipes,
+  selectMenu,
+} from './menu-slice';
 import { MenuScreen, type MenuDay, type MenuScreenProps } from './MenuScreen';
 
 const CRENEAU_LABELS: Record<string, string> = {
@@ -43,6 +51,12 @@ export function MenuContainer() {
   // La fenêtre choisie vient du store, pas d'un état local : le menu affiché y vit déjà, et un
   // `useState` repartait à sa valeur par défaut à chaque remontage (issue #28).
   const selectWindow = (days: number) => dispatch(menuWindowSelected(days));
+
+  // Arriver sur l'écran relit le catalogue. Le container demande sans condition : c'est le thunk,
+  // dans le slice muté, qui décide s'il y a lieu de lire — pas ce fichier, que la mutation ignore.
+  useEffect(() => {
+    void dispatch(refreshMenuRecipes());
+  }, [dispatch]);
 
   let props: MenuScreenProps;
   if (status === 'loading') {

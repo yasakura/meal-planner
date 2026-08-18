@@ -51,6 +51,23 @@ export const generateMenu = createAsyncThunk<
   },
 );
 
+/**
+ * Relecture du catalogue pour un menu DÉJÀ affiché. Le menu résout ses titres depuis les recettes
+ * stockées à la génération : sans cette relecture, un titre modifié ailleurs y reste périmé
+ * jusqu'à la prochaine génération.
+ *
+ * Le menu lui-même n'est pas retouché — mêmes repas, mêmes jours, seuls les noms changent.
+ */
+export const refreshMenuRecipes = createAsyncThunk<Recipe[], void, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  'menu/refreshMenuRecipes',
+  async (_arg, thunkApi) => thunkApi.extra.listRecipes(),
+  {
+    // Pas de menu affiché : il n'y a rien à rafraîchir, et aucune lecture ne part.
+    condition: (_arg, { getState }) => getState().menu.menu !== null,
+  },
+);
+
 // Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
 // équivalent — toute la logique de transition est couverte par ses propres tests.
 const menuSlice = createSlice({
@@ -83,6 +100,13 @@ const menuSlice = createSlice({
         // menu/recipes sont déjà à null (transition pending) : pas de reset redondant.
         // Erreur métier (rejectWithValue) → payload discriminant ; sinon message brut.
         state.error = action.payload ?? action.error.message ?? null;
+      })
+      // Seul `fulfilled` est traité. Rien pour `pending` : l'écran ne doit pas clignoter en
+      // chargement pour une relecture que l'utilisateur n'a pas demandée. Rien pour `rejected`
+      // non plus : la relecture échouée conserve le menu affiché avec ses anciens titres, sans
+      // message d'erreur — il n'a rien demandé, on ne lui montre pas de panne.
+      .addCase(refreshMenuRecipes.fulfilled, (state, action) => {
+        state.recipes = action.payload as typeof state.recipes;
       });
   },
 });

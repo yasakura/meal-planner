@@ -12,6 +12,7 @@ import {
   generateMenu,
   menuReducer,
   menuWindowSelected,
+  refreshMenuRecipes,
   selectMenu,
   type MenuState,
 } from './menu-slice';
@@ -261,6 +262,96 @@ describe('menu slice', () => {
       recipes,
       error: null,
       selectedDays: 7,
+    });
+  });
+  /**
+   * Le menu affichait un INSTANTANÉ des recettes, figé à la génération. En arrivant sur l'écran,
+   * les recettes sont RELUES et les titres rafraîchis — sans toucher au menu lui-même : les mêmes
+   * repas, aux mêmes jours, avec les bons noms.
+   */
+  it('rafraîchir les recettes met à jour les recettes sans toucher au menu ni à la fenêtre choisie', async () => {
+    const menu = aMenu();
+    let catalogue = twoRecipes();
+    const store = createTestStore({
+      generateMenu: async () => menu,
+      listRecipes: async () => catalogue,
+    });
+
+    // Fenêtre NON-défaut : sans ce gage, l'assertion sur selectedDays passerait aussi bien si le
+    // rafraîchissement remettait la fenêtre à sa valeur par défaut.
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    // Le catalogue a changé sous les pieds du menu : c'est exactement le titre modifié ailleurs.
+    catalogue = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+
+    await store.dispatch(refreshMenuRecipes());
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'success',
+      // Le MÊME menu, intact : le rafraîchissement ne rejoue pas la génération.
+      menu,
+      recipes: catalogue,
+      error: null,
+      selectedDays: 7,
+    });
+  });
+
+  /**
+   * Décision produit : si la relecture ÉCHOUE (hors réseau en arrivant sur l'écran), le menu
+   * affiché est CONSERVÉ avec ses anciens titres, sans message d'erreur. Un rafraîchissement que
+   * l'utilisateur n'a pas demandé ne détruit pas un écran qui fonctionne, et ne lui affiche pas
+   * une panne pour une action qu'il n'a pas faite.
+   */
+  it('un rafraîchissement en échec laisse le menu, les recettes et le statut inchangés', async () => {
+    const menu = aMenu();
+    const recipes = twoRecipes();
+    let failPhase = false;
+    const store = createTestStore({
+      generateMenu: async () => menu,
+      listRecipes: async () => {
+        if (failPhase) throw new Error('Boom firestore');
+        return recipes;
+      },
+    });
+
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    failPhase = true;
+    await store.dispatch(refreshMenuRecipes());
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'success',
+      menu,
+      recipes,
+      // Pas de message d'erreur : l'utilisateur n'a rien demandé.
+      error: null,
+      selectedDays: 7,
+    });
+  });
+
+  it('sans menu à rafraîchir, aucune lecture du catalogue n’est déclenchée', async () => {
+    let listCalls = 0;
+    const store = createTestStore({
+      listRecipes: async () => {
+        listCalls += 1;
+        return twoRecipes();
+      },
+    });
+
+    await store.dispatch(refreshMenuRecipes());
+
+    expect(listCalls).toBe(0);
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'idle',
+      menu: null,
+      recipes: null,
+      error: null,
+      selectedDays: 14,
     });
   });
 });
