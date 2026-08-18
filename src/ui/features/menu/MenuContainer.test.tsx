@@ -31,16 +31,23 @@ function twoRecipes(): Recipe[] {
   ];
 }
 
-function renderWithStore(overrides: { generateMenu?: GenerateMenu; listRecipes?: ListRecipes }) {
-  const store = createTestStore(overrides);
-  const view = render(
+type TestStore = ReturnType<typeof createTestStore>;
+
+// Monte le container SUR un store donné — la seule façon de rejouer un remontage de session
+// (le store est un singleton en prod, `unmount()` ne le réinitialise pas).
+function renderOn(store: TestStore) {
+  return render(
     <Provider store={store}>
       <MemoryRouter>
         <MenuContainer />
       </MemoryRouter>
     </Provider>,
   );
-  return { store, ...view };
+}
+
+function renderWithStore(overrides: { generateMenu?: GenerateMenu; listRecipes?: ListRecipes }) {
+  const store = createTestStore(overrides);
+  return { store, ...renderOn(store) };
 }
 
 describe('MenuContainer', () => {
@@ -224,5 +231,81 @@ describe('MenuContainer', () => {
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
 
     expect(await screen.findByRole('button', { name: /régénérer/i })).toBeInTheDocument();
+  });
+
+  /**
+   * Issue #28. La fenêtre choisie est une PRÉFÉRENCE : elle vit dans le store, comme le menu
+   * généré, et survit donc au démontage du container. Quand elle vivait dans un `useState`,
+   * un simple aller-retour la ramenait à « 2 semaines » au-dessus d'un menu de 7 jours.
+   */
+  it('la fenêtre choisie survit à un remontage sur le MÊME store', async () => {
+    const user = userEvent.setup();
+    const { store, unmount } = renderWithStore({});
+
+    await user.click(screen.getByRole('button', { name: /1 semaine/i }));
+    unmount();
+    renderOn(store);
+
+    expect(screen.getByRole('button', { name: /1 semaine/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /2 semaines/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('après un remontage, « Régénérer » régénère sur la fenêtre choisie, pas sur 14', async () => {
+    const user = userEvent.setup();
+    const daysReceived: number[] = [];
+    const generate: GenerateMenu = async ({ days }) => {
+      daysReceived.push(days);
+      return aMenu();
+    };
+    const { store, unmount } = renderWithStore({
+      generateMenu: generate,
+      listRecipes: async () => twoRecipes(),
+    });
+
+    await user.click(screen.getByRole('button', { name: /1 semaine/i }));
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByText('Jour 1');
+
+    unmount();
+    renderOn(store);
+
+    await user.click(await screen.findByRole('button', { name: /régénérer/i }));
+    await screen.findByText('Jour 1');
+
+    expect(daysReceived).toEqual([7, 7]);
+  });
+
+  it('après un remontage, « Réessayer » régénère sur la fenêtre choisie, pas sur 14', async () => {
+    const user = userEvent.setup();
+    const daysReceived: number[] = [];
+    let count = 0;
+    const failThenSucceed: GenerateMenu = async ({ days }) => {
+      daysReceived.push(days);
+      count += 1;
+      if (count === 1) throw new Error('Boom');
+      return aMenu();
+    };
+    const { store, unmount } = renderWithStore({
+      generateMenu: failThenSucceed,
+      listRecipes: async () => twoRecipes(),
+    });
+
+    await user.click(screen.getByRole('button', { name: /1 semaine/i }));
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByRole('alert');
+
+    unmount();
+    renderOn(store);
+
+    await user.click(await screen.findByRole('button', { name: /réessayer/i }));
+    await screen.findByText('Jour 1');
+
+    expect(daysReceived).toEqual([7, 7]);
   });
 });

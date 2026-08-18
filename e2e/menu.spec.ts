@@ -33,4 +33,39 @@ test.describe('Menu', () => {
 
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
   });
+
+  /**
+   * Issue #28. La fenêtre choisie vivait dans un `useState` du container, alors que le menu
+   * généré vit dans le store : un aller-retour vers le catalogue remontait le container, donc
+   * remettait le sélecteur à « 2 semaines » AU-DESSUS des 7 jours toujours affichés. L'écran
+   * montrait une fenêtre et en décrivait une autre, sans aucune action de l'utilisateur.
+   *
+   * Navigation CLIENTE de bout en bout : un `page.goto()` entre les deux visites recréerait le
+   * store, donc le menu, et le défaut deviendrait invisible.
+   */
+  test('la fenêtre choisie survit à un aller-retour vers le catalogue', async ({ page }) => {
+    await page.goto('/menu');
+
+    // Gage du localisateur et de l'attribut : avant tout clic, c'est « 2 semaines » qui porte
+    // `aria-pressed=true` et « 1 semaine » qui porte `false`. L'assertion finale, qui exige
+    // l'inverse, ne peut donc pas être vraie pour de mauvaises raisons.
+    const uneSemaine = page.getByRole('button', { name: '1 semaine' });
+    const deuxSemaines = page.getByRole('button', { name: '2 semaines' });
+    await expect(uneSemaine).toHaveAttribute('aria-pressed', 'false');
+    await expect(deuxSemaines).toHaveAttribute('aria-pressed', 'true');
+
+    await uneSemaine.click();
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.locator('main section')).toHaveCount(7);
+
+    await page.click('nav a[href="/catalogue"]');
+    await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
+    await page.click('nav a[href="/menu"]');
+    await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
+
+    // Le sélecteur décrit la fenêtre effectivement affichée : 7 jours, « 1 semaine ».
+    await expect(page.locator('main section')).toHaveCount(7);
+    await expect(uneSemaine).toHaveAttribute('aria-pressed', 'true');
+    await expect(deuxSemaines).toHaveAttribute('aria-pressed', 'false');
+  });
 });
