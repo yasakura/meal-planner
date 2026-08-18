@@ -119,6 +119,48 @@ describe('MenuContainer', () => {
     expect(screen.getByRole('button', { name: /2 semaines/i })).toBeInTheDocument();
   });
 
+  /**
+   * Le sélecteur de la branche `success` a son PROPRE câblage de `onSelect`. Aucun scénario ne
+   * l'exerçait : un test regarde la PRÉSENCE des deux segments sur cet état, un autre CLIQUE un
+   * segment mais depuis `idle`, un troisième n'exerce que `onRegenerate`. `onSelect: () => {}`
+   * sur cette branche-là laissait donc toute la suite verte, pour un écran qui ne bouge pas au
+   * clic et une régénération qui repart sur 14 — et `MenuContainer.tsx` n'est pas muté.
+   */
+  it('depuis le menu affiché, cliquer « 1 semaine » bascule le segment et régénère sur 7 jours', async () => {
+    const user = userEvent.setup();
+    const daysReceived: number[] = [];
+    const generate: GenerateMenu = async ({ days }) => {
+      daysReceived.push(days);
+      return aMenu();
+    };
+    renderWithStore({ generateMenu: generate, listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByRole('button', { name: /régénérer/i });
+    // GAGE : on part bien de « 2 semaines » actif, sinon la bascule affirmée ensuite serait
+    // vraie sans qu'aucun clic n'ait rien changé.
+    expect(screen.getByRole('button', { name: /2 semaines/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: /1 semaine/i }));
+
+    expect(screen.getByRole('button', { name: /1 semaine/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /2 semaines/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+
+    await user.click(screen.getByRole('button', { name: /régénérer/i }));
+    await screen.findByText('Jour 1');
+
+    expect(daysReceived).toEqual([14, 7]);
+  });
+
   it('affiche l’indicateur de chargement pendant la génération', async () => {
     const user = userEvent.setup();
     const pending: GenerateMenu = () => new Promise<Menu>(() => {});
