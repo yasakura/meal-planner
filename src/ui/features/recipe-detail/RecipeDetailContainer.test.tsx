@@ -21,6 +21,21 @@ function renderAt(id: string, getRecipe: GetRecipe) {
   return { store, ...renderAtWith(store, id) };
 }
 
+// Monte le container sur un CHEMIN complet, requête comprise : la provenance d'où l'on vient
+// vit dans l'URL, et c'est le seul moyen de la lui donner.
+function renderAtPath(path: string, getRecipe: GetRecipe) {
+  const store = createTestStore({ getRecipe });
+  return render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
+        </Routes>
+      </MemoryRouter>
+    </Provider>,
+  );
+}
+
 // Monte le container sur un store DONNÉ. Indispensable pour rejouer un aller-retour sur la
 // route : en prod le store est un singleton de session (main.tsx), seul le container est
 // démonté. Un test qui recréerait le store ne reproduirait aucune rémanence.
@@ -398,5 +413,61 @@ describe('RecipeDetailContainer', () => {
 
     expect(screen.getByText('Chargement…')).toBeInTheDocument();
     expect(screen.queryByText('Recette Une')).not.toBeInTheDocument();
+  });
+
+  /**
+   * TRANCHE 3 — la fiche sait d'où l'on vient, et son retour y ramène. La provenance vit dans
+   * l'URL (`?depuis=menu`), pas dans un état de navigation : elle survit donc au rechargement,
+   * au partage et à la mise en favori. La DÉCISION « quel retour afficher » vit dans un module
+   * pur et muté (`recipe-detail-origin.ts`) ; ce scénario vérifie que le container la lit et la
+   * descend jusqu'à l'écran, ce qu'aucun mutant ne surveille.
+   */
+  it('arrivé depuis le menu, le lien retour ramène au menu', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+
+    renderAtPath('/catalogue/r-1?depuis=menu', async () => recipe);
+    await screen.findByText('Ratatouille');
+
+    // `name` exact : « ← Recettes » ne doit pas pouvoir répondre à la place de « ← Menu ».
+    const retour = screen.getByRole('link', { name: '← Menu' });
+    expect(retour).toHaveAttribute('href', '/menu');
+    expect(screen.queryByRole('link', { name: '← Recettes' })).not.toBeInTheDocument();
+  });
+
+  /**
+   * L'URL NUE — celle d'un rechargement direct, d'un favori ou d'un lien partagé — ne porte
+   * aucune provenance. Le retour ne doit alors ni disparaître, ni affirmer un menu que
+   * l'utilisateur n'a pas vu : il retombe sur le catalogue.
+   *
+   * TÉMOIN de l'absence affirmée ici : le scénario juste au-dessus, où « ← Menu » trouve bien
+   * son lien sur la même fiche, à la seule différence de la provenance dans l'URL.
+   */
+  it('sans provenance dans l’URL, le lien retour ramène aux recettes et jamais au menu', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+
+    renderAtPath('/catalogue/r-1', async () => recipe);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByRole('link', { name: '← Recettes' })).toHaveAttribute('href', '/catalogue');
+    expect(screen.queryByRole('link', { name: '← Menu' })).not.toBeInTheDocument();
+  });
+
+  /**
+   * La provenance ne s'arrête pas à la fiche : le formulaire de modification est une ÉTAPE du
+   * parcours, et « Modifier » doit l'y emporter. Sans elle, le retour du formulaire et la fiche
+   * rendue après un enregistrement retombent sur le catalogue au milieu d'un parcours venu du
+   * menu. TÉMOIN de la provenance ABSENTE : les deux scénarios « Modifier » plus haut, montés
+   * sur une URL nue, où le lien pointe la même route sans rien y ajouter.
+   */
+  it('arrivé depuis le menu, le lien « Modifier » emporte la provenance', async () => {
+    const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
+
+    renderAtPath('/catalogue/r-1?depuis=menu', async () => recipe);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(
+      'href',
+      '/catalogue/r-1/modifier?depuis=menu',
+    );
   });
 });

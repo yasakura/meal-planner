@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { failReads, restore } from './support/e2e-controls';
 
@@ -299,5 +299,171 @@ test.describe('Mise en page du menu', () => {
     expect(mesure.hauteurDuBloc).toBeGreaterThan(0);
     expect(mesure.espaceAuDessus).toBeGreaterThan(0);
     expect(Math.abs(mesure.espaceAuDessus - mesure.espaceEnDessous)).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * TRANCHE 3 — le menu MÈNE aux fiches. La provenance vit dans l'URL (`?depuis=menu`) : c'est
+ * elle, et rien d'autre, qui fait dire « ← Menu » au retour de la fiche.
+ *
+ * Piège de nommage Playwright : `name` cherche une SOUS-CHAÎNE. « Menu » trouverait aussi
+ * l'onglet du bas (`nav a[href="/menu"]`), et « ← Recette » trouve « ← Recettes » — d'où
+ * `exact: true` partout où la distinction porte le scénario.
+ */
+test.describe('Du menu à la fiche recette', () => {
+  const retourMenu = (page: Page) => page.getByRole('link', { name: '← Menu', exact: true });
+  const retourRecettes = (page: Page) => page.getByRole('link', { name: '← Recettes' });
+
+  test('ouvrir une recette du menu, puis revenir au menu tel qu’il était', async ({ page }) => {
+    await page.goto('/menu');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.locator('main section')).toHaveCount(14);
+
+    // Le premier créneau du premier jour : le tirage du mode e2e est déterministe, c'est
+    // « Omelette aux herbes ». Scopé au créneau, sinon le titre est trouvé 10 fois.
+    const premierJour = page.locator('main section').first().locator('li');
+    await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
+
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Omelette aux herbes' }),
+    ).toBeVisible();
+
+    // La fiche nomme sa provenance. L'absence de « ← Recettes » a son TÉMOIN à la fin de ce
+    // même scénario, où la MÊME fiche, ouverte depuis le catalogue, le porte bel et bien.
+    await expect(retourMenu(page)).toHaveCount(1);
+    await expect(retourRecettes(page)).toHaveCount(0);
+
+    await retourMenu(page).click();
+    await expect(page).toHaveURL('/menu');
+
+    // Le menu est retrouvé TEL QUEL : ni régénéré, ni perdu. Navigation cliente de bout en
+    // bout — un `goto` recréerait le store, donc le menu, et il n'y aurait rien à retrouver.
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.locator('main section li')).toHaveCount(28);
+
+    // La MÊME fiche, atteinte depuis le catalogue : la provenance change, le retour aussi.
+    await page.click('nav a[href="/catalogue"]');
+    await page.getByRole('link', { name: 'Omelette aux herbes' }).click();
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes');
+    await expect(retourRecettes(page)).toHaveCount(1);
+    await expect(retourMenu(page)).toHaveCount(0);
+  });
+
+  /**
+   * LE cas du rechargement. Un état de navigation (`Link state`) serait perdu ici, et le retour
+   * retomberait sur le catalogue au milieu d'un parcours qui vient du menu. Dans l'URL, la
+   * provenance traverse le rechargement — et le retour MÈNE bien au menu, sur un store neuf qui
+   * n'a plus de menu généré : l'écran le propose à nouveau au lieu d'être une impasse.
+   */
+  test('la provenance survit à un rechargement de la fiche', async ({ page }) => {
+    await page.goto('/menu');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    const premierJour = page.locator('main section').first().locator('li');
+    await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
+    await expect(retourMenu(page)).toHaveCount(1);
+
+    await page.reload();
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Omelette aux herbes' }),
+    ).toBeVisible();
+    await expect(retourMenu(page)).toHaveCount(1);
+    await expect(retourRecettes(page)).toHaveCount(0);
+
+    await retourMenu(page).click();
+    await expect(page).toHaveURL('/menu');
+    await expect(page.getByRole('button', { name: 'Générer un menu' })).toBeVisible();
+  });
+
+  /**
+   * La provenance traverse le FORMULAIRE. Elle se perdait dès l'aller — le lien « Modifier » ne
+   * la portait pas — donc la fiche rendue après un enregistrement disait « ← Recettes » et
+   * renvoyait au catalogue quelqu'un qui venait du menu.
+   *
+   * Navigation CLIENTE de bout en bout : un `goto` recréerait le store, donc le menu, et le
+   * retour n'aurait plus rien à retrouver.
+   */
+  test('modifier une recette ouverte depuis le menu, puis revenir au menu', async ({ page }) => {
+    await page.goto('/menu');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.locator('main section')).toHaveCount(14);
+
+    const premierJour = page.locator('main section').first().locator('li');
+    await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+
+    await page.getByRole('link', { name: 'Modifier' }).click();
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu');
+    // Les DEUX sorties du formulaire gardent le fil. Celle-ci n'est pas cliquée — le scénario
+    // suit l'autre — mais son adresse se lit ici. `exact` : « ← Recettes » répondrait sinon.
+    await expect(page.getByRole('link', { name: '← Recette', exact: true })).toHaveAttribute(
+      'href',
+      '/catalogue/recipe-omelette-herbes?depuis=menu',
+    );
+
+    await page.getByLabel('Titre').fill('Omelette aux fines herbes');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    // La fiche d'arrivée montre la modification ET sait encore d'où l'on vient. L'absence de
+    // « ← Recettes » a son TÉMOIN dans le scénario voisin, où la même fiche, ouverte depuis le
+    // catalogue, le porte bel et bien.
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Omelette aux fines herbes' }),
+    ).toBeVisible();
+    await expect(retourMenu(page)).toHaveCount(1);
+    await expect(retourRecettes(page)).toHaveCount(0);
+
+    await retourMenu(page).click();
+    await expect(page).toHaveURL('/menu');
+
+    // Le menu est retrouvé TEL QUEL, et il porte le nouveau titre : la boucle est bouclée.
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.getByText('Omelette aux fines herbes')).toHaveCount(10);
+  });
+
+  /**
+   * Le formulaire SANS recette — ici parce que la lecture tombe en panne — est le seul écran du
+   * parcours qui n'offre rien d'autre que sa sortie. Elle disait « ← Recettes » et ramenait au
+   * catalogue, alors que l'URL portait encore `?depuis=menu` : le fil coupé là où l'utilisateur
+   * n'a même pas de formulaire pour se rattraper.
+   *
+   * La panne est un état du STORE : armée une fois sur la fiche, et tout le parcours se fait par
+   * les liens — un `page.goto()` recréerait le store, donc le commutateur, et la lecture
+   * réussirait. Les deux libellés se cherchent en `exact` : « ← Recettes » répondrait à
+   * « ← Recette », et « Menu » à l'onglet du bas.
+   */
+  test('la lecture en panne sur le formulaire venu du menu ramène au menu', async ({ page }) => {
+    await page.goto('/menu');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.locator('main section')).toHaveCount(14);
+
+    const premierJour = page.locator('main section').first().locator('li');
+    await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+
+    await failReads(page);
+    await page.getByRole('link', { name: 'Modifier' }).click();
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu');
+    await expect(
+      page.getByText('Aucune connexion — la recette n’a pas pu être chargée.'),
+    ).toHaveCount(1);
+
+    // L'URL dit d'où l'on vient, l'écran aussi. L'absence de « ← Recettes » a son TÉMOIN dans
+    // les scénarios voisins, où la même fiche ouverte depuis le catalogue le porte bel et bien.
+    await expect(retourMenu(page)).toHaveCount(1);
+    await expect(retourRecettes(page)).toHaveCount(0);
+
+    await retourMenu(page).click();
+    await expect(page).toHaveURL('/menu');
+
+    // La sortie ramène sur quelque chose : le menu généré est toujours là, panne comprise —
+    // une relecture échouée ne le vide pas.
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
   });
 });

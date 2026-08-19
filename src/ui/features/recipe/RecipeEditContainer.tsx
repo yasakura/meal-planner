@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { type Ingredient } from '../../../domain/entities/ingredient';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { loadRecipeDetail, selectRecipeDetail } from '../recipe-detail/recipe-detail-slice';
+import { originOf, type BackLink } from '../recipe-detail/recipe-detail-origin';
 import { toPropsWithoutRecipe } from '../recipe-detail/recipe-detail-states';
 import { RecipeDetailScreen } from '../recipe-detail/RecipeDetailScreen';
 import { RecipeCreateScreen } from './RecipeCreateScreen';
@@ -58,6 +59,7 @@ function formOf(recipe: Recipe): FormState {
  */
 function RecipeEditForm(props: {
   recipe: Recipe;
+  back: BackLink;
   saving: boolean;
   errorMessage: string | null;
   onSave: (values: RecipeEditValues) => void;
@@ -78,8 +80,8 @@ function RecipeEditForm(props: {
   return (
     <RecipeCreateScreen
       heading="Modifier la recette"
-      backTo={`/catalogue/${props.recipe.id}`}
-      backLabel="← Recette"
+      backTo={props.back.href}
+      backLabel={props.back.label}
       title={form.title}
       convives={form.convives}
       rows={form.rows}
@@ -128,10 +130,16 @@ function RecipeEditForm(props: {
 
 export function RecipeEditContainer() {
   const { id } = useParams();
+  // La provenance a traversé le lien « Modifier » et vit dans l'URL de CE formulaire. Lue une
+  // fois, elle produit les deux sorties : le retour du formulaire et la fiche rendue par un
+  // enregistrement réussi. Aucune des deux ne peut l'oublier — la provenance est le seul objet
+  // qui sache fabriquer ces adresses.
+  const [searchParams] = useSearchParams();
   const { status: loadStatus, recipe } = useAppSelector(selectRecipeDetail);
   const { status: saveStatus } = useAppSelector(selectRecipeEdition);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const origin = originOf(searchParams);
 
   // Un formulaire s'ouvre : on le SIGNALE au slice, qui décide seul s'il remet le statut à zéro.
   // Dépend de `id`, exactement comme la lecture juste en dessous : React Router conserve
@@ -166,8 +174,13 @@ export function RecipeEditContainer() {
 
   // Tant qu'aucune recette n'a alimenté le formulaire, l'écran est celui du détail : mêmes
   // constats, mot pour mot, et surtout même refus d'affirmer « introuvable » sur une lecture
-  // qui n'a pas abouti.
-  if (loaded === null) return <RecipeDetailScreen {...toPropsWithoutRecipe(loadStatus)} />;
+  // qui n'a pas abouti. Son retour est celui de la PROVENANCE, comme partout ailleurs — c'est
+  // l'unique sortie d'un écran qui n'offre rien d'autre, et l'URL sait d'où l'on vient même
+  // quand la recette manque. Aucune recette n'est requise pour la produire : `backLink` ne
+  // désigne jamais une fiche, seulement le menu ou le catalogue, qui existent tous deux sans
+  // elle — c'est `backToRecipe`, plus bas, qui réclame un identifiant.
+  if (loaded === null)
+    return <RecipeDetailScreen {...toPropsWithoutRecipe(loadStatus)} back={origin.backLink} />;
 
   // Retour au DÉTAIL de la recette modifiée — pas au catalogue, contrairement à la création —
   // et sur l'ISSUE de l'enregistrement, jamais sur l'observation du statut : un effet qui
@@ -178,7 +191,7 @@ export function RecipeEditContainer() {
   const handleSave = (values: RecipeEditValues) => {
     void dispatch(updateRecipe({ id: loaded.id, ...values })).then((result) => {
       if (updateRecipe.fulfilled.match(result) && monte.current)
-        navigate(`/catalogue/${loaded.id}`);
+        navigate(origin.recipeHref(loaded.id));
     });
   };
 
@@ -186,6 +199,7 @@ export function RecipeEditContainer() {
     <RecipeEditForm
       key={loaded.id}
       recipe={loaded}
+      back={origin.backToRecipe(loaded.id)}
       saving={saveStatus === 'saving'}
       errorMessage={saveStatus === 'error' ? 'Impossible d’enregistrer la recette.' : null}
       onSave={handleSave}

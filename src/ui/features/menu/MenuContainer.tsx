@@ -1,7 +1,5 @@
 import { useEffect } from 'react';
 
-import { type Menu } from '../../../domain/entities/menu';
-import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   generateMenu,
@@ -12,39 +10,8 @@ import {
   selectMenu,
   selectStartDateIso,
 } from './menu-slice';
-import { menuDayLabel } from './menu-day-label';
-import { MenuScreen, type MenuDay, type MenuScreenProps } from './MenuScreen';
-
-const CRENEAU_LABELS: Record<string, string> = {
-  midi: 'Midi',
-  soir: 'Soir',
-};
-
-function toDays(menu: Menu, recipes: Recipe[]): MenuDay[] {
-  const titleById = new Map(recipes.map((recipe) => [recipe.id, recipe.title]));
-  const byJour = new Map<number, MenuDay>();
-
-  for (const repas of menu.repas) {
-    let day = byJour.get(repas.jour);
-    if (day === undefined) {
-      day = {
-        key: String(repas.jour),
-        label: menuDayLabel(menu.dateDebut, repas.jour),
-        slots: [],
-      };
-      byJour.set(repas.jour, day);
-    }
-    for (const slot of repas.slots) {
-      day.slots.push({
-        key: `${repas.jour}-${repas.creneau}`,
-        creneauLabel: CRENEAU_LABELS[repas.creneau] ?? repas.creneau,
-        title: titleById.get(slot.recipeId) ?? 'Recette inconnue',
-      });
-    }
-  }
-
-  return [...byJour.values()];
-}
+import { menuDays } from './menu-days';
+import { MenuScreen, type MenuScreenProps } from './MenuScreen';
 
 function errorMessage(error: string | null): string {
   return error === NO_RECIPES
@@ -82,7 +49,7 @@ export function MenuContainer() {
   } else if (status === 'success' && menu !== null && recipes !== null) {
     props = {
       status: 'success',
-      days: toDays(menu, recipes),
+      days: menuDays(menu, recipes),
       startDateIso,
       onStartDateChange: selectStartDate,
       selectedDays,

@@ -1,10 +1,21 @@
 import { styled, keyframes } from 'styled-components';
+import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
 
 const { colors, space, fonts } = tokens;
 
-export type MenuSlotLine = { key: string; creneauLabel: string; title: string };
+/**
+ * Une ligne de créneau MÈNE à une fiche, ou ne mène nulle part — et le type ne laisse pas de
+ * troisième possibilité. La variante `unknown` n'a pas de champ `href` : il n'existe donc aucune
+ * façon de rendre cliquable la ligne de repli « Recette inconnue », ni d'oublier l'adresse d'une
+ * ligne qui doit en avoir une. L'erreur est impossible, pas seulement improbable.
+ *
+ * C'est `menu-days.ts`, muté, qui décide laquelle des deux variantes chaque créneau reçoit.
+ */
+export type MenuSlotLine =
+  | { key: string; creneauLabel: string; title: string; recipe: 'known'; href: string }
+  | { key: string; creneauLabel: string; title: string; recipe: 'unknown' };
 export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
 
 export type MenuScreenProps =
@@ -254,6 +265,16 @@ const SlotTitle = styled.span`
   color: ${colors.ink};
 `;
 
+// Même typographie que `SlotTitle` : la ligne d'un menu n'a pas à s'annoncer comme un lien pour
+// l'être, et souligner vingt-huit titres saturerait l'écran. C'est un LIEN et non un bouton,
+// comme les lignes du catalogue : il ne fait que changer de route.
+const SlotLink = styled(Link)`
+  font-family: ${fonts.body};
+  font-size: 15px;
+  color: ${colors.ink};
+  text-decoration: none;
+`;
+
 function Body(props: MenuScreenProps) {
   switch (props.status) {
     case 'idle':
@@ -302,7 +323,11 @@ function Body(props: MenuScreenProps) {
                   {day.slots.map((slot) => (
                     <SlotItem key={slot.key}>
                       <CreneauLabel>{slot.creneauLabel}</CreneauLabel>
-                      <SlotTitle>{slot.title}</SlotTitle>
+                      {slot.recipe === 'known' ? (
+                        <SlotLink to={slot.href}>{slot.title}</SlotLink>
+                      ) : (
+                        <SlotTitle>{slot.title}</SlotTitle>
+                      )}
                     </SlotItem>
                   ))}
                 </SlotList>

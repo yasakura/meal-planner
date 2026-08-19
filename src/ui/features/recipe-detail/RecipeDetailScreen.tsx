@@ -2,6 +2,7 @@ import { styled, keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
+import { type BackLink } from './recipe-detail-origin';
 
 const { colors, space, fonts } = tokens;
 
@@ -36,7 +37,7 @@ const Page = styled.div`
   padding: ${space.lg}px;
 `;
 
-const BackLink = styled(Link)`
+const BackAnchor = styled(Link)`
   font-family: ${fonts.body};
   font-size: 14px;
   color: ${colors.inkSecondary};
@@ -233,10 +234,14 @@ function Body(props: RecipeDetailScreenProps) {
   }
 }
 
-export function RecipeDetailScreen(props: RecipeDetailScreenProps) {
+/**
+ * Le lien retour n'est plus câblé en dur : il DÉPEND d'où l'on vient, et l'écran est dumb — il ne
+ * décide pas, il rend. La décision vit dans `recipe-detail-origin.ts`, qui est muté.
+ */
+export function RecipeDetailScreen(props: RecipeDetailScreenProps & { back: BackLink }) {
   return (
     <Page>
-      <BackLink to="/catalogue">← Recettes</BackLink>
+      <BackAnchor to={props.back.href}>{props.back.label}</BackAnchor>
       <Body {...props} />
     </Page>
   );

@@ -69,6 +69,32 @@ function renderWithStore(
 }
 
 /**
+ * Monte le container sur un CHEMIN complet, requête comprise : la provenance d'où l'on vient vit
+ * dans l'URL, et c'est le seul moyen de la lui donner.
+ */
+function renderAtPath(
+  path: string,
+  overrides?: { getRecipe?: GetRecipe; updateRecipe?: UpdateRecipe },
+) {
+  const store = createTestStore({
+    getRecipe: overrides?.getRecipe ?? (async () => GRATIN),
+    ...(overrides?.updateRecipe ? { updateRecipe: overrides.updateRecipe } : {}),
+  });
+  return {
+    store,
+    ...render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    ),
+  };
+}
+
+/**
  * Monte le container avec un lien de navigation CLIENTE vers un autre `/catalogue/:id/modifier`.
  * Cliquer ce lien change le paramètre de route sans démonter l'élément — React Router conserve
  * l'instance quand seul le paramètre change. C'est le seul montage capable d'observer un effet
@@ -383,6 +409,45 @@ describe('RecipeEditContainer', () => {
     expect(screen.queryByText('Recette introuvable')).not.toBeInTheDocument();
   });
 
+  /**
+   * L'écran SANS recette est le seul dont l'utilisateur ne peut rien faire d'autre que sortir :
+   * son unique lien renvoyait au catalogue, en dur, alors que l'URL porte encore la provenance.
+   * Venu du menu, la panne de lecture coupait donc le fil du parcours là où il n'y a même pas de
+   * formulaire pour se rattraper. Le retour est celui de la PROVENANCE, comme partout ailleurs.
+   *
+   * Un seul des trois états sans recette est exercé : ils sortent tous du même `if`, et le
+   * retour ne regarde pas le statut — le multiplier ne testerait que la même ligne trois fois.
+   * TÉMOIN de l'absence affirmée ici : le scénario juste en dessous, même état sur une URL nue,
+   * où « ← Recettes » est bel et bien là.
+   */
+  it('venu du menu, l’écran sans recette ramène au MENU', async () => {
+    const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+    renderAtPath('/catalogue/r-1/modifier?depuis=menu', { getRecipe: horsLigne });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Aucune connexion — la recette n’a pas pu être chargée.',
+    );
+    expect(screen.getByRole('link', { name: '← Menu' })).toHaveAttribute('href', '/menu');
+    expect(screen.queryByRole('link', { name: '← Recettes' })).not.toBeInTheDocument();
+  });
+
+  /**
+   * Le témoin : sans provenance, on n'affirme pas venir d'un menu qu'on n'a pas vu. C'est aussi
+   * lui qui gage l'absence de « ← Menu », en montrant le même localisateur trouver son lien
+   * là-haut. Le retour ne désigne JAMAIS une fiche ici — il n'y a pas de recette — et les deux
+   * destinations possibles, elles, existent sans elle.
+   */
+  it('sans provenance, l’écran sans recette ramène au CATALOGUE', async () => {
+    const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+    renderAtPath('/catalogue/r-1/modifier', { getRecipe: horsLigne });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Aucune connexion — la recette n’a pas pu être chargée.',
+    );
+    expect(screen.getByRole('link', { name: '← Recettes' })).toHaveAttribute('href', '/catalogue');
+    expect(screen.queryByRole('link', { name: '← Menu' })).not.toBeInTheDocument();
+  });
+
   // On arrive ici DEPUIS le détail : annuler doit rendre l'écran d'où l'on vient, pas la liste
   // deux crans plus loin. Libellé au singulier — « Recettes » annoncerait le catalogue. Le titre
   // de la recette ne figure pas dans le lien : un titre long y déborde de la mise en page.
@@ -393,6 +458,39 @@ describe('RecipeEditContainer', () => {
       'href',
       '/catalogue/r-1',
     );
+  });
+
+  /**
+   * Le formulaire est une ÉTAPE d'un parcours qui a commencé ailleurs. Ouvert depuis une fiche
+   * venue du menu, il rend une fiche qui doit encore le savoir — sinon annuler une modification
+   * fait perdre le fil, et l'écran d'arrivée renvoie au catalogue quelqu'un qui venait du menu.
+   * TÉMOIN de la provenance ABSENTE : le scénario juste au-dessus, monté sur une URL nue, où le
+   * même lien pointe la même fiche sans rien y ajouter.
+   */
+  it('venu du menu, le lien « ← Recette » ramène à une fiche qui sait encore d’où l’on vient', async () => {
+    renderAtPath('/catalogue/r-1/modifier?depuis=menu');
+
+    expect(await screen.findByRole('link', { name: '← Recette' })).toHaveAttribute(
+      'href',
+      '/catalogue/r-1?depuis=menu',
+    );
+  });
+
+  /**
+   * L'autre sortie du formulaire, celle qu'on emprunte quand tout va bien. Le retour au détail
+   * après un enregistrement réussi est déjà couvert plus haut sur une URL nue — ici la fiche
+   * rendue doit en plus porter la provenance, faute de quoi la modification d'une recette
+   * ouverte depuis le menu se termine sur un écran qui dit « ← Recettes ».
+   */
+  it('venu du menu, un enregistrement réussi rend une fiche qui sait encore d’où l’on vient', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderAtPath('/catalogue/r-1/modifier?depuis=menu', { updateRecipe: spy.fn });
+
+    await screen.findByLabelText(/titre/i);
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+
+    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1?depuis=menu'));
   });
 
   /**

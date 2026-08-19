@@ -582,4 +582,59 @@ describe('MenuContainer', () => {
     expect(lectures).toBe(1);
     expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
   });
+
+  /**
+   * TRANCHE 3 — une recette du menu MÈNE à sa fiche. Le titre devient un lien, et l'adresse
+   * inscrit la provenance : c'est elle, et rien d'autre, qui fera dire « ← Menu » au retour de la
+   * fiche. La règle d'adressage vit dans un module pur et muté (`recipe-detail-origin.ts`) ; ce
+   * scénario vérifie le CÂBLAGE, que la mutation ne voit pas — `MenuContainer.tsx` et
+   * `MenuScreen.tsx` n'ont pour filet que la RTL.
+   *
+   * Les DEUX créneaux de « Ratatouille » sont exigés : le menu place r1 au lundi Midi et au mardi
+   * Midi, et une implémentation qui ne lierait que la première occurrence resterait verte sur un
+   * simple `getByRole`.
+   */
+  it('chaque recette du menu est un lien vers sa fiche, marquée comme venant du menu', async () => {
+    const user = userEvent.setup();
+    renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByText('lundi 24 août');
+
+    const ratatouille = screen.getAllByRole('link', { name: 'Ratatouille' });
+    expect(ratatouille).toHaveLength(2);
+    for (const lien of ratatouille) {
+      expect(lien).toHaveAttribute('href', '/catalogue/r1?depuis=menu');
+    }
+    expect(screen.getByRole('link', { name: 'Blanquette' })).toHaveAttribute(
+      'href',
+      '/catalogue/r2?depuis=menu',
+    );
+  });
+
+  /**
+   * Le repli « Recette inconnue » ne désigne aucune fiche : il n'y a rien vers quoi naviguer, et
+   * la ligne ne doit donc pas être cliquable. Un lien vers une recette disparue mènerait à
+   * « Recette introuvable » — un cul-de-sac fabriqué par l'écran lui-même.
+   *
+   * GAGE de l'absence : le créneau voisin, lui, EST un lien. Sans lui, « pas de lien » resterait
+   * vrai d'un écran qui n'en produirait aucun.
+   */
+  it('la ligne d’une recette absente du catalogue n’est pas un lien', async () => {
+    const user = userEvent.setup();
+    const menu = createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'disparue' })] }),
+        createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+      ],
+    });
+    renderWithStore({ generateMenu: async () => menu, listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    expect(await screen.findByRole('link', { name: 'Blanquette' })).toBeInTheDocument();
+    expect(screen.getByText('Recette inconnue')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Recette inconnue' })).not.toBeInTheDocument();
+  });
 });
