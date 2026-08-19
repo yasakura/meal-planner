@@ -1,6 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { openAccountSheet } from './support/account-sheet';
+import {
+  accountSheetButtonHandle,
+  closeAccountSheet,
+  isStillMounted,
+  openAccountSheet,
+  panelHandle,
+  reopenAccountSheetDuringExit,
+  waitForExitToStart,
+  waitForSheetBackInPlace,
+} from './support/account-sheet';
 import { failWrites, restore } from './support/e2e-controls';
 
 function prenoms(page: Page) {
@@ -163,7 +172,7 @@ test.describe('Foyer hors ligne', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
   });
 
-  test('un cycle de renommage inachevé rend les autres lignes inertes, une frappe les réveille', async ({
+  test('un cycle de renommage inachevé rend les autres lignes inertes, une frappe les réveille, et le renommage abouti solde tout', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -210,5 +219,213 @@ test.describe('Foyer hors ligne', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Renommer Bruno' })).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Retirer Bruno' })).toBeEnabled();
+
+    // SORTIE de l'état non-nominal, que le scénario d'ajout fait déjà : réveiller les lignes ne
+    // solde rien tant que le renommage lui-même n'a pas abouti. Le réseau revient, l'écriture
+    // passe, et l'écran ne se contredit pas — la liste à jour ET le constat d'échec côte à côte,
+    // c'est le défaut vécu le 2026-08-12.
+    await restore(page);
+    // `Ulysse` et non `Alicia` : Alice est en TÊTE de liste, et un prénom qui garde ce rang
+    // rendrait l'assertion suivante identique avec ou sans tri. Le rang doit changer.
+    await page.getByLabel('Nouveau prénom pour Alice').fill('Ulysse');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    // Quatre `convive-name` : la ligne d'Alice est REFERMÉE (une ligne en édition n'en rend
+    // aucun), elle porte le nouveau prénom, et elle a rejoint sa place alphabétique.
+    await expect(prenoms(page)).toHaveText(['Bruno', 'Chloé', 'Émile', 'Ulysse']);
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+    // Le même localisateur que les deux clics ci-dessus, donc gagé : plus aucun formulaire ouvert.
+    await expect(page.getByRole('button', { name: 'Enregistrer' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Renommer Bruno' })).toBeEnabled();
+  });
+
+  /**
+   * Le retrait est la seule écriture DESTRUCTIVE du foyer, et la seule dont aucun scénario ne
+   * regardait l'échec. Son constat existe pourtant dans `convives-slice.ts` depuis FR-3.
+   */
+  test('un retrait non confirmé n’efface personne, le dit, et le réseau revenu il aboutit', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue');
+    await openAccountSheet(page);
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile']);
+
+    await failWrites(page);
+    await page.getByRole('button', { name: 'Retirer Chloé' }).click();
+    await expect(page.getByText('Retirer Chloé du foyer ?')).toBeVisible();
+    await page.getByRole('button', { name: 'Retirer', exact: true }).click();
+
+    await expect(
+      page.getByText('Aucune connexion — le retrait de Chloé n’a pas pu être confirmé.'),
+    ).toBeVisible();
+    // Le MÊME localisateur que l'absence de la fin, vu ici en train de trouver son texte.
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
+
+    // Chloé n'est PAS effacée de l'écran : sa ligne est en mode confirmation, donc elle ne rend
+    // aucun `convive-name` — c'est la question qui porte son prénom, et elle est toujours là.
+    // Une disparition optimiste serait le pire des faux signaux sur un geste sans undo.
+    await expect(page.getByText('Retirer Chloé du foyer ?')).toBeVisible();
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Émile']);
+
+    // Les autres lignes sont inertes tant que ce cycle n'est pas soldé, comme au renommage.
+    await expect(page.getByRole('button', { name: 'Renommer Alice' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Retirer Alice' })).toBeDisabled();
+
+    // SORTIE : le réseau revient, le même geste aboutit.
+    await restore(page);
+    await page.getByRole('button', { name: 'Retirer', exact: true }).click();
+
+    await expect(page.getByText('Retirer Chloé du foyer ?')).toHaveCount(0);
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Renommer Alice' })).toBeEnabled();
+    // L'ÉCRAN d'abord, sans rien relire : la ligne de Chloé repasserait en mode normal — donc
+    // rendrait de nouveau son prénom — si le retrait n'était pas appliqué à la liste affichée.
+    // Sans cette assertion, la relecture ci-dessous masque le défaut : le dépôt, lui, est juste.
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Émile']);
+
+    // L'ÉCRAN ne suffit pas sur une écriture destructive : la sheet se ferme et se rouvre pour
+    // forcer une relecture du dépôt. Chloé n'y est plus — le retrait rejoué a bien été écrit.
+    await closeAccountSheet(page);
+    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Compte' }).click();
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Émile']);
+  });
+});
+
+/**
+ * Le seul endroit du dépôt où le TIMING RÉEL d'une transition CSS décide de l'état affiché.
+ *
+ * `convives-slice.ts` fait porter à `loadConvives.pending` un filet secondaire de remise à zéro,
+ * et documente qu'il ne garantit rien : « `AccountSheet` garde son panneau monté pendant les
+ * 200 ms de sa transition de sortie, donc une réouverture rapide n'entraîne aucun remontage et ce
+ * thunk n'est jamais rejoué (mesuré : 80 ms → non, 700 ms → oui) ». jsdom ne peut pas trancher
+ * cette phrase : il n'a ni transition, ni `transitionend`. Ces deux scénarios sont les deux
+ * moitiés de la mesure, et ils se GAGENT l'un l'autre — le même instrument (`isStillMounted` sur
+ * la prise du nœud) est exigé vrai dans l'un et faux dans l'autre.
+ *
+ * ATTENTION à ce que la moitié « pendant la sortie » est, et à ce qu'elle n'est pas. Elle exerce
+ * la MACHINE À ÉTATS de la sheet, pas un doigt : la réouverture y passe par un `dispatchEvent`,
+ * parce que l'overlay intercepte tout tap tant qu'il n'a pas disparu et qu'un vrai clic sur
+ * « Compte » n'aboutit qu'à 540 ms — mesuré —, largement après le démontage. Aucun utilisateur ne
+ * peut aujourd'hui emprunter ce chemin par ce bouton.
+ *
+ * Il est couvert quand même parce qu'il est à une décision de devenir le chemin normal : le jour
+ * où l'overlay en sortie reçoit `pointer-events: none` — amélioration plausible, l'écran mangeant
+ * 200 ms de taps à chaque fermeture —, la réouverture éclair devient atteignable au doigt, et le
+ * filet est déjà posé.
+ */
+test.describe('Foyer et cycle de vie de la sheet', () => {
+  test('raccourci sur la machine à états — rouvrir pendant la sortie ne démonte pas la sheet, et l’ajout non confirmé reste tel quel', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue');
+    await openAccountSheet(page);
+
+    await failWrites(page);
+    await champPrenom(page).fill('Zoé');
+    await boutonAjouter(page).click();
+    // Le MÊME localisateur que l'assertion de survie plus bas, ET que l'absence du scénario
+    // suivant : vu ici en train de trouver son texte, il ne peut pas y être muet pour rien.
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
+
+    const panneau = await panelHandle(page);
+    const boutonCompte = await accountSheetButtonHandle(page);
+    await closeAccountSheet(page);
+
+    // La sortie a COMMENCÉ. Sans cette preuve, un « Fermer » qui ne ferme plus laisserait tout le
+    // scénario vert : le panneau resterait attaché, donc « toujours monté », sans qu'aucune
+    // fermeture n'ait eu lieu ni qu'aucune réouverture n'ait rien annulé.
+    await waitForExitToStart(page, panneau);
+    await reopenAccountSheetDuringExit(boutonCompte);
+
+    // Et la réouverture a pris effet SUR CE NŒUD-LÀ : lui seul peut revenir à sa place, un nœud
+    // démonté ne se retransforme jamais. Le panneau qu'on retrouve est donc bien celui d'avant.
+    await waitForSheetBackInPlace(page, panneau);
+    expect(await isStillMounted(panneau)).toBe(true);
+    await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
+
+    // Aucun remontage, donc aucun `loadConvives`, donc aucun filet : tout est resté en place —
+    // le constat, la saisie et le verrou du bouton. C'est bien la frappe qui porte la sortie.
+    await expect(
+      page.getByText('Aucune connexion — l’ajout de Zoé n’a pas pu être confirmé.'),
+    ).toBeVisible();
+    await expect(champPrenom(page)).toHaveValue('Zoé');
+    await expect(boutonAjouter(page)).toBeDisabled();
+  });
+
+  test('rouvrir la sheet après son démontage repart d’un cycle d’ajout propre', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue');
+    await openAccountSheet(page);
+
+    await failWrites(page);
+    await champPrenom(page).fill('Zoé');
+    await boutonAjouter(page).click();
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
+
+    const panneau = await panelHandle(page);
+    await closeAccountSheet(page);
+    // Le démontage est ATTENDU, pas supposé : c'est lui qui rejoue `loadConvives`, donc le filet.
+    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
+
+    // Vrai clic, à la vitesse d'un utilisateur : mesuré à 540 ms sur ce dépôt, parce que l'overlay
+    // intercepte tout tap tant qu'il n'a pas disparu. C'est le cas ATTEIGNABLE des deux.
+    await page.getByRole('button', { name: 'Compte' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
+    expect(await isStillMounted(panneau)).toBe(false);
+
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+    await expect(champPrenom(page)).toHaveValue('');
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile']);
+
+    // Et l'écran n'est pas une impasse : le réseau revenu, le même ajout aboutit.
+    await restore(page);
+    await champPrenom(page).fill('Zoé');
+    await boutonAjouter(page).click();
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile', 'Zoé']);
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+  });
+
+  test('un renommage non confirmé traverse une réouverture éclair, puis se solde au démontage', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue');
+    await openAccountSheet(page);
+
+    await failWrites(page);
+    await page.getByRole('button', { name: 'Renommer Alice' }).click();
+    await page.getByLabel('Nouveau prénom pour Alice').fill('Alicia');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
+
+    const panneau = await panelHandle(page);
+    const boutonCompte = await accountSheetButtonHandle(page);
+    await closeAccountSheet(page);
+    await waitForExitToStart(page, panneau);
+    await reopenAccountSheetDuringExit(boutonCompte);
+    await waitForSheetBackInPlace(page, panneau);
+    expect(await isStillMounted(panneau)).toBe(true);
+
+    // Sans remontage, l'édition et son BROUILLON sont là où on les a laissés : la ligne d'Alice
+    // est toujours ouverte, le texte tapé n'a pas été perdu, et le constat attend d'être lu.
+    await expect(page.getByLabel('Nouveau prénom pour Alice')).toHaveValue('Alicia');
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
+    await expect(prenoms(page)).toHaveText(['Bruno', 'Chloé', 'Émile']);
+
+    // Le démontage, lui, solde le cycle : la ligne se referme sur l'ANCIEN prénom — le renommage
+    // n'a jamais été acquitté, rien ne prouve qu'il est enregistré.
+    await closeAccountSheet(page);
+    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Compte' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
+    expect(await isStillMounted(panneau)).toBe(false);
+
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile']);
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+    // Le brouillon est parti avec l'édition : rouvrir la ligne repart du prénom affiché.
+    await expect(page.getByRole('button', { name: 'Renommer Bruno' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Renommer Alice' }).click();
+    await expect(page.getByLabel('Nouveau prénom pour Alice')).toHaveValue('Alice');
   });
 });

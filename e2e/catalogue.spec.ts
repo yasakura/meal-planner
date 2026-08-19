@@ -104,6 +104,53 @@ test.describe('Catalogue', () => {
   });
 
   /**
+   * Le VERROU de soumission, jamais exercé au parcours assemblé jusqu'ici. Il vit dans
+   * `recipe-form-submission.ts`, que la mutation couvre — mais son CÂBLAGE au bouton vit dans un
+   * `.tsx`, que Stryker ne regarde pas. Un verrou correctement calculé et jamais branché produit
+   * exactement le défaut qu'il existe pour empêcher : une recette sans titre, ou sans le moindre
+   * ingrédient, écrite au dépôt.
+   *
+   * Distinct du refus au clic de la ligne INCOMPLÈTE (`modifier-recette.spec.ts`) : ici le bouton
+   * ne part pas du tout, là il part et se fait refuser.
+   */
+  test('le formulaire de création reste verrouillé tant qu’il manque un titre ou un ingrédient', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue');
+    await page.getByRole('link', { name: 'Ajouter une recette' }).click();
+
+    const enregistrer = page.getByRole('button', { name: 'Enregistrer' });
+    // À l'ouverture, rien n'est saisi.
+    await expect(enregistrer).toBeDisabled();
+
+    // Un ingrédient valide ne suffit pas : la recette n'a pas de nom.
+    await page.locator('#ingredient-name-0').fill('Poireaux');
+    await page.locator('#ingredient-quantity-0').fill('3');
+    await expect(enregistrer).toBeDisabled();
+
+    // Un titre d'espaces n'est pas un titre.
+    await page.getByLabel('Titre').fill('   ');
+    await expect(enregistrer).toBeDisabled();
+
+    // GAGE des quatre verrous ci-dessus : le bouton s'ouvre bel et bien quand les deux exigences
+    // sont tenues. Sans lui, un bouton désactivé pour une tout autre raison — ou introuvable —
+    // les rendrait tous vrais sans rien défendre.
+    await page.getByLabel('Titre').fill('Tarte aux poireaux');
+    await expect(enregistrer).toBeEnabled();
+
+    // Et il se referme : vidée de sa quantité, la seule ligne n'est plus un ingrédient valide.
+    await page.locator('#ingredient-quantity-0').fill('');
+    await expect(enregistrer).toBeDisabled();
+
+    // SORTIE du verrou, et preuve que rien n'a fui entre-temps : la quantité retapée rouvre le
+    // bouton, et le catalogue reçoit UNE recette — pas trois brouillons partis en chemin.
+    await page.locator('#ingredient-quantity-0').fill('3');
+    await enregistrer.click();
+    await expect(page).toHaveURL('/catalogue');
+    await expect(titresDuCatalogue(page)).toHaveText([...TITRES_TRIES, 'Tarte aux poireaux']);
+  });
+
+  /**
    * Le statut d'enregistrement est un état transitoire du store, et le store est un singleton
    * de session : resté à `success`, il fait renavigüer vers le catalogue le formulaire à peine
    * monté. Tout se joue donc en navigation CLIENT — jamais de `page.goto()` entre les deux
