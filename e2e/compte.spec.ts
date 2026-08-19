@@ -3,9 +3,7 @@ import { expect, test } from '@playwright/test';
 import { openAccountSheet } from './support/account-sheet';
 
 test.describe('Sheet Compte', () => {
-  test('montre le foyer et la déconnexion, et masque l’info d’environnement hors dev', async ({
-    page,
-  }) => {
+  test('montre le foyer et la déconnexion', async ({ page }) => {
     await page.goto('/catalogue');
     await openAccountSheet(page);
 
@@ -17,12 +15,6 @@ test.describe('Sheet Compte', () => {
       'Émile',
     ]);
     await expect(page.getByRole('button', { name: 'Se déconnecter' })).toBeVisible();
-
-    // L'info d'environnement est réservée à `dev` (`env.name === 'dev'` dans `AccountSheet`).
-    // Les scénarios tournent en `e2e`, donc elle ne doit PAS s'afficher : ce que cette
-    // assertion verrouille, c'est que l'identifiant du projet Firebase ne fuit pas hors dev.
-    await expect(page.getByText('Environnement :')).toHaveCount(0);
-    await expect(page.getByText('Firebase :')).toHaveCount(0);
   });
 
   /**

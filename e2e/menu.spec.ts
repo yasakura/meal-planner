@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 import { failReads, restore } from './support/e2e-controls';
 
@@ -208,5 +208,93 @@ test.describe('Menu et modification de recette', () => {
     await expect(page.locator('main section li')).toHaveCount(28);
     await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
     await expect(page.getByText('Curry de pois chiches')).toHaveCount(9);
+  });
+});
+
+/**
+ * Centrage vertical d'un état plein écran (constat, état vide) dans la hauteur qui lui est
+ * OFFERTE — et non dans sa propre boîte, qui l'épouserait et rendrait la mesure tautologique.
+ *
+ * La zone offerte va du bord HAUT de l'état au bas de la boîte de contenu de `main`. Ces deux
+ * bords viennent de sources différentes, et c'est tout l'intérêt : l'état ne borne que le haut,
+ * jamais le bas. Un état qui aurait perdu sa hauteur épouserait ses enfants et se poserait sous
+ * l'en-tête, laissant la moitié basse de la page vide — le bas venant de `main`, l'écart entre
+ * les deux bords reste alors entier, il se retrouve en totalité SOUS le bloc, et l'égalité des
+ * espaces tombe. C'est ce qui empêche la mesure d'être tautologique.
+ *
+ * Le bloc mesuré est l'union des ENFANTS de l'état : `justify-content: center` les centre dans
+ * la zone, et c'est cette position-là que l'œil voit.
+ *
+ * Cette mesure servait trois surfaces — catalogue vide, recette introuvable, menu sans recette.
+ * Une seule a été gardée : la garantie est la même et la chaîne `flex: 1` traversée aussi, donc
+ * les deux autres ne pouvaient rougir que là où celle-ci rougit déjà. C'est le menu qui reste,
+ * parce que c'est le seul `error` ATTEIGNABLE par un parcours et le seul à qui l'issue #41 donne
+ * une provenance — d'où le déménagement de la mesure jusqu'ici, auprès de son unique appelant.
+ */
+type Centrage = {
+  hauteurDuBloc: number;
+  espaceAuDessus: number;
+  espaceEnDessous: number;
+};
+
+async function centrageVertical(etat: Locator): Promise<Centrage> {
+  return etat.evaluate((element) => {
+    const ecran = element.parentElement as HTMLElement;
+    const region = element.closest('main') as HTMLElement;
+
+    // Le haut de la zone est le bord haut de l'état lui-même : ce que l'espacement qui le
+    // précède a déjà repoussé est, par construction, hors de la zone offerte. Rien n'est donc
+    // à mesurer sur le frère précédent, et le véhicule de cet espacement — marge, `gap` — n'a
+    // aucune prise sur le résultat.
+    const hautDeLaZone = element.getBoundingClientRect().top;
+    // Le bas de la zone se lit sur `main`, PAS sur l'écran : un écran qui a perdu sa hauteur
+    // épouse son contenu, et mesurer dans sa boîte rendrait « centré » vrai alors que la moitié
+    // basse de la page est vide. La marge basse que l'écran se réserve est retranchée, sans quoi
+    // un centrage correct paraîtrait décalé d'autant.
+    const basDeLaZone =
+      region.getBoundingClientRect().bottom -
+      parseFloat(getComputedStyle(region).paddingBottom) -
+      parseFloat(getComputedStyle(ecran).paddingBottom);
+
+    const enfants = [...element.children].map((enfant) => enfant.getBoundingClientRect());
+    const haut = Math.min(...enfants.map((boite) => boite.top));
+    const bas = Math.max(...enfants.map((boite) => boite.bottom));
+
+    return {
+      hauteurDuBloc: bas - haut,
+      espaceAuDessus: haut - hautDeLaZone,
+      espaceEnDessous: basDeLaZone - bas,
+    };
+  });
+}
+
+test.describe('Mise en page du menu', () => {
+  /**
+   * F5 — `CenteredState` a été écrit pour centrer un constat dans la hauteur restante. Il ne
+   * peut le faire que si l'écran qui le contient a une hauteur à distribuer : sans elle, le
+   * constat se colle sous l'en-tête et laisse un demi-écran de crème vide sous lui.
+   *
+   * Issue #41 — l'état `error` était le SEUL à ne pas être centré, alors que `loading`,
+   * `unavailable`, `empty` et `notFound` le sont tous. L'écart ne date pas d'une décision : il
+   * date du jour où `Page` a pris `flex: 1` et où il y a enfin eu une hauteur à distribuer.
+   *
+   * C'est le menu qui l'exerce, parce que c'est le seul `error` ATTEIGNABLE par un parcours :
+   * un catalogue vide fait refuser la génération. Le commutateur e2e ne sait produire qu'un
+   * `RepositoryUnavailableError`, donc l'`error` du catalogue reste hors de portée d'ici.
+   */
+  test('le menu sans recette centre son constat dans la hauteur offerte', async ({ page }) => {
+    await page.goto('/menu?recipes=0');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.getByRole('alert')).toHaveText(
+      "Ajoute d'abord des recettes pour générer un menu.",
+    );
+
+    const mesure = await centrageVertical(page.getByRole('alert').locator('..'));
+
+    // Gages : un bloc effondré, ou un bloc qui remplit toute la zone, rendrait « centré » vrai
+    // sans que rien ne soit centré.
+    expect(mesure.hauteurDuBloc).toBeGreaterThan(0);
+    expect(mesure.espaceAuDessus).toBeGreaterThan(0);
+    expect(Math.abs(mesure.espaceAuDessus - mesure.espaceEnDessous)).toBeLessThanOrEqual(1);
   });
 });
