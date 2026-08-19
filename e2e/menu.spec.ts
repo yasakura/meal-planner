@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { failReads, restore } from './support/e2e-controls';
+
 test.describe('Menu', () => {
   test('générer un menu remplit les repas de la quinzaine', async ({ page }) => {
     await page.goto('/menu');
@@ -76,6 +78,74 @@ test.describe('Menu', () => {
     await expect(page.locator('main section')).toHaveCount(7);
     await expect(uneSemaine).toHaveAttribute('aria-pressed', 'true');
     await expect(deuxSemaines).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  /**
+   * TÉMOIN de l'absence affirmée par le scénario hors ligne : « Ajoute d'abord des recettes »
+   * n'a le droit d'exister QUE quand le catalogue est réellement vide. Les deux constats du menu
+   * sortent des deux branches du même ternaire (`errorMessage`, `MenuContainer.tsx`), donc rien
+   * ne distingue « pas de recette » de « pas de réseau » sinon le texte lui-même.
+   */
+  test('sans recette, le menu refuse de générer et le dit ; une recette créée, il génère', async ({
+    page,
+  }) => {
+    await page.goto('/menu?recipes=0');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+
+    await expect(page.getByRole('alert')).toHaveText(
+      "Ajoute d'abord des recettes pour générer un menu.",
+    );
+    await expect(page.getByText("Ajoute d'abord des recettes")).toHaveCount(1);
+    // Le constat nomme le remède, encore faut-il que l'écran ne soit pas une impasse.
+    await expect(page.getByRole('button', { name: 'Réessayer' })).toBeVisible();
+
+    // SORTIE de l'état : le remède annoncé est appliqué, par les liens et jamais par l'URL —
+    // un `goto` recréerait le store, donc effacerait le constat sans que rien ne le prouve.
+    await page.click('nav a[href="/catalogue"]');
+    await page.getByRole('link', { name: 'Ajouter une recette' }).click();
+    await page.getByLabel('Titre').fill('Tarte aux poireaux');
+    await page.locator('#ingredient-name-0').fill('Poireaux');
+    await page.locator('#ingredient-quantity-0').fill('3');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page).toHaveURL('/catalogue');
+
+    await page.click('nav a[href="/menu"]');
+    await page.getByRole('button', { name: 'Réessayer' }).click();
+
+    // Le catalogue ne compte qu'une recette : elle occupe donc les 28 créneaux, et ce compte de
+    // PRÉSENCE se gage seul — aucun créneau n'est retombé sur le repli « Recette inconnue ».
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.locator('main section li')).toHaveCount(28);
+    await expect(page.getByText('Tarte aux poireaux')).toHaveCount(28);
+    await expect(page.getByText("Ajoute d'abord des recettes")).toHaveCount(0);
+  });
+
+  /**
+   * Le catalogue vide et le réseau coupé mènent au MÊME état `error` du slice, et ne se
+   * distinguent que par le message. Un menu qui accuserait le catalogue d'être vide alors que
+   * c'est le réseau qui manque enverrait l'utilisateur créer des recettes qu'il a déjà.
+   */
+  test('hors ligne, le menu ne dit pas que le catalogue est vide, et Réessayer le sort de là', async ({
+    page,
+  }) => {
+    // On arrive en `idle`, PUIS on coupe : `page.goto()` recrée le store, donc le commutateur.
+    await page.goto('/menu');
+    await failReads(page);
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+
+    await expect(page.getByRole('alert')).toHaveText('Impossible de générer le menu.');
+    // Le MÊME localisateur que l'absence de la fin, vu ici en train de trouver son texte.
+    await expect(page.getByText('Impossible de générer le menu.')).toHaveCount(1);
+    // Et le constat de l'AUTRE branche, celui du scénario témoin juste au-dessus, reste muet.
+    await expect(page.getByText("Ajoute d'abord des recettes")).toHaveCount(0);
+
+    await restore(page);
+    await page.getByRole('button', { name: 'Réessayer' }).click();
+
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.locator('main section li')).toHaveCount(28);
+    await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
+    await expect(page.getByText('Impossible de générer le menu.')).toHaveCount(0);
   });
 });
 
