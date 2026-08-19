@@ -1,7 +1,8 @@
 import { E2eAuthGateway } from '../../data/e2e/e2e-auth-gateway';
 import { E2eConviveRepository } from '../../data/e2e/e2e-convive-repository';
 import { type E2eControls, E2eFailureSwitch } from '../../data/e2e/e2e-failure-switch';
-import { E2E_ACCOUNT } from '../../data/e2e/e2e-fixtures';
+import { E2eClock } from '../../data/e2e/e2e-clock';
+import { E2E_ACCOUNT, E2E_TODAY } from '../../data/e2e/e2e-fixtures';
 import { E2eRecipeRepository } from '../../data/e2e/e2e-recipe-repository';
 import { readE2eSeed } from '../../data/e2e/e2e-seed';
 import { SequentialIdGenerator } from '../../data/e2e/sequential-id-generator';
@@ -12,6 +13,7 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
@@ -46,6 +48,9 @@ export function createE2eStore(host: E2eHost): AppStore {
       recipeRepository,
       randomPicker: MathRandomPicker.create(() => 0),
     }),
+    // Horloge FIGÉE, comme les identifiants séquentiels et le tirage déterministe : sans elle,
+    // les dates affichées au menu changeraient chaque jour et les scénarios seraient périssables.
+    nextMonday: nextMondayUseCase({ clock: E2eClock.on(E2E_TODAY) }),
     listConvives: listConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({
       idGenerator: SequentialIdGenerator.withPrefix('e2e-convive'),

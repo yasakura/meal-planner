@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
+import { createCalendarDate } from '../../domain/entities/calendar-date';
 import { IngredientBuilder } from '../../domain/test-builders/ingredient.builder';
 import { type E2eControls } from '../../data/e2e/e2e-failure-switch';
+import { E2E_TODAY } from '../../data/e2e/e2e-fixtures';
 import { observeAuthState, selectAuth } from '../features/auth/auth-slice';
 import { loadCatalogue, selectCatalogue } from '../features/catalogue/catalogue-slice';
 import { addConvive, loadConvives, selectConvives } from '../features/convives/convives-slice';
@@ -154,6 +156,31 @@ describe('createE2eStore', () => {
 
     expect(premier).not.toBeNull();
     expect(second).toEqual(premier);
+  });
+
+  /**
+   * Deux propriétés tiennent ICI, et nulle part ailleurs — les autres leviers de déterminisme
+   * du mode e2e (identifiants séquentiels, tirage, fixtures, ordre du foyer) ont chacun le
+   * leur, l'horloge n'en avait aucun :
+   *
+   * 1. le CÂBLAGE : c'est bien l'horloge FIGÉE qui date le menu. Branchée sur `SystemClock`,
+   *    la date de départ serait celle du jour d'exécution et changerait chaque semaine ;
+   * 2. le jour figé n'est PAS un lundi. C'est la propriété discriminante de `E2E_TODAY` : si
+   *    « aujourd'hui » était déjà le prochain lundi, les deux se confondraient et un use-case
+   *    qui rendrait la date du jour au lieu du lundi suivant passerait inaperçu — dans les
+   *    scénarios Playwright comme ici.
+   *
+   * La seconde assertion est une absence, adossée à la présence exacte de la ligne au-dessus :
+   * la date de départ y est pinnée au littéral avant d'être opposée à `E2E_TODAY`.
+   */
+  it('date le menu sur l’horloge FIGÉE, au prochain lundi — qui n’est pas le jour même', async () => {
+    const store = createE2eStore(hostAt(''));
+
+    await store.dispatch(generateMenu(3));
+
+    const dateDebut = selectMenu(store.getState()).menu?.dateDebut;
+    expect(dateDebut).toEqual(createCalendarDate({ year: 2026, month: 1, day: 5 }));
+    expect(dateDebut).not.toEqual(E2E_TODAY);
   });
 
   it('fait échouer les lectures à la demande, PUIS les rétablit sans trace', async () => {

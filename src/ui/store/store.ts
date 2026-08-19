@@ -7,6 +7,7 @@ import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
 import { type GetRecipe } from '../../domain/use-cases/get-recipe';
 import { type ListConvives } from '../../domain/use-cases/list-convives';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
+import { type NextMonday } from '../../domain/use-cases/next-monday';
 import { type RemoveConvive } from '../../domain/use-cases/remove-convive';
 import { type RenameConvive } from '../../domain/use-cases/rename-convive';
 import { type UpdateRecipe } from '../../domain/use-cases/update-recipe';
@@ -25,6 +26,7 @@ export type AppDependencies = {
   listRecipes: ListRecipes;
   getRecipe: GetRecipe;
   generateMenu: GenerateMenu;
+  nextMonday: NextMonday;
   listConvives: ListConvives;
   addConvive: AddConvive;
   renameConvive: RenameConvive;

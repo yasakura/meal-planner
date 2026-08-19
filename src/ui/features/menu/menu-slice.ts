@@ -85,7 +85,11 @@ export const generateMenu = createAsyncThunk<
     if (recipes.length === 0) {
       return thunkApi.rejectWithValue(NO_RECIPES);
     }
-    const menu = await thunkApi.extra.generateMenu({ days });
+    // La date de début n'est pas choisie par l'écran : c'est le prochain lundi, relu à chaque
+    // génération. Le figer une fois pour la session ferait démarrer un menu généré le mardi sur
+    // le lundi de la semaine passée.
+    const dateDebut = thunkApi.extra.nextMonday();
+    const menu = await thunkApi.extra.generateMenu({ days, dateDebut });
     return { menu, recipes };
   },
 );

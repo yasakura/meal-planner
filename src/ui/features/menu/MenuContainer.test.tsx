@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { createCalendarDate } from '../../../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../../../domain/entities/menu';
 import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
@@ -14,8 +15,12 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import { MenuContainer } from './MenuContainer';
 
+// Lundi 24 août 2026 : le jour 0 du menu EST cette date, le jour 1 le lendemain.
+const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+
 function aMenu(): Menu {
   return createMenu({
+    dateDebut: LUNDI_24_AOUT,
     repas: [
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
@@ -69,7 +74,7 @@ describe('MenuContainer', () => {
 
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
 
-    expect(await screen.findByText('Jour 1')).toBeInTheDocument();
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
     expect(daysReceived).toEqual([14]);
   });
 
@@ -104,7 +109,7 @@ describe('MenuContainer', () => {
 
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
 
-    expect(await screen.findByText('Jour 1')).toBeInTheDocument();
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
     expect(daysReceived).toEqual([7]);
   });
 
@@ -156,7 +161,7 @@ describe('MenuContainer', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /régénérer/i }));
-    await screen.findByText('Jour 1');
+    await screen.findByText('lundi 24 août');
 
     expect(daysReceived).toEqual([14, 7]);
   });
@@ -189,7 +194,7 @@ describe('MenuContainer', () => {
 
     await user.click(screen.getByRole('button', { name: /réessayer/i }));
 
-    expect(await screen.findByText('Jour 1')).toBeInTheDocument();
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
     expect(count).toBe(2);
   });
 
@@ -218,19 +223,45 @@ describe('MenuContainer', () => {
     expect(screen.queryByText(/Boom firestore/i)).not.toBeInTheDocument();
   });
 
+  /**
+   * L'en-tête d'un jour porte sa DATE, dérivée de la date de début du menu et du décalage du
+   * repas. Le menu part ici d'un lundi 4 janvier 2027, et non du lundi 24 août des autres
+   * scénarios : un libellé constant, ou lu ailleurs que dans le menu affiché, ne peut pas
+   * passer les deux.
+   */
+  it('nomme chaque jour par sa date, dérivée de la date de début DU MENU affiché', async () => {
+    const user = userEvent.setup();
+    const menu = createMenu({
+      dateDebut: createCalendarDate({ year: 2027, month: 1, day: 4 }),
+      repas: [
+        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+        createRepas({ jour: 1, creneau: 'midi', slots: [createSlot({ recipeId: 'r2' })] }),
+      ],
+    });
+    renderWithStore({ generateMenu: async () => menu, listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    await screen.findByText('lundi 4 janvier');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'lundi 4 janvier',
+      'mardi 5 janvier',
+    ]);
+  });
+
   it('regroupe les repas par jour et affiche le titre de la recette de chaque créneau', async () => {
     const user = userEvent.setup();
     renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => twoRecipes() });
 
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
 
-    const jour1 = (await screen.findByText('Jour 1')).closest('section') as HTMLElement;
+    const jour1 = (await screen.findByText('lundi 24 août')).closest('section') as HTMLElement;
     expect(within(jour1).getByText('Midi')).toBeInTheDocument();
     expect(within(jour1).getByText('Ratatouille')).toBeInTheDocument();
     expect(within(jour1).getByText('Soir')).toBeInTheDocument();
     expect(within(jour1).getByText('Blanquette')).toBeInTheDocument();
 
-    const jour2 = screen.getByText('Jour 2').closest('section') as HTMLElement;
+    const jour2 = screen.getByText('mardi 25 août').closest('section') as HTMLElement;
     expect(within(jour2).getByText('Midi')).toBeInTheDocument();
     expect(within(jour2).getByText('Ratatouille')).toBeInTheDocument();
   });
@@ -241,11 +272,11 @@ describe('MenuContainer', () => {
 
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
 
-    await screen.findByText('Jour 1');
+    await screen.findByText('lundi 24 août');
     const dayLabels = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(dayLabels).toEqual(['Jour 1', 'Jour 2']);
+    expect(dayLabels).toEqual(['lundi 24 août', 'mardi 25 août']);
 
-    const jour1 = screen.getByText('Jour 1').closest('section') as HTMLElement;
+    const jour1 = screen.getByText('lundi 24 août').closest('section') as HTMLElement;
     const creneaux = within(jour1)
       .getAllByText(/^(Midi|Soir)$/)
       .map((el) => el.textContent);
@@ -255,6 +286,7 @@ describe('MenuContainer', () => {
   it('affiche un libellé de repli quand la recette d’un créneau est introuvable', async () => {
     const user = userEvent.setup();
     const menu = createMenu({
+      dateDebut: LUNDI_24_AOUT,
       repas: [
         createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'inconnu' })] }),
       ],
@@ -312,13 +344,13 @@ describe('MenuContainer', () => {
 
     await user.click(screen.getByRole('button', { name: /1 semaine/i }));
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
-    await screen.findByText('Jour 1');
+    await screen.findByText('lundi 24 août');
 
     unmount();
     renderOn(store);
 
     await user.click(await screen.findByRole('button', { name: /régénérer/i }));
-    await screen.findByText('Jour 1');
+    await screen.findByText('lundi 24 août');
 
     expect(daysReceived).toEqual([7, 7]);
   });
@@ -346,7 +378,7 @@ describe('MenuContainer', () => {
     renderOn(store);
 
     await user.click(await screen.findByRole('button', { name: /réessayer/i }));
-    await screen.findByText('Jour 1');
+    await screen.findByText('lundi 24 août');
 
     expect(daysReceived).toEqual([7, 7]);
   });
@@ -366,7 +398,7 @@ describe('MenuContainer', () => {
 
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
     // GAGE de l'absence affirmée plus bas : le même localisateur, vu trouver l'ancien titre sur
-    // ses DEUX créneaux (r1 occupe Jour 1 Midi et Jour 2 Midi).
+    // ses DEUX créneaux (r1 occupe le lundi 24 Midi et le mardi 25 Midi).
     expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
 
     unmount();
@@ -380,8 +412,8 @@ describe('MenuContainer', () => {
     expect(screen.queryAllByText('Ratatouille')).toHaveLength(0);
     // Le menu lui-même n'a pas bougé : mêmes repas, mêmes jours.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Jour 1',
-      'Jour 2',
+      'lundi 24 août',
+      'mardi 25 août',
     ]);
   });
 

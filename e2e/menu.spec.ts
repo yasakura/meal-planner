@@ -29,8 +29,11 @@ test.describe('Menu', () => {
     await expect(page.getByText('Gratin dauphinois')).toHaveCount(9);
     await expect(page.getByText('Curry de pois chiches')).toHaveCount(9);
 
-    await expect(jours.first().getByRole('heading', { level: 2 })).toHaveText('Jour 1');
-    await expect(jours.last().getByRole('heading', { level: 2 })).toHaveText('Jour 14');
+    // Chaque jour porte sa DATE réelle. Le mode e2e fige son horloge au jeudi 1er janvier 2026
+    // (`E2E_TODAY`), et le menu part du prochain lundi : lundi 5 janvier, quatorzième jour
+    // dimanche 18. Sans cette horloge figée, ces deux libellés changeraient chaque jour.
+    await expect(jours.first().getByRole('heading', { level: 2 })).toHaveText('lundi 5 janvier');
+    await expect(jours.last().getByRole('heading', { level: 2 })).toHaveText('dimanche 18 janvier');
 
     // Le tirage du mode e2e est déterministe (`MathRandomPicker.create(() => 0)` : toujours la
     // tête du vivier), donc le premier jour est nommable exactement — c'est ce qui distingue

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createCalendarDate, type CalendarDate } from './calendar-date';
 import { createMenu } from './menu';
 import { createRepas } from './repas';
 import { createSlot } from './slot';
@@ -6,38 +7,53 @@ import { createSlot } from './slot';
 const aRepas = () =>
   createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] });
 
+// Lundi 24 août 2026. Les repas restent indexés par DÉCALAGE : le jour 0 est cette date-là.
+const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+
 describe('Menu', () => {
   it('se crée valide et expose ses repas', () => {
     const repas = aRepas();
-    const menu = createMenu({ repas: [repas] });
+    const menu = createMenu({ repas: [repas], dateDebut: LUNDI_24_AOUT });
 
     expect(menu.repas).toEqual([repas]);
   });
 
   it('accepte un menu sans repas (0 jour) sans lever', () => {
-    const menu = createMenu({ repas: [] });
+    const menu = createMenu({ repas: [], dateDebut: LUNDI_24_AOUT });
 
     expect(menu.repas).toEqual([]);
   });
 
   it('retourne un Menu gelé (immuable au runtime)', () => {
-    const menu = createMenu({ repas: [aRepas()] });
+    const menu = createMenu({ repas: [aRepas()], dateDebut: LUNDI_24_AOUT });
 
     expect(Object.isFrozen(menu)).toBe(true);
   });
 
   it('gèle le tableau repas (copie défensive immuable)', () => {
-    const menu = createMenu({ repas: [aRepas()] });
+    const menu = createMenu({ repas: [aRepas()], dateDebut: LUNDI_24_AOUT });
 
     expect(Object.isFrozen(menu.repas)).toBe(true);
   });
 
   it('copie le tableau repas fourni (isolation de la source)', () => {
     const source = [aRepas()];
-    const menu = createMenu({ repas: source });
+    const menu = createMenu({ repas: source, dateDebut: LUNDI_24_AOUT });
 
     source.push(aRepas());
 
     expect(menu.repas).toHaveLength(1);
+  });
+
+  it('porte la date de début reçue', () => {
+    const menu = createMenu({ repas: [aRepas()], dateDebut: LUNDI_24_AOUT });
+
+    expect(menu.dateDebut).toEqual({ year: 2026, month: 8, day: 24 });
+  });
+
+  it('refuse un menu sans date de début', () => {
+    expect(() =>
+      createMenu({ repas: [aRepas()], dateDebut: undefined as unknown as CalendarDate }),
+    ).toThrow('La date de début du menu est obligatoire');
   });
 });

@@ -12,6 +12,9 @@ const FORBIDDEN_IN_DOMAIN = [
   'react-redux',
   'styled-components',
   'firebase',
+  // `CalendarDate` est une date civile ancrée sur UTC : le domaine n'a aucune bibliothèque de
+  // date, et un `addDays` importé la rendrait inutile. Permis dans `ui/` pour le formatage.
+  'date-fns',
 ];
 
 const FORBIDDEN_IN_DATA = [
@@ -53,7 +56,7 @@ function matchesForbidden(specifier: string, forbidden: string[]): boolean {
 }
 
 describe('Architecture boundaries', () => {
-  it('src/domain ne doit jamais importer React, Redux, Firebase, styled-components', () => {
+  it('src/domain ne doit jamais importer React, Redux, Firebase, styled-components, date-fns', () => {
     const domainDir = join(ROOT, 'domain');
     const files = collectSourceFiles(domainDir);
     const violations: string[] = [];

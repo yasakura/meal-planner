@@ -4,12 +4,14 @@ import { FirestoreConviveRepository } from '../../data/firestore-convive-reposit
 import { FirestoreRecipeRepository } from '../../data/firestore-recipe-repository';
 import { IdGeneratorCuid2 } from '../../data/id-generator-cuid2';
 import { MathRandomPicker } from '../../data/math-random-picker';
+import { SystemClock } from '../../data/system-clock';
 import { addConviveUseCase } from '../../domain/use-cases/add-convive';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
 import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
@@ -33,6 +35,7 @@ export function createAppStore() {
       recipeRepository,
       randomPicker: MathRandomPicker.create(),
     }),
+    nextMonday: nextMondayUseCase({ clock: SystemClock.create() }),
     listConvives: listConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({
       idGenerator: IdGeneratorCuid2.create(),

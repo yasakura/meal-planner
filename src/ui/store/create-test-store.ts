@@ -5,9 +5,12 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
+import { createCalendarDate } from '../../domain/entities/calendar-date';
+import { DriftingClock } from '../../domain/test-doubles/drifting-clock';
 import { InMemoryConviveRepository } from '../../domain/test-doubles/in-memory-convive-repository';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
 import { StubAuthGateway } from '../../domain/test-doubles/stub-auth-gateway';
@@ -34,6 +37,12 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
     generateMenu: generateMenuUseCase({
       recipeRepository,
       randomPicker: MathRandomPicker.create(() => 0),
+    }),
+    // Horloge partie d'un DIMANCHE (23 août 2026), et qui dérive d'un jour par lecture comme
+    // le port l'autorise. Le dimanche interdit de confondre « prochain lundi » avec
+    // « aujourd'hui » ; la dérive interdit de mémoriser la première lecture.
+    nextMonday: nextMondayUseCase({
+      clock: DriftingClock.startingOn(createCalendarDate({ year: 2026, month: 8, day: 23 })),
     }),
     listConvives: listConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({

@@ -10,6 +10,7 @@ import {
   refreshMenuRecipes,
   selectMenu,
 } from './menu-slice';
+import { menuDayLabel } from './menu-day-label';
 import { MenuScreen, type MenuDay, type MenuScreenProps } from './MenuScreen';
 
 const CRENEAU_LABELS: Record<string, string> = {
@@ -24,7 +25,11 @@ function toDays(menu: Menu, recipes: Recipe[]): MenuDay[] {
   for (const repas of menu.repas) {
     let day = byJour.get(repas.jour);
     if (day === undefined) {
-      day = { key: String(repas.jour), label: `Jour ${repas.jour + 1}`, slots: [] };
+      day = {
+        key: String(repas.jour),
+        label: menuDayLabel(menu.dateDebut, repas.jour),
+        slots: [],
+      };
       byJour.set(repas.jour, day);
     }
     for (const slot of repas.slots) {

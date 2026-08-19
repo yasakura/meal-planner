@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
+import { createCalendarDate } from '../../../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../../../domain/entities/menu';
 import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
@@ -18,8 +19,13 @@ import {
   type MenuState,
 } from './menu-slice';
 
+// Lundi 24 août 2026 : le prochain lundi vu depuis l'horloge de `createTestStore`, qui part
+// d'un DIMANCHE (23 août). Une date de début égale à « aujourd'hui » ne pourrait pas passer.
+const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+
 function aMenu(): Menu {
   return createMenu({
+    dateDebut: LUNDI_24_AOUT,
     repas: [
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
@@ -38,6 +44,7 @@ function twoRecipes(): Recipe[] {
 // retombe sur « Recette inconnue » si un catalogue périmé écrase le catalogue courant.
 function aMenuAvecR3(): Menu {
   return createMenu({
+    dateDebut: LUNDI_24_AOUT,
     repas: [
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r3' })] }),
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
@@ -92,8 +99,8 @@ describe('menu slice', () => {
     });
   });
 
-  it('generateMenu transmet le nombre de jours au use case de génération', async () => {
-    let received: { days: number } | null = null;
+  it('generateMenu transmet le nombre de jours et la date de début au use case de génération', async () => {
+    let received: { days: number; dateDebut: unknown } | null = null;
     const generate: GenerateMenu = async (input) => {
       received = input;
       return aMenu();
@@ -105,7 +112,10 @@ describe('menu slice', () => {
 
     await store.dispatch(generateMenu(5));
 
-    expect(received).toEqual({ days: 5 });
+    // La date de début n'est PAS choisie par l'écran : c'est le prochain lundi vu de
+    // l'horloge. `createTestStore` part d'un dimanche 23 août 2026, d'où le lundi 24 — une
+    // implémentation qui transmettrait « aujourd'hui » rendrait le 23.
+    expect(received).toEqual({ days: 5, dateDebut: { year: 2026, month: 8, day: 24 } });
   });
 
   it('generateMenu en échec, depuis un menu déjà affiché, repart en error en effaçant menu/recettes et porte le message', async () => {
@@ -520,5 +530,31 @@ describe('menu slice', () => {
       selectedDays: 7,
       latestRecipesRequestId: regeneration.meta.requestId,
     });
+  });
+
+  it('recalcule la date de début à CHAQUE génération, sans figer celle de la première', async () => {
+    // L'horloge de `createTestStore` dérive d'un jour par lecture — le port `Clock` ne promet
+    // aucune stabilité. Partie du dimanche 23 août : la 1ʳᵉ génération lit un dimanche (→ lundi
+    // 24), la 2ᵉ un lundi (→ ce lundi 24 même, la règle inclut aujourd'hui), la 3ᵉ un mardi
+    // (→ lundi 31). Une date mémorisée au premier appel rendrait trois fois le 24.
+    const dates: unknown[] = [];
+    const generate: GenerateMenu = async (input) => {
+      dates.push(input.dateDebut);
+      return aMenu();
+    };
+    const store = createTestStore({
+      generateMenu: generate,
+      listRecipes: async () => twoRecipes(),
+    });
+
+    await store.dispatch(generateMenu(7));
+    await store.dispatch(generateMenu(7));
+    await store.dispatch(generateMenu(7));
+
+    expect(dates).toEqual([
+      { year: 2026, month: 8, day: 24 },
+      { year: 2026, month: 8, day: 24 },
+      { year: 2026, month: 8, day: 31 },
+    ]);
   });
 });
