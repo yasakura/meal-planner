@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { failReads, restore } from './support/e2e-controls';
+import { attendreAtteignable } from './support/atteignabilite';
+import { failReads, failWrites, restore } from './support/e2e-controls';
 
 /**
  * Ordre attendu du catalogue : alphabétique par titre, collation française. Il n'est PAS
@@ -209,9 +210,13 @@ test.describe('Catalogue hors ligne', () => {
     await failReads(page);
     await page.click('nav a[href="/catalogue"]');
 
-    await expect(
-      page.getByText('Aucune connexion — le catalogue n’a pas pu être chargé.'),
-    ).toBeVisible();
+    // Le RÔLE autant que le texte : l'écran déclare `status` (poli) et non `alert` (assertif)
+    // parce qu'une absence de réseau n'appelle aucune action immédiate. Aucun scénario ne
+    // l'assertait — tout basculer en `alert` serait passé inaperçu. `status` est unique dans le
+    // document sur cet écran, donc le rôle suffit à désigner la cible.
+    await expect(page.getByRole('status')).toHaveText(
+      'Aucune connexion — le catalogue n’a pas pu être chargé.',
+    );
 
     // Le défaut vécu : hors ligne, l'écran affirmait un catalogue VIDE. Une absence de réseau
     // n'est pas une absence de recette. (Les mêmes localisateurs trouvent bien quelque chose
@@ -229,9 +234,9 @@ test.describe('Catalogue hors ligne', () => {
     await page.goto('/menu');
     await failReads(page);
     await page.click('nav a[href="/catalogue"]');
-    await expect(
-      page.getByText('Aucune connexion — le catalogue n’a pas pu être chargé.'),
-    ).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText(
+      'Aucune connexion — le catalogue n’a pas pu être chargé.',
+    );
     // Le localisateur court, celui de l'absence plus bas, vu ici en train de trouver le constat.
     await expect(page.getByText('Aucune connexion')).toHaveCount(1);
 
@@ -252,7 +257,10 @@ test.describe('Catalogue hors ligne', () => {
   test('une recette qui n’existe pas le dit, sans piéger l’utilisateur', async ({ page }) => {
     await page.goto('/catalogue/recette-qui-nexiste-pas');
 
-    await expect(page.getByText('Recette introuvable')).toHaveCount(1);
+    // `alert` (assertif) et non `status` : une recette introuvable interrompt le parcours, elle
+    // appelle une action. La distinction est argumentée dans `RecipeDetailScreen` et n'était
+    // assertée nulle part.
+    await expect(page.getByRole('alert')).toHaveText('Recette introuvable');
     await expect(page.getByRole('link', { name: '← Recettes' })).toBeVisible();
   });
 
@@ -263,11 +271,15 @@ test.describe('Catalogue hors ligne', () => {
     await failReads(page);
     await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
 
-    await expect(
-      page.getByText('Aucune connexion — la recette n’a pas pu être chargée.'),
-    ).toBeVisible();
+    // `status` et non `alert` : même arbitrage que pour le catalogue hors ligne, et c'est ici
+    // qu'il se distingue de l'`alert` du scénario témoin juste au-dessus — deux constats sur le
+    // MÊME écran, dont un seul interrompt le parcours.
+    await expect(page.getByRole('status')).toHaveText(
+      'Aucune connexion — la recette n’a pas pu être chargée.',
+    );
     // Hors ligne n'est pas « cette recette n'existe pas » : l'écran ne doit pas l'affirmer.
-    // Même localisateur que le scénario témoin juste au-dessus, où il trouve bien son texte.
+    // Le scénario témoin juste au-dessus montre ce TEXTE là où il a le droit d'exister, ce qui
+    // rend cette absence parlante : renommé ou disparu, le témoin rougit le premier.
     await expect(page.getByText('Recette introuvable')).toHaveCount(0);
 
     // Sans lien retour, l'utilisateur est piégé sur un écran qui ne montre rien.
@@ -278,5 +290,173 @@ test.describe('Catalogue hors ligne', () => {
     await retour.click();
     await expect(page).toHaveURL('/catalogue');
     await expect(titresDuCatalogue(page)).toHaveText(TITRES_TRIES);
+  });
+});
+
+/**
+ * Issues #32 et #37 — des commandes rendues SOUS les barres collantes.
+ *
+ * Ni la RTL ni les autres scénarios de cette suite ne peuvent voir ce défaut : la RTL ignore la
+ * mise en page, et Playwright fait défiler l'élément dans la vue avant de cliquer. Les deux
+ * « cliquent » un bouton que l'utilisateur ne peut pas atteindre — même famille que le champ
+ * `disabled` de FR-3 : un test qui emprunte un chemin qu'aucun humain ne peut prendre.
+ *
+ * Le seul filet possible est donc une MESURE de position dans un vrai navigateur, sans aucun
+ * défilement préalable : c'est l'atteignabilité AU REPOS, à l'ouverture de l'écran.
+ *
+ * Ces scénarios vivaient dans un `layout.spec.ts` à part, aujourd'hui supprimé. Ils sont revenus
+ * AUPRÈS du parcours qu'ils protègent : la mise en page du catalogue et de son formulaire n'est
+ * pas un sujet transverse, c'est une propriété de ces écrans-là. Ce qui les accompagnait et ne
+ * mesurait que du DÉFILEMENT MORT — un proxy — est parti avec le fichier.
+ */
+test.describe('Mise en page du catalogue', () => {
+  test('le bouton d’enregistrement du formulaire est atteignable sans défiler', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue/nouvelle');
+
+    // Le formulaire est rempli pour que le bouton soit ACTIF : on mesure la commande telle que
+    // l'utilisateur la trouve au moment où il veut s'en servir, pas une commande inerte.
+    await page.getByLabel('Titre').fill('Tarte aux poireaux');
+    await page.locator('#ingredient-name-0').fill('Poireaux');
+    await page.locator('#ingredient-quantity-0').fill('3');
+
+    const bouton = page.getByRole('button', { name: 'Enregistrer' });
+    await expect(bouton).toBeEnabled();
+
+    // `fill()` a fait défiler les champs dans la vue ; `attendreAtteignable` revient au repos,
+    // la position où l'écran s'ouvre, et l'assert.
+    const mesure = await attendreAtteignable(bouton);
+
+    // Les SEULS `largeur`/`hauteur` encore vivants de la suite, et ils le sont parce que la
+    // cible n'est gagée que par `toBeEnabled()`, qui n'implique AUCUNE boîte : un bouton actif
+    // de taille nulle rendrait `elementFromPoint` tout aussi nul, et le scénario serait vert
+    // sans rien avoir vu. Partout ailleurs un `toBeVisible()` précédait, et il exige déjà une
+    // boîte englobante non vide — les mêmes deux lignes y étaient mortes, elles ont été
+    // retirées. Ne pas les supprimer ici par symétrie : le gage n'y est pas.
+    expect(mesure.largeur).toBeGreaterThan(0);
+    expect(mesure.hauteur).toBeGreaterThan(0);
+  });
+
+  /**
+   * F1 — le constat d'échec voyage-t-il AVEC la commande ? Le bouton remonte avec la barre
+   * collante ; un message resté à sa position naturelle finit sous le pli, et l'utilisateur
+   * qui vient de cliquer ne voit rien — il reclique. Même famille que l'échec d'ajout
+   * silencieux de FR-3.
+   *
+   * `toBeVisible()` ne suffit pas ici : il ne regarde pas si un autre élément recouvre la
+   * cible, ni si elle est hors du viewport. Seule la mesure de position le dit.
+   */
+  test('le constat d’échec d’enregistrement est visible sans défiler', async ({ page }) => {
+    // On arme la panne AVANT d'entrer dans le formulaire, et on y entre par le lien : un
+    // `page.goto()` recréerait le store, donc le commutateur, et l'écriture réussirait.
+    await page.goto('/catalogue');
+    await failWrites(page);
+    await page.getByRole('link', { name: 'Ajouter une recette' }).click();
+
+    await page.getByLabel('Titre').fill('Tarte aux poireaux');
+    await page.locator('#ingredient-name-0').fill('Poireaux');
+    await page.locator('#ingredient-quantity-0').fill('3');
+
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    const constat = page.getByText('Impossible d’enregistrer la recette.');
+    await expect(constat).toBeVisible();
+
+    // Retour au repos : l'utilisateur n'a pas défilé, il a cliqué une commande qui était là.
+    await attendreAtteignable(constat);
+  });
+
+  /**
+   * F2 — une barre collante ne réserve pas sa place : le formulaire défile DERRIÈRE elle. Sans
+   * fond opaque, ses champs se voient au travers de la marge de la barre, et l'utilisateur ne
+   * sait plus où le champ s'arrête ni où la commande commence. Le fond n'est donc pas un
+   * ornement : il est ce qui fait de la barre une surface, et non un trou.
+   */
+  test('la barre d’action masque le contenu qui défile dessous', async ({ page }) => {
+    await page.goto('/catalogue/nouvelle');
+    const bouton = page.getByRole('button', { name: 'Enregistrer' });
+    await expect(bouton).toBeVisible();
+
+    const fonds = await bouton.evaluate((element) => {
+      const barre = element.parentElement as HTMLElement;
+      const ecran = barre.closest('main > div') as HTMLElement;
+      return {
+        barre: getComputedStyle(barre).backgroundColor,
+        ecran: getComputedStyle(ecran).backgroundColor,
+      };
+    });
+
+    // Gage : si l'écran lui-même était transparent, l'égalité ci-dessous serait vraie et muette.
+    expect(fonds.ecran).not.toBe('rgba(0, 0, 0, 0)');
+    expect(fonds.barre).toBe(fonds.ecran);
+  });
+
+  /**
+   * `elementFromPoint` prouve que la commande est ATTEIGNABLE ; il ne dit pas OÙ. Ce scénario-ci
+   * gage la coordonnée, et avec elle ce que l'atteignabilité ne peut pas voir : que la barre
+   * d'action et la tab bar lisent bien LA MÊME hauteur. `--tabbar-h` est publiée par `Layout`,
+   * consommée comme décalage par la barre d'action dans un autre fichier, et déclarée comme
+   * hauteur par la tab bar dans un troisième ; le jour où l'un des deux consommateurs cesse de la
+   * lire — valeur écrite en dur, hauteur redevenue émergente —, la barre cesse d'être posée sur
+   * le haut de la tab bar, et cette égalité le dit immédiatement, à chaque exécution.
+   *
+   * Ce qu'il ne gage PAS, contrairement à ce qu'on pourrait lire dans l'égalité : la VALEUR de
+   * `--tabbar-h`. Les deux membres en dérivent — `bottom: var(--tabbar-h)` d'un côté,
+   * `height: var(--tabbar-h)` de l'autre —, donc la porter à 72px les déplace ensemble et le
+   * scénario reste vert. Le PLANCHER de cette valeur — la hauteur qu'il faut au contenu des
+   * onglets — n'est plus tenu par aucun scénario : celui qui s'en chargeait mesurait des pixels
+   * à 0,1 px près, donc dépendait de la police que la machine résout pour `system-ui`, pour un
+   * débordement qui n'apparaît qu'à des tailles que l'application n'utilise jamais.
+   *
+   * C'est la BARRE qui est mesurée, et non le bouton qu'elle contient : la barre lui réserve du
+   * padding, donc le bas du bouton n'est plus le bas de ce qui se pose sur la tab bar.
+   */
+  test('la barre d’action se pose exactement sur le haut de la tab bar', async ({ page }) => {
+    await page.goto('/catalogue/nouvelle');
+    const bouton = page.getByRole('button', { name: 'Enregistrer' });
+    const tabBar = page.getByRole('navigation');
+    await expect(bouton).toBeVisible();
+    await expect(tabBar).toBeVisible();
+
+    const barre = await bouton.evaluate((element) => {
+      const boite = (element.parentElement as HTMLElement).getBoundingClientRect();
+      return { bas: boite.bottom, hauteur: boite.height };
+    });
+    const hautDeLaTabBar = await tabBar.evaluate((element) => element.getBoundingClientRect().top);
+
+    // Gages : deux boîtes effondrées rendraient `0 === 0`, vrai et muet.
+    expect(barre.hauteur).toBeGreaterThan(0);
+    expect(hautDeLaTabBar).toBeGreaterThan(0);
+    expect(barre.bas).toBe(hautDeLaTabBar);
+  });
+
+  /**
+   * F4 — sur un écran COURT, la seule chose qui pousse la tab bar au bas du viewport est le
+   * `flex: 1` de `Content` : `Shell` garde son `min-height`, donc « la page ne défile pas »
+   * reste vrai pendant que la tab bar flotte au milieu de l'écran. C'est la raison pour laquelle
+   * ce scénario a survécu aux trois « tient dans l'écran, sans aucun défilement » qui
+   * l'entouraient : eux mesuraient du défilement MORT, un proxy aveugle à ce décrochage ; lui
+   * mesure DIRECTEMENT la conséquence visible, la seule que l'utilisateur constate.
+   *
+   * Rangé au catalogue, et non au menu : c'est `/catalogue?recipes=0` qu'il ouvre, et c'est déjà
+   * ce fichier qui possède l'écran vide du catalogue.
+   */
+  test('la tab bar se pose au bas de l’écran quand le contenu est court', async ({ page }) => {
+    await page.goto('/catalogue?recipes=0');
+    const tabBar = page.getByRole('navigation');
+    await expect(tabBar).toBeVisible();
+
+    const mesure = await tabBar.evaluate((element) => ({
+      bas: element.getBoundingClientRect().bottom,
+      hauteur: element.getBoundingClientRect().height,
+      viewport: document.documentElement.clientHeight,
+    }));
+
+    // Le gage est le `toBeVisible()` ci-dessus, et lui seul suffit : il exige déjà une boîte
+    // englobante non vide, donc une tab bar effondrée — qui poserait son bas n'importe où — ne
+    // peut pas arriver jusqu'ici. Un `expect(mesure.hauteur).toBeGreaterThan(0)` a occupé cette
+    // place et ne pouvait pas rougir ; ne pas le remettre.
+    expect(mesure.bas).toBe(mesure.viewport);
   });
 });

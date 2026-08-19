@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { atteignabilite } from './support/atteignabilite';
+import { attendreAtteignable } from './support/atteignabilite';
 import { failWrites, restore } from './support/e2e-controls';
 
 /**
@@ -309,13 +309,9 @@ test.describe('Modifier une recette hors ligne', () => {
     const constat = page.getByText('Impossible d’enregistrer la recette.');
     await expect(constat).toBeVisible();
 
-    // L'utilisateur n'a pas défilé : il a cliqué une commande qui était là, au repos.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const mesure = await atteignabilite(constat);
-    expect(mesure.largeur).toBeGreaterThan(0);
-    expect(mesure.hauteur).toBeGreaterThan(0);
-    expect(mesure.defilement).toBe(0);
-    expect(mesure.obstacle).toBeNull();
+    // L'utilisateur n'a pas défilé : il a cliqué une commande qui était là, au repos. Le retour
+    // en haut et les deux assertions vivent dans `attendreAtteignable`.
+    await attendreAtteignable(constat);
 
     // On reste sur le formulaire : l'échec ne fait pas croire à un succès en renavigüant.
     await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois/modifier');
