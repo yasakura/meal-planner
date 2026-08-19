@@ -1,16 +1,18 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
-import { createCalendarDate } from '../../../domain/entities/calendar-date';
+import { createCalendarDate, type CalendarDate } from '../../../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../../../domain/entities/menu';
 import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
+import { nextMondayUseCase, type NextMonday } from '../../../domain/use-cases/next-monday';
+import { DriftingClock } from '../../../domain/test-doubles/drifting-clock';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import { MenuContainer } from './MenuContainer';
@@ -50,9 +52,28 @@ function renderOn(store: TestStore) {
   );
 }
 
-function renderWithStore(overrides: { generateMenu?: GenerateMenu; listRecipes?: ListRecipes }) {
+function renderWithStore(overrides: {
+  generateMenu?: GenerateMenu;
+  listRecipes?: ListRecipes;
+  nextMonday?: NextMonday;
+}) {
   const store = createTestStore(overrides);
   return { store, ...renderOn(store) };
+}
+
+// Le champ natif n'est pas une zone de texte : on ne le « tape » pas, le système y dépose une
+// valeur d'un coup. `fireEvent.change` reproduit exactement ce que le navigateur émet.
+function choisirLaDateDeDebut(valeur: string) {
+  fireEvent.change(screen.getByLabelText('Début du menu'), { target: { value: valeur } });
+}
+
+// Menu daté par la date REÇUE, et non par un littéral : c'est le seul moyen de suivre la date
+// choisie jusqu'aux en-têtes de jour affichés.
+function menuDatedOn(dateDebut: CalendarDate): Menu {
+  return createMenu({
+    dateDebut,
+    repas: [createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] })],
+  });
 }
 
 describe('MenuContainer', () => {
@@ -462,5 +483,103 @@ describe('MenuContainer', () => {
     // serait tout aussi vrai sur un écran qui ne s'est jamais affiché.
     expect(await screen.findByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
     expect(listCalls).toBe(0);
+  });
+
+  /**
+   * TRANCHE 2 — le jour de début est CHOISI. Le contrôle est le champ natif `<input type="date">` :
+   * le système ouvre son propre sélecteur, localisé et accessible, et n'échange que des chaînes
+   * `AAAA-MM-JJ`. Ni l'écran ni le container ne traduisent : la traduction vit dans `CalendarDate`.
+   *
+   * Le mercredi 2 septembre 2026 est choisi partout ici parce qu'il n'est PAS le prochain lundi
+   * vu de l'horloge de test (24 août), ni celui de la lecture suivante (31 août) : un écran qui
+   * reposerait le défaut au lieu de lire la préférence ne peut pas l'afficher.
+   */
+  it('affiche un champ « Début du menu » renseigné au prochain lundi', () => {
+    renderWithStore({});
+
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
+  });
+
+  it('choisir une date de début, puis générer : le menu part de cette date', async () => {
+    const user = userEvent.setup();
+    const generate: GenerateMenu = async ({ dateDebut }) => menuDatedOn(dateDebut);
+    renderWithStore({ generateMenu: generate, listRecipes: async () => twoRecipes() });
+
+    choisirLaDateDeDebut('2026-09-02');
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-09-02');
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    // La date choisie est descendue jusqu'à l'en-tête du premier jour : le mercredi 2 septembre
+    // ne peut venir ni du défaut, ni d'un littéral du double.
+    expect(await screen.findByText('mercredi 2 septembre')).toBeInTheDocument();
+  });
+
+  /**
+   * Le champ de la branche `success` a son PROPRE câblage, comme le sélecteur segmenté avant lui :
+   * `onStartDateChange: () => {}` sur cette branche-là laisserait verts tous les scénarios qui
+   * partent de `idle`, pour un champ qui ne bouge pas sous le doigt. `MenuContainer.tsx` n'est
+   * pas muté — ce trou ne se bouche qu'ici.
+   */
+  it('depuis le menu affiché, changer la date et régénérer : le menu repart de la nouvelle date', async () => {
+    const user = userEvent.setup();
+    const generate: GenerateMenu = async ({ dateDebut }) => menuDatedOn(dateDebut);
+    renderWithStore({ generateMenu: generate, listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    // GAGE : on part bien du prochain lundi affiché, sinon le changement affirmé ensuite serait
+    // vrai sans qu'aucune saisie n'ait rien changé.
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
+
+    choisirLaDateDeDebut('2026-09-02');
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-09-02');
+
+    await user.click(screen.getByRole('button', { name: /régénérer/i }));
+
+    expect(await screen.findByText('mercredi 2 septembre')).toBeInTheDocument();
+    expect(screen.queryByText('lundi 24 août')).not.toBeInTheDocument();
+  });
+
+  /**
+   * Même règle que la fenêtre (issue #28) : la date de début est une PRÉFÉRENCE, elle vit dans le
+   * store et survit au démontage du container. Dans un `useState`, un aller-retour vers le
+   * catalogue la ramènerait au prochain lundi au-dessus d'un menu qui commence ailleurs.
+   */
+  it('la date de début choisie survit à un remontage sur le MÊME store', () => {
+    const { store, unmount } = renderWithStore({});
+
+    choisirLaDateDeDebut('2026-09-02');
+    unmount();
+    renderOn(store);
+
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-09-02');
+  });
+
+  /**
+   * LE PIÈGE de l'initialisation. Le port `Clock` ne promet rien entre deux lectures, et son
+   * double AVANCE d'un jour à chaque appel : une date par défaut relue à chaque montage
+   * changerait de semaine en cours de session — trois allers-retours vers le catalogue et le
+   * menu proposerait le lundi 31 août sans que l'utilisateur ait rien touché.
+   *
+   * L'horloge n'est donc lue qu'UNE fois par session, à la naissance du store. Le compte
+   * l'exige en forme permanente : un mécanisme qui relirait au montage le ferait grimper à 3,
+   * et la valeur affichée dériverait avec lui.
+   */
+  it('n’interroge l’horloge qu’UNE fois par session, quel que soit le nombre de montages', () => {
+    let lectures = 0;
+    const clock = DriftingClock.startingOn(createCalendarDate({ year: 2026, month: 8, day: 23 }));
+    const prochainLundi = nextMondayUseCase({ clock });
+    const nextMonday: NextMonday = () => {
+      lectures += 1;
+      return prochainLundi();
+    };
+    const { store, unmount } = renderWithStore({ nextMonday });
+
+    unmount();
+    renderOn(store).unmount();
+    renderOn(store);
+
+    expect(lectures).toBe(1);
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
   });
 });

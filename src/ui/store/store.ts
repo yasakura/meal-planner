@@ -14,7 +14,7 @@ import { type UpdateRecipe } from '../../domain/use-cases/update-recipe';
 import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
 import { convivesReducer } from '../features/convives/convives-slice';
-import { menuReducer } from '../features/menu/menu-slice';
+import { menuInitialState, menuReducer } from '../features/menu/menu-slice';
 import { recipeDetailReducer } from '../features/recipe-detail/recipe-detail-slice';
 import { recipeEditReducer } from '../features/recipe/recipe-edit-slice';
 import { recipeReducer } from '../features/recipe/recipe-slice';
@@ -46,6 +46,12 @@ const rootReducer = combineReducers({
 export function createStore(dependencies: AppDependencies) {
   return configureStore({
     reducer: rootReducer,
+    // Le menu naît avec sa date de début : le prochain lundi, lu UNE fois ici. `initialState`
+    // est statique et ne peut appeler aucun port ; c'est le seul endroit où le store dispose
+    // à la fois de ses dépendances et de son état de départ. Corollaire recherché : l'horloge
+    // n'est jamais relue au montage d'un écran, donc la date par défaut ne dérive pas d'un
+    // aller-retour à l'autre (le port `Clock` ne promet rien entre deux lectures).
+    preloadedState: { menu: menuInitialState(dependencies.nextMonday()) },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({ thunk: { extraArgument: dependencies } }),
   });

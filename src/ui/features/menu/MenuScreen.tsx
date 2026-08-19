@@ -10,6 +10,8 @@ export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
 export type MenuScreenProps =
   | {
       status: 'idle';
+      startDateIso: string;
+      onStartDateChange: (iso: string) => void;
       selectedDays: number;
       onSelect: (days: number) => void;
       onGenerate: () => void;
@@ -19,6 +21,8 @@ export type MenuScreenProps =
   | {
       status: 'success';
       days: MenuDay[];
+      startDateIso: string;
+      onStartDateChange: (iso: string) => void;
       selectedDays: number;
       onSelect: (days: number) => void;
       onRegenerate: () => void;
@@ -59,6 +63,51 @@ const Segment = styled.button<{ $active: boolean }>`
   font-size: 14px;
   padding: ${space.sm}px ${space.lg}px;
 `;
+
+const Field = styled.div`
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: ${space.xs}px;
+  margin-bottom: ${space.lg}px;
+`;
+
+const FieldLabel = styled.label`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.inkSecondary};
+`;
+
+const DateInput = styled.input`
+  background: transparent;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${tokens.radii.sm};
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 15px;
+  padding: ${space.sm}px ${space.md}px;
+`;
+
+const START_DATE_FIELD_ID = 'menu-start-date';
+
+/**
+ * Champ natif : sur mobile, le système ouvre son propre sélecteur — localisé, accessible, et
+ * gratuit. Il n'échange que des chaînes `AAAA-MM-JJ`, que l'écran transmet telles quelles :
+ * la traduction vers une date civile appartient au domaine, pas à un composant.
+ */
+function StartDatePicker(props: { value: string; onChange: (iso: string) => void }) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={START_DATE_FIELD_ID}>Début du menu</FieldLabel>
+      <DateInput
+        id={START_DATE_FIELD_ID}
+        type="date"
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+      />
+    </Field>
+  );
+}
 
 const MENU_WINDOWS: { days: number; label: string }[] = [
   { days: 7, label: '1 semaine' },
@@ -211,6 +260,7 @@ function Body(props: MenuScreenProps) {
       return (
         <>
           <Intro>Génère un menu à partir de tes recettes.</Intro>
+          <StartDatePicker value={props.startDateIso} onChange={props.onStartDateChange} />
           <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
           <PrimaryButton type="button" onClick={props.onGenerate}>
             Générer un menu
@@ -259,6 +309,7 @@ function Body(props: MenuScreenProps) {
               </DaySection>
             ))}
           </DayList>
+          <StartDatePicker value={props.startDateIso} onChange={props.onStartDateChange} />
           <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
           <PrimaryButton type="button" onClick={props.onRegenerate}>
             Régénérer

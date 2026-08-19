@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
+import { parseIsoDate, toIsoDate, type CalendarDate } from '../../../domain/entities/calendar-date';
 import { type Menu } from '../../../domain/entities/menu';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type AppThunkApiConfig, type RootState } from '../../store/store';
@@ -15,6 +16,17 @@ export type MenuState = {
   // vit dans le store — comme le menu généré — pour que les deux ne puissent pas diverger au
   // gré des montages du container (issue #28). Aucune transition ne la remet à zéro.
   selectedDays: number;
+  /**
+   * Jour de début du menu, CHOISI par l'utilisateur. Préférence de même nature et de même durée
+   * de vie que `selectedDays` : aucune transition ne la remet à zéro, et la fenêtre du menu se
+   * lit « une date de début + une durée ». Le prochain lundi n'en est que la valeur par DÉFAUT.
+   *
+   * Le `| null` n'est PAS un état de l'application : `initialState` doit bien porter une valeur
+   * statique, et aucune date ne peut être écrite en dur là. C'est `menuInitialState`, appelée à
+   * la naissance du store avec le prochain lundi, qui la pose — tout store réel naît donc avec
+   * sa date. Seul un appel NU au reducer (`menuReducer(undefined, …)`) peut voir le null.
+   */
+  startDate: CalendarDate | null;
   /**
    * requestId de la DERNIÈRE lecture de recettes lancée. Plomberie de dispatch : aucun écran ne
    * le lit.
@@ -64,8 +76,30 @@ const initialState: MenuState = {
   recipes: null,
   error: null,
   selectedDays: DEFAULT_DAYS,
+  startDate: null,
   latestRecipesRequestId: null,
 };
+
+/**
+ * État d'un store NEUF, date de début comprise. Appelée par `createStore` avec le prochain lundi.
+ *
+ * L'horloge est ainsi lue UNE fois par session, à la naissance du store, et jamais au montage
+ * d'un écran : le port `Clock` ne promet rien entre deux lectures — son double avance d'un jour
+ * à chaque appel — donc une date par défaut relue à chaque arrivée sur /menu changerait de
+ * semaine au fil des allers-retours, sans que l'utilisateur ait rien touché. Une lecture unique
+ * n'a pas besoin d'être gardée : il n'y a pas de seconde lecture à empêcher.
+ */
+export function menuInitialState(startDate: CalendarDate): MenuState {
+  return { ...initialState, startDate };
+}
+
+/**
+ * La date de début d'un store réel, jamais nulle (voir `MenuState.startDate`). Un seul endroit
+ * porte cette affirmation, pour qu'il n'y en ait pas trois à réviser le jour où elle change.
+ */
+function startDateOf(state: MenuState): CalendarDate {
+  return state.startDate as CalendarDate;
+}
 
 // Discriminant d'erreur métier : catalogue vide → pas de menu possible.
 export const NO_RECIPES = 'no-recipes';
@@ -85,10 +119,10 @@ export const generateMenu = createAsyncThunk<
     if (recipes.length === 0) {
       return thunkApi.rejectWithValue(NO_RECIPES);
     }
-    // La date de début n'est pas choisie par l'écran : c'est le prochain lundi, relu à chaque
-    // génération. Le figer une fois pour la session ferait démarrer un menu généré le mardi sur
-    // le lundi de la semaine passée.
-    const dateDebut = thunkApi.extra.nextMonday();
+    // La date de début est LUE, pas déduite : c'est la préférence de l'utilisateur, prochain
+    // lundi par défaut. La génération ne consulte plus l'horloge — deux générations d'affilée
+    // partent du même jour tant que personne n'a touché au champ.
+    const dateDebut = startDateOf(thunkApi.getState().menu);
     const menu = await thunkApi.extra.generateMenu({ days, dateDebut });
     return { menu, recipes };
   },
@@ -120,6 +154,19 @@ const menuSlice = createSlice({
   reducers: {
     menuWindowSelected(state, action: PayloadAction<number>) {
       state.selectedDays = action.payload;
+    },
+    /**
+     * Le champ natif n'échange que des chaînes `AAAA-MM-JJ`, et rend la chaîne VIDE quand
+     * l'utilisateur l'efface. Une chaîne qui ne désigne aucun jour ne remplace donc rien : la
+     * préférence précédente reste, et le store ne part pas en exception au milieu d'un reducer.
+     * La décision est ici, dans le slice qui est muté, et non dans le container qui ne l'est pas.
+     */
+    menuStartDateSelected(state, action: PayloadAction<string>) {
+      try {
+        state.startDate = parseIsoDate(action.payload);
+      } catch {
+        // Rien à choisir : la date de début ne bouge pas.
+      }
     },
   },
   extraReducers: (builder) => {
@@ -163,8 +210,12 @@ const menuSlice = createSlice({
   },
 });
 
-export const { menuWindowSelected } = menuSlice.actions;
+export const { menuStartDateSelected, menuWindowSelected } = menuSlice.actions;
 
 export const menuReducer = menuSlice.reducer;
 
 export const selectMenu = (state: RootState): MenuState => state.menu;
+
+// La date de début telle que le champ natif la veut. La traduction appartient à `CalendarDate` ;
+// ce sélecteur ne fait que l'appliquer, ici plutôt que dans un container non muté.
+export const selectStartDateIso = (state: RootState): string => toIsoDate(startDateOf(state.menu));

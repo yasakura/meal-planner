@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addDays, createCalendarDate, dayOfWeek } from './calendar-date';
+import { addDays, createCalendarDate, dayOfWeek, parseIsoDate, toIsoDate } from './calendar-date';
 
 describe('CalendarDate', () => {
   it('se crée valide et expose ses composants civils', () => {
@@ -130,5 +130,58 @@ describe('dayOfWeek', () => {
     ['samedi', { year: 2026, month: 8, day: 29 }, 6],
   ])('rend le rang du jour de la semaine : %s', (_label, props, expected) => {
     expect(dayOfWeek(createCalendarDate(props))).toBe(expected);
+  });
+});
+
+/**
+ * Format d'ÉCHANGE, pas concept métier : `<input type="date">` ne parle que cette chaîne-là.
+ * La traduction vit ici, dans l'entité, et non dans un container — un `.tsx` n'est pas muté.
+ */
+describe('toIsoDate', () => {
+  it('rend le format du champ natif : AAAA-MM-JJ', () => {
+    expect(toIsoDate(createCalendarDate({ year: 2026, month: 8, day: 24 }))).toBe('2026-08-24');
+  });
+
+  // Le champ natif n'accepte QUE la forme à zéros : « 2026-1-5 » ne le renseigne pas.
+  it('complète le mois et le quantième par un zéro', () => {
+    expect(toIsoDate(createCalendarDate({ year: 2026, month: 1, day: 5 }))).toBe('2026-01-05');
+  });
+});
+
+describe('parseIsoDate', () => {
+  it('relit le format du champ natif', () => {
+    expect(parseIsoDate('2026-08-24')).toEqual({ year: 2026, month: 8, day: 24 });
+  });
+
+  it('relit le 29 février d’une année bissextile', () => {
+    expect(parseIsoDate('2028-02-29')).toEqual({ year: 2028, month: 2, day: 29 });
+  });
+
+  it('rend une date gelée, comme la factory', () => {
+    expect(Object.isFrozen(parseIsoDate('2026-08-24'))).toBe(true);
+  });
+
+  /**
+   * Deux familles d'échecs, et la seconde est celle qu'un contrôle de FORME laisserait passer :
+   * « 2026-02-30 » est parfaitement bien formé et ne désigne aucun jour. La chaîne vide est le
+   * cas RÉEL du champ natif — c'est ce qu'il rend quand l'utilisateur l'efface.
+   */
+  it.each([
+    ['chaîne vide (le champ natif effacé)', ''],
+    ['date partielle', '2026-08'],
+    ['séparateurs français', '24/08/2026'],
+    ['mois et quantième sans zéro', '2026-8-4'],
+    ['horodatage complet', '2026-08-24T00:00:00'],
+    ['espace en tête', ' 2026-08-24'],
+    ['lettres', 'abcd-ef-gh'],
+    ['mois 13', '2026-13-01'],
+    ['mois 0', '2026-00-01'],
+    ['quantième 32', '2026-08-32'],
+    ['quantième 0', '2026-08-00'],
+    ['30 février', '2026-02-30'],
+    ['31 avril', '2026-04-31'],
+    ['29 février hors année bissextile', '2026-02-29'],
+  ])('rejette ce qui ne désigne aucun jour du calendrier : %s', (_label, iso) => {
+    expect(() => parseIsoDate(iso)).toThrow('La date civile est invalide');
   });
 });

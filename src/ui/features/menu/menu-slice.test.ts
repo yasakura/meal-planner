@@ -13,15 +13,22 @@ import { deferred } from '../../test-utils/deferred';
 import {
   generateMenu,
   menuReducer,
+  menuStartDateSelected,
   menuWindowSelected,
   refreshMenuRecipes,
   selectMenu,
+  selectStartDateIso,
   type MenuState,
 } from './menu-slice';
 
 // Lundi 24 août 2026 : le prochain lundi vu depuis l'horloge de `createTestStore`, qui part
 // d'un DIMANCHE (23 août). Une date de début égale à « aujourd'hui » ne pourrait pas passer.
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+
+// Mercredi 2 septembre 2026 : ni le prochain lundi vu de l'horloge de test (24 août), ni celui
+// de la lecture suivante (31 août). Une date de début qui vaut ce jour-là ne peut avoir été
+// que CHOISIE.
+const MERCREDI_2_SEPT = createCalendarDate({ year: 2026, month: 9, day: 2 });
 
 function aMenu(): Menu {
   return createMenu({
@@ -66,6 +73,9 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 14,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       // Aucune lecture n'a été lancée : il n'y a pas de « dernière » à mémoriser.
       latestRecipesRequestId: null,
     });
@@ -94,6 +104,9 @@ describe('menu slice', () => {
       // Jamais touchée par le cycle de génération : la fenêtre choisie reste celle de départ,
       // et NON l'argument passé au thunk.
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       // La génération lit le catalogue : c'est ELLE la dernière lecture lancée.
       latestRecipesRequestId: generated.meta.requestId,
     });
@@ -149,6 +162,9 @@ describe('menu slice', () => {
       recipes: null,
       error: 'Boom firestore',
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       // La SECONDE génération, celle qui a échoué : la mémoire suit la dernière lancée.
       latestRecipesRequestId: failed.meta.requestId,
     });
@@ -186,6 +202,9 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       latestRecipesRequestId: inFlight.requestId,
     });
   });
@@ -209,6 +228,9 @@ describe('menu slice', () => {
       recipes: null,
       error: 'no-recipes',
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       latestRecipesRequestId: refused.meta.requestId,
     });
     expect(generateCalled).toBe(false);
@@ -225,6 +247,10 @@ describe('menu slice', () => {
       recipes: null,
       error: 'Impossible de générer un menu sans recette',
       selectedDays: 7,
+      // Date de début NON-défaut : le lundi 24 août, qui EST le prochain lundi de
+      // l’horloge de test, ne distinguerait pas « la préférence a survécu » de « le
+      // défaut a été reposé ». Le mercredi 2 septembre, lui, ne peut venir que du store.
+      startDate: MERCREDI_2_SEPT,
       latestRecipesRequestId: 'req-0',
     };
 
@@ -236,6 +262,8 @@ describe('menu slice', () => {
       recipes,
       error: null,
       selectedDays: 7,
+      // Rendue INCHANGÉE : `fulfilled` ne repose pas le défaut par-dessus la préférence.
+      startDate: MERCREDI_2_SEPT,
       // `fulfilled` ne touche PAS la mémoire de fraîcheur : elle est posée au départ de la
       // lecture, pas à son arrivée. Elle reste donc sur 'req-0', pas sur l'id de cette action.
       latestRecipesRequestId: 'req-0',
@@ -253,6 +281,10 @@ describe('menu slice', () => {
       recipes: twoRecipes(),
       error: 'Impossible de générer un menu sans recette',
       selectedDays: 7,
+      // Date de début NON-défaut : le lundi 24 août, qui EST le prochain lundi de
+      // l’horloge de test, ne distinguerait pas « la préférence a survécu » de « le
+      // défaut a été reposé ». Le mercredi 2 septembre, lui, ne peut venir que du store.
+      startDate: MERCREDI_2_SEPT,
       latestRecipesRequestId: 'req-0',
     };
 
@@ -263,8 +295,10 @@ describe('menu slice', () => {
       menu: null,
       recipes: null,
       error: null,
-      // La transition qui efface TOUT le reste n'efface pas la fenêtre choisie.
+      // La transition qui efface TOUT le reste n'efface ni la fenêtre choisie…
       selectedDays: 7,
+      // … ni la date de début choisie.
+      startDate: MERCREDI_2_SEPT,
       // Le départ d'une génération PREND la main sur la lecture précédente ('req-0').
       latestRecipesRequestId: 'req-1',
     });
@@ -310,6 +344,9 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       latestRecipesRequestId: inFlight.requestId,
     });
 
@@ -322,6 +359,9 @@ describe('menu slice', () => {
       recipes,
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       latestRecipesRequestId: inFlight.requestId,
     });
   });
@@ -366,6 +406,9 @@ describe('menu slice', () => {
       recipes: catalogue,
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       // La relecture a pris la main sur la génération qui la précède.
       latestRecipesRequestId: refreshed.meta.requestId,
     });
@@ -417,6 +460,9 @@ describe('menu slice', () => {
       // Pas de message d'erreur : l'utilisateur n'a rien demandé.
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       // La relecture a bien pris la main au DÉPART, alors même qu'elle a échoué à l'arrivée.
       latestRecipesRequestId: result.meta.requestId,
     });
@@ -440,6 +486,9 @@ describe('menu slice', () => {
       recipes: null,
       error: null,
       selectedDays: 14,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       // Relecture bloquée au départ : `pending` n'a pas tourné, rien n'est mémorisé.
       latestRecipesRequestId: null,
     });
@@ -486,6 +535,9 @@ describe('menu slice', () => {
       recipes: aJour,
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       latestRecipesRequestId: courante.requestId,
     });
   });
@@ -528,15 +580,89 @@ describe('menu slice', () => {
       recipes: aJour,
       error: null,
       selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
       latestRecipesRequestId: regeneration.meta.requestId,
     });
   });
+});
 
-  it('recalcule la date de début à CHAQUE génération, sans figer celle de la première', async () => {
-    // L'horloge de `createTestStore` dérive d'un jour par lecture — le port `Clock` ne promet
-    // aucune stabilité. Partie du dimanche 23 août : la 1ʳᵉ génération lit un dimanche (→ lundi
-    // 24), la 2ᵉ un lundi (→ ce lundi 24 même, la règle inclut aujourd'hui), la 3ᵉ un mardi
-    // (→ lundi 31). Une date mémorisée au premier appel rendrait trois fois le 24.
+/**
+ * La date de début cesse d'être déduite à chaque génération : elle devient une PRÉFÉRENCE, de
+ * même nature et de même durée de vie que la fenêtre (issue #28). Le prochain lundi n'en est
+ * plus que la valeur par DÉFAUT, posée une fois à la naissance du store.
+ *
+ * Toutes les dates choisies dans ce bloc sont le MERCREDI 2 septembre 2026 : ni le prochain
+ * lundi vu de l'horloge de test (24 août), ni celui de la lecture suivante (31 août). Une
+ * implémentation qui recalculerait le défaut au lieu de lire la préférence ne peut pas le rendre.
+ */
+describe('menu slice — date de début', () => {
+  const MERCREDI_2_SEPT = '2026-09-02';
+
+  it('un store neuf part du prochain lundi vu de l’horloge', () => {
+    const store = createTestStore();
+
+    expect(selectMenu(store.getState()).startDate).toEqual({ year: 2026, month: 8, day: 24 });
+  });
+
+  it('offre la date de début au format du champ natif', () => {
+    const store = createTestStore();
+
+    expect(selectStartDateIso(store.getState())).toBe('2026-08-24');
+  });
+
+  it('choisir une date de début remplace la préférence', () => {
+    const store = createTestStore();
+
+    store.dispatch(menuStartDateSelected(MERCREDI_2_SEPT));
+
+    expect(selectMenu(store.getState()).startDate).toEqual({ year: 2026, month: 9, day: 2 });
+    expect(selectStartDateIso(store.getState())).toBe(MERCREDI_2_SEPT);
+  });
+
+  /**
+   * Le champ natif rend une chaîne VIDE quand l'utilisateur l'efface — c'est le cas réel, pas
+   * une hypothèse. Il n'y a alors aucune date à choisir : la préférence précédente reste, et
+   * surtout le store ne part pas en exception au milieu d'un reducer.
+   */
+  it.each([
+    ['le champ effacé', ''],
+    ['un jour qui n’existe pas', '2026-02-30'],
+    ['du texte', 'demain'],
+  ])('%s laisse la date de début inchangée', (_label, saisie) => {
+    const store = createTestStore();
+    store.dispatch(menuStartDateSelected(MERCREDI_2_SEPT));
+
+    store.dispatch(menuStartDateSelected(saisie));
+
+    expect(selectMenu(store.getState()).startDate).toEqual({ year: 2026, month: 9, day: 2 });
+  });
+
+  it('generateMenu transmet la date de début CHOISIE au use case de génération', async () => {
+    let received: { days: number; dateDebut: unknown } | null = null;
+    const generate: GenerateMenu = async (input) => {
+      received = input;
+      return aMenu();
+    };
+    const store = createTestStore({
+      generateMenu: generate,
+      listRecipes: async () => twoRecipes(),
+    });
+
+    store.dispatch(menuStartDateSelected(MERCREDI_2_SEPT));
+    await store.dispatch(generateMenu(5));
+
+    expect(received).toEqual({ days: 5, dateDebut: { year: 2026, month: 9, day: 2 } });
+  });
+
+  /**
+   * REMPLACE « recalcule la date de début à CHAQUE génération » : c'est exactement la règle
+   * inverse. L'horloge de test dérive d'un jour par lecture ; relue à la troisième génération,
+   * elle rendrait le lundi 31 août et le menu changerait de semaine sans que l'utilisateur ait
+   * touché à quoi que ce soit. Elle n'est plus lue qu'une fois, à la naissance du store.
+   */
+  it('ne recalcule PAS la date de début d’une génération à l’autre', async () => {
     const dates: unknown[] = [];
     const generate: GenerateMenu = async (input) => {
       dates.push(input.dateDebut);
@@ -554,7 +680,35 @@ describe('menu slice', () => {
     expect(dates).toEqual([
       { year: 2026, month: 8, day: 24 },
       { year: 2026, month: 8, day: 24 },
-      { year: 2026, month: 8, day: 31 },
+      { year: 2026, month: 8, day: 24 },
     ]);
+  });
+
+  /**
+   * Même règle que pour la fenêtre : aucune transition du cycle de génération ne remet la date
+   * de début à son défaut — ni `pending`, qui efface pourtant menu, recettes et erreur, ni
+   * `fulfilled`. Le mercredi 2 septembre le prouve ; le lundi 24 août, qui EST le défaut, ne
+   * distinguerait pas « la préférence a survécu » de « le défaut a été reposé ».
+   */
+  it('la date de début choisie survit à un cycle de génération complet (pending → fulfilled)', async () => {
+    const menu = aMenu();
+    let resolveGenerate!: (menu: Menu) => void;
+    const generated = new Promise<Menu>((resolve) => {
+      resolveGenerate = resolve;
+    });
+    const store = createTestStore({
+      generateMenu: () => generated,
+      listRecipes: async () => twoRecipes(),
+    });
+
+    store.dispatch(menuStartDateSelected(MERCREDI_2_SEPT));
+    const inFlight = store.dispatch(generateMenu(7));
+
+    expect(selectMenu(store.getState()).startDate).toEqual({ year: 2026, month: 9, day: 2 });
+
+    resolveGenerate(menu);
+    await inFlight;
+
+    expect(selectMenu(store.getState()).startDate).toEqual({ year: 2026, month: 9, day: 2 });
   });
 });
