@@ -160,31 +160,57 @@ test.describe('Menu', () => {
   });
 
   /**
-   * Le catalogue vide et le réseau coupé mènent au MÊME état `error` du slice, et ne se
-   * distinguent que par le message. Un menu qui accuserait le catalogue d'être vide alors que
-   * c'est le réseau qui manque enverrait l'utilisateur créer des recettes qu'il a déjà.
+   * Ce que ce scénario défend depuis toujours, et qui reste vrai : le catalogue vide et le réseau
+   * coupé sont deux constats DIFFÉRENTS. Un menu qui accuserait le catalogue d'être vide alors
+   * que c'est le réseau qui manque enverrait l'utilisateur créer des recettes qu'il a déjà.
+   *
+   * Ce qui est RÉVOQUÉ (itération « hors ligne simplifié ») : « et Réessayer le sort de là ».
+   * Hors ligne, l'écran n'offre plus aucun bouton — aucun ne peut aboutir — et porte son propre
+   * constat, qui nomme le MENU. La sortie existe toujours, mais elle se fait en REVENANT
+   * sur l'écran une fois le réseau rétabli : c'est ce que la seconde moitié exerce désormais, à
+   * la place du clic sur « Réessayer ».
    */
-  test('hors ligne, le menu ne dit pas que le catalogue est vide, et Réessayer le sort de là', async ({
+  test('hors ligne, le menu porte le constat du menu et non celui d’un catalogue vide', async ({
     page,
   }) => {
     // On arrive en `idle`, PUIS on coupe : `page.goto()` recrée le store, donc le commutateur.
     await page.goto('/menu');
     await failReads(page);
-    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    const generer = page.getByRole('button', { name: 'Générer un menu' });
+    // GAGE de l'absence affirmée plus bas : ce localisateur-ci trouve bel et bien son bouton
+    // avant que la panne ne le retire de l'écran.
+    await expect(generer).toHaveCount(1);
+    await generer.click();
 
-    await expect(page.getByRole('alert')).toHaveText('Impossible de générer le menu.');
-    // Le MÊME localisateur que l'absence de la fin, vu ici en train de trouver son texte.
-    await expect(page.getByText('Impossible de générer le menu.')).toHaveCount(1);
-    // Et le constat de l'AUTRE branche, celui du scénario témoin juste au-dessus, reste muet.
+    // Le constat NOMME l'écran : la lecture qui a échoué est celle du catalogue, mais on n'est
+    // pas dans un catalogue — c'est son menu que l'utilisateur venait voir.
+    // `exact: true` : sans lui, `getByText` cherche une SOUS-CHAÎNE, et cet écran-ci porte aussi
+    // « l’enregistrement du menu n’a pas pu être confirmé ». Les deux constats ne doivent jamais
+    // pouvoir se répondre l'un pour l'autre.
+    const constat = page.getByText('Aucune connexion — le menu n’a pas pu être chargé.', {
+      exact: true,
+    });
+    await expect(constat).toHaveCount(1);
+    // Le constat de l'AUTRE branche, celui du scénario témoin juste au-dessus, reste muet.
     await expect(page.getByText("Ajoute d'abord des recettes")).toHaveCount(0);
+    // Aucun bouton : ni « Générer un menu », ni « Réessayer » — dont le TÉMOIN est ce même
+    // scénario voisin, où il est bien visible là où le réessai a un sens.
+    await expect(generer).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Réessayer' })).toHaveCount(0);
 
+    // SORTIE de l'état, et sans bouton pour la déclencher : revenir sur l'écran rend l'offre de
+    // générer. Par les liens, jamais par l'URL — un `goto` recréerait le store, donc le
+    // commutateur de panne, et la sortie serait vraie pour de mauvaises raisons.
     await restore(page);
-    await page.getByRole('button', { name: 'Réessayer' }).click();
+    await page.click('nav a[href="/catalogue"]');
+    await page.click('nav a[href="/menu"]');
+    await generer.click();
 
     await expect(page.locator('main section')).toHaveCount(14);
     await expect(page.locator('main section li')).toHaveCount(28);
     await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
-    await expect(page.getByText('Impossible de générer le menu.')).toHaveCount(0);
+    // Le MÊME localisateur, vu trouver son texte plus haut : plus aucune trace du constat.
+    await expect(constat).toHaveCount(0);
   });
 
   /**
@@ -545,10 +571,35 @@ test.describe('Du menu à la fiche recette', () => {
     await retourMenu(page).click();
     await expect(page).toHaveURL('/menu');
 
-    // La sortie ramène sur quelque chose : le menu généré est toujours là, panne comprise —
-    // une relecture échouée ne le vide pas.
+    // La sortie ramène sur quelque chose, mais pas sur le menu : la relecture du catalogue
+    // échoue elle aussi, et l'écran DEVIENT le constat — celui du MENU, pas celui de la page
+    // des recettes. Rien de faux n'est affiché : des titres qu'on ne peut plus vérifier ne sont
+    // pas montrés.
+    // `exact: true` : sans lui, `getByText` cherche une SOUS-CHAÎNE, et cet écran-ci porte aussi
+    // « l’enregistrement du menu n’a pas pu être confirmé ».
+    const constat = page.getByText('Aucune connexion — le menu n’a pas pu être chargé.', {
+      exact: true,
+    });
+    await expect(constat).toHaveCount(1);
+    // Aucun bouton : ni « Régénérer », ni « Réessayer » ne peuvent aboutir sans réseau. Le
+    // TÉMOIN de ces absences est le scénario voisin « modifier une recette ouverte depuis le
+    // menu, puis revenir au menu », où le même localisateur trouve bien son bouton — et la
+    // sortie ci-dessous le retrouve à son tour.
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Réessayer' })).toHaveCount(0);
+    await expect(page.locator('main section')).toHaveCount(0);
+
+    // SORTIE de l'état, et sans bouton pour la déclencher : le menu n'a jamais quitté le store,
+    // et revenir sur l'écran relance la lecture. Par les liens, jamais par l'URL — un `goto`
+    // recréerait le store, donc effacerait le menu au lieu de le retrouver.
+    await restore(page);
+    await page.click('nav a[href="/catalogue"]');
+    await page.click('nav a[href="/menu"]');
+
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
     await expect(page.locator('main section')).toHaveCount(14);
     await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
+    // Le MÊME localisateur, vu trouver son texte plus haut : plus aucune trace du constat.
+    await expect(constat).toHaveCount(0);
   });
 });

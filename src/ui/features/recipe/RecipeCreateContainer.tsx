@@ -14,8 +14,7 @@ import { isSubmitDisabled } from './recipe-form-submission';
 import {
   createRecipe,
   recipeCreateNoticeOf,
-  recipeFormEdited,
-  recipeFormOpened,
+  recipeFormScreenOpened,
   selectIsCreationLocked,
   selectRecipeCreation,
   type RecipeFormNotice,
@@ -32,15 +31,16 @@ export function RecipeCreateContainer() {
   const [rowsConstat, setRowsConstat] = useState<string | null>(null);
 
   const creation = useAppSelector(selectRecipeCreation);
-  // Le verrou de l'ENVOI vit dans le slice, qui est muté : il tient pendant l'écriture ET tant
-  // qu'elle n'est pas acquittée. Les CHAMPS, eux, ne se verrouillent jamais — voir plus bas.
+  // Le verrou de l'ENVOI vit dans le slice, qui est muté : le temps de l'écriture, et rien de
+  // plus. Les CHAMPS, eux, ne se verrouillent jamais.
   const envoiVerrouille = useAppSelector(selectIsCreationLocked);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
-  // Un formulaire s'ouvre : on le SIGNALE au slice, qui décide seul s'il remet le statut à zéro.
+  // Un formulaire s'ouvre : on le SIGNALE au slice, qui décide seul s'il remet le cycle à zéro
+  // et pose l'identifiant du document à écrire. Le container n'en connaît aucun.
   useEffect(() => {
-    dispatch(recipeFormOpened());
+    dispatch(recipeFormScreenOpened());
   }, [dispatch]);
 
   // Le seul lien au cycle de vie dont dispose la suite du `then` plus bas : une promesse n'est pas
@@ -59,8 +59,7 @@ export function RecipeCreateContainer() {
 
   // Le PRÉDICAT DE SAISIE vit dans `recipe-form-submission.ts`, partagé avec la modification et
   // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas. Le verrou,
-  // lui, est propre à cet écran : `selectIsCreationLocked` tient aussi sur le non-acquitté,
-  // pour ne pas rouvrir la fabrique de doublon.
+  // lui, vient du slice — et il vaut désormais la même chose que celui de la modification.
   const submitDisabled = isSubmitDisabled({ locked: envoiVerrouille, title, rows });
   const submitLabel = creation.status === 'saving' ? 'Enregistrement…' : 'Enregistrer';
   // Le constat de saisie prime sur celui de l'enregistrement : c'est le dernier geste de
@@ -93,32 +92,7 @@ export function RecipeCreateContainer() {
     });
   };
 
-  /**
-   * La SAISIE est le mécanisme de récupération du constat non acquitté : elle l'efface et lève
-   * le verrou de l'envoi, sans dépendre d'aucun cycle de montage — quitter le formulaire pour le
-   * rouvrir abandonnerait tout ce qui y a été tapé. Les champs restent donc TOUJOURS éditables,
-   * là où le bouton, lui, est verrouillé. Chacun des quatre le déclenche, et c'est le slice —
-   * muté — qui décide s'il y a lieu d'en tenir compte.
-   */
-  const saisieModifiee = () => dispatch(recipeFormEdited());
-
-  const handleTitleChange = (value: string) => {
-    saisieModifiee();
-    setTitle(value);
-  };
-
-  const handleConvivesChange = (value: number) => {
-    saisieModifiee();
-    setConvives(value);
-  };
-
-  const handleInstructionsChange = (value: string) => {
-    saisieModifiee();
-    setInstructions(value);
-  };
-
   const handleRowChange = (index: number, patch: Partial<IngredientRow>) => {
-    saisieModifiee();
     setRowsConstat(null);
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
@@ -139,9 +113,9 @@ export function RecipeCreateContainer() {
       convives={convives}
       rows={rows}
       instructions={instructions}
-      onTitleChange={handleTitleChange}
-      onConvivesChange={handleConvivesChange}
-      onInstructionsChange={handleInstructionsChange}
+      onTitleChange={setTitle}
+      onConvivesChange={setConvives}
+      onInstructionsChange={setInstructions}
       onRowChange={handleRowChange}
       onAddRow={handleAddRow}
       onRemoveRow={handleRemoveRow}

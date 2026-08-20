@@ -106,7 +106,7 @@ test.describe('Foyer', () => {
 });
 
 test.describe('Foyer hors ligne', () => {
-  test('un ajout non confirmé nomme le convive, garde la saisie et verrouille le bouton', async ({
+  test('un ajout non confirmé nomme le convive, garde la saisie, et ne verrouille rien', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -125,13 +125,13 @@ test.describe('Foyer hors ligne', () => {
     await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile']);
     // La saisie survit : la re-taper à la main serait la punition d'une panne réseau.
     await expect(champPrenom(page)).toHaveValue('Zoé');
-    // Second appui verrouillé : l'écriture est réellement partie, un second id ferait doublon.
-    await expect(boutonAjouter(page)).toBeDisabled();
-    // Le champ, LUI, reste ouvert — c'est la frappe qui déverrouille.
+    // Rien n'est verrouillé. L'écriture est partie sous l'identifiant du brouillon : un second
+    // appui la RÉÉCRIT au même endroit, il ne peut pas dupliquer — il n'y a plus rien à empêcher.
+    await expect(boutonAjouter(page)).toBeEnabled();
     await expect(champPrenom(page)).toBeEnabled();
   });
 
-  test('une frappe efface le constat, déverrouille le bouton, et l’ajout suivant n’en garde aucune trace', async ({
+  test('le constat d’ajout survit à la frappe, et c’est le second envoi qui le solde', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -148,20 +148,20 @@ test.describe('Foyer hors ligne', () => {
     // vraies, donc muettes.
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
 
-    // UNE frappe, pas un remontage : le remontage n'est pas garanti — la sheet reste montée
-    // pendant sa transition de sortie, une réouverture rapide ne rejoue aucun effet.
+    // La frappe ne solde plus RIEN : le constat reste affiché, parce que rien n'oblige plus
+    // l'utilisateur à taper pour se libérer — le bouton n'a jamais été verrouillé.
     // `End` d'abord : `press()` commence par `focus()`, et Chromium place alors le curseur en
     // TÊTE du champ — un `Backspace` seul n'effacerait rien et ne changerait donc rien.
     await champPrenom(page).press('End');
     await champPrenom(page).press('Backspace');
     await expect(champPrenom(page)).toHaveValue('Zo');
 
-    await expect(page.getByText('Aucune connexion')).toHaveCount(0);
-    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
     await expect(boutonAjouter(page)).toBeEnabled();
 
-    // Sortie complète de l'état : le réseau revient, l'ajout aboutit, et l'écran ne se
-    // contredit pas — le convive dans la liste ET le constat d'échec, c'est le défaut vécu.
+    // SORTIE de l'état : le réseau revient, le SECOND ENVOI du même formulaire aboutit, et
+    // l'écran ne se contredit pas — le convive dans la liste ET le constat d'échec, c'est le
+    // défaut vécu. C'est le verdict suivant qui chasse le constat, pas la frappe.
     await restore(page);
     await champPrenom(page).fill('Zoé');
     await boutonAjouter(page).click();
@@ -172,7 +172,7 @@ test.describe('Foyer hors ligne', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
   });
 
-  test('un cycle de renommage inachevé rend les autres lignes inertes, une frappe les réveille, et le renommage abouti solde tout', async ({
+  test('un cycle de renommage inachevé laisse les autres lignes actionnables, et le renommage abouti solde tout', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -196,14 +196,14 @@ test.describe('Foyer hors ligne', () => {
     // libellé du champ d'édition.
     await expect(prenoms(page)).toHaveText(['Bruno', 'Chloé', 'Émile']);
 
-    // Les autres lignes sont inertes tant que ce cycle n'est pas soldé : ouvrir Bruno
-    // effacerait le constat d'Alice avant qu'il ait été lu, et déplacerait l'édition sous le
-    // brouillon en cours.
-    await expect(page.getByRole('button', { name: 'Renommer Bruno' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Retirer Bruno' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Renommer Chloé' })).toBeDisabled();
+    // Les autres lignes restent ACTIONNABLES : un constat ne retient plus personne. Le
+    // renommage vise un identifiant qui existe déjà — un second envoi est le même upsert, il ne
+    // peut rien dupliquer, donc il n'y a rien à verrouiller.
+    await expect(page.getByRole('button', { name: 'Renommer Bruno' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Retirer Bruno' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Renommer Chloé' })).toBeEnabled();
 
-    // Le verrou n'est pas une impasse : une frappe dans la ligne éditée solde le cycle.
+    // Et le constat SURVIT à la frappe : ce n'est plus elle qui solde le cycle.
     //
     // `getByLabel('Nouveau prénom pour Alice')` porte DEUX choses, et ce n'est pas un hasard :
     // il désigne le champ, et il assure au passage que le store garde l'ANCIEN prénom — le
@@ -216,14 +216,11 @@ test.describe('Foyer hors ligne', () => {
     await page.getByLabel('Nouveau prénom pour Alice').press('Backspace');
     await expect(page.getByLabel('Nouveau prénom pour Alice')).toHaveValue('Alici');
 
-    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Renommer Bruno' })).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Retirer Bruno' })).toBeEnabled();
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
 
-    // SORTIE de l'état non-nominal, que le scénario d'ajout fait déjà : réveiller les lignes ne
-    // solde rien tant que le renommage lui-même n'a pas abouti. Le réseau revient, l'écriture
-    // passe, et l'écran ne se contredit pas — la liste à jour ET le constat d'échec côte à côte,
-    // c'est le défaut vécu le 2026-08-12.
+    // SORTIE de l'état non-nominal, que le scénario d'ajout fait déjà : c'est le VERDICT SUIVANT
+    // qui solde le cycle. Le réseau revient, l'écriture passe, et l'écran ne se contredit pas —
+    // la liste à jour ET le constat d'échec côte à côte, c'est le défaut vécu le 2026-08-12.
     await restore(page);
     // `Ulysse` et non `Alicia` : Alice est en TÊTE de liste, et un prénom qui garde ce rang
     // rendrait l'assertion suivante identique avec ou sans tri. Le rang doit changer.
@@ -267,9 +264,10 @@ test.describe('Foyer hors ligne', () => {
     await expect(page.getByText('Retirer Chloé du foyer ?')).toBeVisible();
     await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Émile']);
 
-    // Les autres lignes sont inertes tant que ce cycle n'est pas soldé, comme au renommage.
-    await expect(page.getByRole('button', { name: 'Renommer Alice' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Retirer Alice' })).toBeDisabled();
+    // Les autres lignes restent actionnables, comme au renommage : un retrait vise lui aussi un
+    // identifiant qui existe déjà, et l'effacement est idempotent.
+    await expect(page.getByRole('button', { name: 'Renommer Alice' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Retirer Alice' })).toBeEnabled();
 
     // SORTIE : le réseau revient, le même geste aboutit.
     await restore(page);
@@ -344,13 +342,14 @@ test.describe('Foyer et cycle de vie de la sheet', () => {
     expect(await isStillMounted(panneau)).toBe(true);
     await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
 
-    // Aucun remontage, donc aucun `loadConvives`, donc aucun filet : tout est resté en place —
-    // le constat, la saisie et le verrou du bouton. C'est bien la frappe qui porte la sortie.
+    // Aucun remontage, donc aucun `loadConvives`, donc aucune remise à zéro : le constat et la
+    // saisie sont restés exactement où on les a laissés. Le bouton, lui, n'a jamais été
+    // verrouillé — c'est le verdict suivant qui portera la sortie.
     await expect(
       page.getByText('Aucune connexion — l’ajout de Zoé n’a pas pu être confirmé.'),
     ).toBeVisible();
     await expect(champPrenom(page)).toHaveValue('Zoé');
-    await expect(boutonAjouter(page)).toBeDisabled();
+    await expect(boutonAjouter(page)).toBeEnabled();
   });
 
   test('rouvrir la sheet après son démontage repart d’un cycle d’ajout propre', async ({

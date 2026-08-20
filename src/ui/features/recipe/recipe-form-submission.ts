@@ -7,11 +7,11 @@ import { validRowsOf, type IngredientRow } from './ingredient-rows';
  * dupliquées, qu'aucun mutant ne surveillait (Stryker ne mute pas les `.tsx`). Une dérive entre
  * les deux écrans n'aurait été signalée par rien.
  *
- * `locked`, lui, n'est PAS partagé : le verrou est INJECTÉ par l'appelant, et les deux écrans
- * n'y mettent délibérément pas la même chose. La création passe `saving || unconfirmed`
- * (`selectIsCreationLocked`) : rouvrir le bouton sur une écriture non acquittée relancerait la
- * fabrique de cuid, donc un doublon. La modification passe `saving` seul — son écriture est un
- * upsert sur un identifiant conservé, qui ne peut rien dupliquer.
+ * `locked`, lui, n'est PAS cette décision : le verrou est INJECTÉ par l'appelant, qui reste
+ * libre d'y mettre ce que son écran exige. Les deux y mettent aujourd'hui `saving` seul — le
+ * temps de l'écriture, et rien de plus : de part et d'autre l'identifiant du document est fixé
+ * avant l'envoi (posé à l'ouverture du formulaire pour la création, conservé pour la
+ * modification), et un second envoi réécrit donc le même document sans jamais le dupliquer.
  *
  * Module voisin de `ingredient-rows.ts` plutôt qu'ajout dedans : des trois termes, un seul parle
  * des lignes. Y loger un prédicat qui lit un titre et un statut d'enregistrement ferait mentir un

@@ -1,53 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import { addConviveUseCase } from './add-convive';
-import { StubIdGenerator } from '../test-doubles/stub-id-generator';
 import { InMemoryConviveRepository } from '../test-doubles/in-memory-convive-repository';
 import { type ConviveRepository } from '../ports/convive-repository';
 
 describe('addConviveUseCase', () => {
-  it("attribue au convive l'id produit par le IdGenerator", async () => {
-    const idGenerator = StubIdGenerator.returning('id-connu-42');
+  // L'identifiant est REÇU, jamais inventé ici : il est posé à l'ouverture du formulaire
+  // (`newConviveIdUseCase`) et vaut pour tous les envois de cette saisie-là. Un identifiant
+  // tiré à chaque écriture ferait, d'un second envoi hors ligne, un second document — deux
+  // convives pour une seule personne.
+  it("attribue au convive l'id reçu en entrée", async () => {
     const addConvive = addConviveUseCase({
-      idGenerator,
       conviveRepository: InMemoryConviveRepository.create(),
     });
 
-    const convive = await addConvive({ name: 'Aurélie' });
+    const convive = await addConvive({ id: 'id-recu-42', name: 'Aurélie' });
 
-    expect(convive.id).toBe('id-connu-42');
-  });
-
-  it('appelle generate() exactement une fois', async () => {
-    const idGenerator = StubIdGenerator.returning('id-connu-42');
-    const addConvive = addConviveUseCase({
-      idGenerator,
-      conviveRepository: InMemoryConviveRepository.create(),
-    });
-
-    await addConvive({ name: 'Aurélie' });
-
-    expect(idGenerator.callCount).toBe(1);
+    expect(convive.id).toBe('id-recu-42');
   });
 
   it('forwarde le name du input vers le convive', async () => {
     const addConvive = addConviveUseCase({
-      idGenerator: StubIdGenerator.create(),
       conviveRepository: InMemoryConviveRepository.create(),
     });
 
-    const convive = await addConvive({ name: 'Lionel' });
+    const convive = await addConvive({ id: 'id-recu-42', name: 'Lionel' });
 
     expect(convive.name).toBe('Lionel');
   });
 
   it('persiste le convive créé dans le repository (identité de référence)', async () => {
     const conviveRepository = InMemoryConviveRepository.create();
-    const addConvive = addConviveUseCase({
-      idGenerator: StubIdGenerator.returning('id-connu-42'),
-      conviveRepository,
-    });
+    const addConvive = addConviveUseCase({ conviveRepository });
 
-    const convive = await addConvive({ name: 'Aurélie' });
+    const convive = await addConvive({ id: 'id-recu-42', name: 'Aurélie' });
 
     expect(conviveRepository.all()).toEqual([convive]);
     expect(conviveRepository.all()[0]).toBe(convive);
@@ -55,12 +40,9 @@ describe('addConviveUseCase', () => {
 
   it('appelle save() exactement une fois', async () => {
     const conviveRepository = InMemoryConviveRepository.create();
-    const addConvive = addConviveUseCase({
-      idGenerator: StubIdGenerator.create(),
-      conviveRepository,
-    });
+    const addConvive = addConviveUseCase({ conviveRepository });
 
-    await addConvive({ name: 'Aurélie' });
+    await addConvive({ id: 'id-recu-42', name: 'Aurélie' });
 
     expect(conviveRepository.saveCount).toBe(1);
   });
@@ -72,31 +54,26 @@ describe('addConviveUseCase', () => {
       updateExisting: () => Promise.resolve(undefined),
       remove: () => Promise.resolve(),
     };
-    const addConvive = addConviveUseCase({
-      idGenerator: StubIdGenerator.create(),
-      conviveRepository,
-    });
+    const addConvive = addConviveUseCase({ conviveRepository });
 
-    await expect(addConvive({ name: 'Aurélie' })).rejects.toThrow('boom');
+    await expect(addConvive({ id: 'id-recu-42', name: 'Aurélie' })).rejects.toThrow('boom');
   });
 
   it("propage l'erreur de validation de la factory sur un name vide", async () => {
     const addConvive = addConviveUseCase({
-      idGenerator: StubIdGenerator.create(),
       conviveRepository: InMemoryConviveRepository.create(),
     });
 
-    await expect(addConvive({ name: '' })).rejects.toThrow('Le nom du convive est obligatoire');
+    await expect(addConvive({ id: 'id-recu-42', name: '' })).rejects.toThrow(
+      'Le nom du convive est obligatoire',
+    );
   });
 
   it('ne persiste rien quand le input est invalide', async () => {
     const conviveRepository = InMemoryConviveRepository.create();
-    const addConvive = addConviveUseCase({
-      idGenerator: StubIdGenerator.create(),
-      conviveRepository,
-    });
+    const addConvive = addConviveUseCase({ conviveRepository });
 
-    await expect(addConvive({ name: '' })).rejects.toThrow();
+    await expect(addConvive({ id: 'id-recu-42', name: '' })).rejects.toThrow();
 
     expect(conviveRepository.saveCount).toBe(0);
     expect(conviveRepository.all()).toEqual([]);

@@ -14,6 +14,8 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { newConviveIdUseCase } from '../../domain/use-cases/new-convive-id';
+import { newRecipeIdUseCase } from '../../domain/use-cases/new-recipe-id';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
@@ -47,9 +49,9 @@ export function createE2eStore(host: E2eHost): AppStore {
   return createStore({
     authGateway: E2eAuthGateway.signedInAs(E2E_ACCOUNT),
     clock,
-    createRecipe: createRecipeUseCase({
+    createRecipe: createRecipeUseCase({ recipeRepository }),
+    newRecipeId: newRecipeIdUseCase({
       idGenerator: SequentialIdGenerator.withPrefix('e2e-recipe'),
-      recipeRepository,
     }),
     updateRecipe: updateRecipeUseCase({ recipeRepository }),
     listRecipes: listRecipesUseCase({ recipeRepository }),
@@ -63,9 +65,9 @@ export function createE2eStore(host: E2eHost): AppStore {
     // système ici ferait purger — ou conserver — selon le jour d'exécution.
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),
-    addConvive: addConviveUseCase({
+    addConvive: addConviveUseCase({ conviveRepository }),
+    newConviveId: newConviveIdUseCase({
       idGenerator: SequentialIdGenerator.withPrefix('e2e-convive'),
-      conviveRepository,
     }),
     renameConvive: renameConviveUseCase({ conviveRepository }),
     removeConvive: removeConviveUseCase({ conviveRepository }),

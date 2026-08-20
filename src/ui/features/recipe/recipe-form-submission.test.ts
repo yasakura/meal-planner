@@ -16,9 +16,9 @@ const LIGNE_VALIDE = row({ name: 'Crème', quantity: '200', unit: 'ml' });
  * la dérive n'aurait été signalée par rien : les deux écrans se seraient mis à refuser des
  * saisies différentes.
  *
- * `locked` n'est PAS cette décision-là : c'est le verrou que l'APPELANT fournit, et les deux
- * écrans n'y mettent pas la même chose (création : `saving || unconfirmed` ; modification :
- * `saving` seul). Ce que ces tests fixent ici, c'est qu'un verrou fourni prime sur la saisie.
+ * `locked` n'est PAS cette décision-là : c'est le verrou que l'APPELANT fournit, et chaque écran
+ * reste libre d'y mettre ce qu'il exige — les deux y mettent aujourd'hui `saving` seul. Ce que
+ * ces tests fixent ici, c'est qu'un verrou fourni prime sur la saisie.
  */
 describe('isSubmitDisabled', () => {
   it('déverrouille dès qu’un titre et une ligne valide sont saisis, hors enregistrement', () => {
@@ -26,7 +26,7 @@ describe('isSubmitDisabled', () => {
   });
 
   // Le verrou fourni par l'appelant PRIME : sans lui, un double clic part deux fois. Ce qu'il
-  // recouvre — écriture en vol seule, ou en vol ET non acquittée — est la décision de l'écran.
+  // recouvre reste la décision de l'écran, que ce module ne cherche pas à connaître.
   it('verrouille dès que l’appelant fournit le verrou, saisie pourtant complète', () => {
     expect(isSubmitDisabled({ locked: true, title: 'Gratin', rows: [LIGNE_VALIDE] })).toBe(true);
   });
