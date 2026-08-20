@@ -266,6 +266,9 @@ test.describe('Menu et modification de recette', () => {
 
     // Détour par le catalogue pour modifier le titre — par les liens, jamais par l'URL.
     await page.click('nav a[href="/catalogue"]');
+    // Le menu porte ce MÊME titre en 9 liens : un clic parti avant que la route ait basculé les
+    // trouverait encore, et s'en irait sur un lien du menu en croyant prendre celui du catalogue.
+    await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
     await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
     await page.getByRole('link', { name: 'Modifier' }).click();
     await page.getByLabel('Titre').fill('Aubergines farcies');
@@ -424,6 +427,9 @@ test.describe('Du menu à la fiche recette', () => {
 
     // La MÊME fiche, atteinte depuis le catalogue : la provenance change, le retour aussi.
     await page.click('nav a[href="/catalogue"]');
+    // Le menu porte ce MÊME titre en 10 liens : un clic parti avant que la route ait basculé les
+    // trouverait encore, et s'en irait sur un lien du menu en croyant prendre celui du catalogue.
+    await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
     await page.getByRole('link', { name: 'Omelette aux herbes' }).click();
     await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes');
     await expect(retourRecettes(page)).toHaveCount(1);
