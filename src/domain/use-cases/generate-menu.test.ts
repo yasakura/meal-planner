@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { createCalendarDate } from '../entities/calendar-date';
 import { generateMenuUseCase } from './generate-menu';
 import { InMemoryRecipeRepository } from '../test-doubles/in-memory-recipe-repository';
 import { SequenceRandomPicker } from '../test-doubles/sequence-random-picker';
 import { RecipeBuilder } from '../test-builders/recipe.builder';
+
+// Lundi 24 août 2026. Le use-case ne DEVINE pas la date de début : elle lui est donnée.
+const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
 
 describe('generateMenuUseCase', () => {
   it('produit days × 2 repas, ordonnés par jour croissant puis midi avant soir, chacun avec 1 slot', async () => {
@@ -16,7 +20,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 
-    const menu = await generateMenu({ days: 2 });
+    const menu = await generateMenu({ days: 2, dateDebut: LUNDI_24_AOUT });
 
     expect(menu.repas).toHaveLength(4);
     expect(menu.repas.map((r) => [r.jour, r.creneau])).toEqual([
@@ -39,7 +43,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(2, 0),
     });
 
-    const menu = await generateMenu({ days: 1 });
+    const menu = await generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT });
 
     // L'attendu est DÉRIVÉ du catalogue tel que le repository le rend : le port ne
     // garantit aucun ordre. Coder 'r2' puis 'r0' supposerait l'ordre d'insertion, ce que
@@ -60,7 +64,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0, 0),
     });
 
-    const menu = await generateMenu({ days: 1 });
+    const menu = await generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT });
 
     // Attendu dérivé du catalogue rendu, pas de l'ordre d'insertion.
     const catalogue = await recipeRepository.findAll();
@@ -82,7 +86,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 
-    const menu = await generateMenu({ days: 2 });
+    const menu = await generateMenu({ days: 2, dateDebut: LUNDI_24_AOUT });
 
     // Attendu dérivé du catalogue rendu, pas de l'ordre d'insertion.
     const [premiere, seconde] = await recipeRepository.findAll();
@@ -103,7 +107,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0, 0),
     });
 
-    const menu = await generateMenu({ days: 1 });
+    const menu = await generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT });
 
     expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual(['only', 'only']);
   });
@@ -121,7 +125,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 
-    const menu = await generateMenu({ days: 2 });
+    const menu = await generateMenu({ days: 2, dateDebut: LUNDI_24_AOUT });
 
     const recipeIds = menu.repas.map((r) => r.slots[0]?.recipeId);
     expect(new Set(recipeIds).size).toBe(4);
@@ -135,7 +139,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0),
     });
 
-    await expect(generateMenu({ days })).rejects.toThrow(
+    await expect(generateMenu({ days, dateDebut: LUNDI_24_AOUT })).rejects.toThrow(
       'Le nombre de jours doit être un entier positif',
     );
   });
@@ -147,7 +151,7 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0),
     });
 
-    await expect(generateMenu({ days: 0 })).rejects.toThrow(
+    await expect(generateMenu({ days: 0, dateDebut: LUNDI_24_AOUT })).rejects.toThrow(
       'Le nombre de jours doit être un entier positif',
     );
   });
@@ -159,8 +163,24 @@ describe('generateMenuUseCase', () => {
       randomPicker: SequenceRandomPicker.returning(0),
     });
 
-    await expect(generateMenu({ days: 1 })).rejects.toThrow(
+    await expect(generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT })).rejects.toThrow(
       'Impossible de générer un menu sans recette',
     );
+  });
+
+  it('porte dans le menu produit la date de début reçue en entrée', async () => {
+    const recipeRepository = InMemoryRecipeRepository.create();
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r0').build());
+    const generateMenu = generateMenuUseCase({
+      recipeRepository,
+      randomPicker: SequenceRandomPicker.returning(0, 0),
+    });
+
+    const menu = await generateMenu({
+      days: 1,
+      dateDebut: createCalendarDate({ year: 2027, month: 1, day: 4 }),
+    });
+
+    expect(menu.dateDebut).toEqual({ year: 2027, month: 1, day: 4 });
   });
 });

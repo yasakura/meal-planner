@@ -10,19 +10,14 @@ import {
 
 import { type ConviveRepository } from '../domain/ports/convive-repository';
 import { type Convive } from '../domain/entities/convive';
-import { RepositoryUnavailableError } from '../domain/errors/repository-unavailable-error';
 import { conviveToDocument, documentToConvive } from './convive-mapper';
+// Borne d'acquittement PARTAGÉE (`firestore-ack-deadline`) : extraite d'ici à l'arrivée des
+// menus et des recettes, qui subissent le même défaut du SDK sur leurs écritures.
+import { DEFAULT_ACK_TIMEOUT_MS, withAckDeadline } from './firestore-ack-deadline';
 // Traduction `data → domain` PARTAGÉE (`firestore-failure`) : extraite d'ici à l'arrivée du
 // second consommateur, l'adapter recettes. Deux adapters, un seul point de passage — sinon
 // un écran dirait « aucune connexion » là où l'autre dirait « impossible de charger ».
 import { asDomainFailure } from './firestore-failure';
-
-/**
- * Borne au-delà de laquelle une écriture non acquittée est déclarée non confirmée.
- * Volontairement tolérante : un réseau qui rampe (signal faible mais présent) ne doit pas
- * produire un faux constat hors-ligne.
- */
-const DEFAULT_ACK_TIMEOUT_MS = 5000;
 
 export type FirestoreConviveRepositoryOptions = {
   ackTimeoutMs?: number;
@@ -45,21 +40,10 @@ export class FirestoreConviveRepository implements ConviveRepository {
     // Hors ligne, `setDoc` ne rejette pas : il met l'écriture en file locale et n'acquitte
     // qu'au serveur — la promesse ne se règle jamais. Sans borne, l'écran resterait figé
     // sur « ajout en cours » sans jamais rien dire.
-    await this.withAckDeadline(
+    await withAckDeadline(
       setDoc(doc(this.db, 'convives', convive.id), conviveToDocument(convive)),
+      this.ackTimeoutMs,
     );
-  }
-
-  private withAckDeadline<T>(write: Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const deadline = setTimeout(
-        () => reject(RepositoryUnavailableError.create()),
-        this.ackTimeoutMs,
-      );
-      write
-        .then(resolve, (error: unknown) => reject(asDomainFailure(error)))
-        .finally(() => clearTimeout(deadline));
-    });
   }
 
   async findAll(): Promise<Convive[]> {
@@ -96,7 +80,7 @@ export class FirestoreConviveRepository implements ConviveRepository {
     //
     // Bornée comme `save` et `remove` : sur un réseau qui rampe, les cinq tentatives de
     // Firestore peuvent s'étirer bien au-delà de ce que l'écran peut taire.
-    return await this.withAckDeadline(
+    return await withAckDeadline(
       runTransaction(this.db, async (transaction) => {
         const snapshot = await transaction.get(ref);
         if (!snapshot.exists()) return undefined;
@@ -104,6 +88,7 @@ export class FirestoreConviveRepository implements ConviveRepository {
         transaction.set(ref, conviveToDocument(updated));
         return updated;
       }),
+      this.ackTimeoutMs,
     );
   }
 
@@ -113,6 +98,6 @@ export class FirestoreConviveRepository implements ConviveRepository {
     // promesse ne se règle jamais. Sans borne, l'écran resterait figé sur « suppression en
     // cours », bouton verrouillé, sans jamais rien dire. La borne est ce qui permet à l'UI
     // d'avouer qu'elle ne sait pas, au lieu de se taire indéfiniment.
-    await this.withAckDeadline(deleteDoc(doc(this.db, 'convives', id)));
+    await withAckDeadline(deleteDoc(doc(this.db, 'convives', id)), this.ackTimeoutMs);
   }
 }

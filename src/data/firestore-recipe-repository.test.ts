@@ -73,6 +73,42 @@ describe('FirestoreRecipeRepository', () => {
     await expect(repository.save(recipe)).rejects.toThrow('permission-denied');
   });
 
+  // Réseau coupé, `setDoc` NE REJETTE PAS : il met l'écriture en file locale et n'acquitte
+  // qu'au serveur — la promesse ne se règle jamais. Sans borne, l'écran resterait figé sur
+  // « enregistrement en cours », sans jamais rien dire.
+  it(
+    "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      const repository = FirestoreRecipeRepository.create(db, { ackTimeoutMs: 10 });
+
+      await expect(repository.save(RecipeBuilder.aRecipe().build())).rejects.toSatisfy(
+        isRepositoryUnavailable,
+      );
+    },
+  );
+
+  // La borne d'attente ne doit pas survivre à l'écriture qu'elle surveille : sans nettoyage,
+  // chaque enregistrement réussi laisserait un timer de 5 s derrière lui.
+  it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
+    vi.useFakeTimers();
+    try {
+      mockedDoc.mockReturnValue({} as never);
+      mockedSetDoc.mockResolvedValue(undefined as never);
+      const repository = FirestoreRecipeRepository.create(db);
+
+      await repository.save(RecipeBuilder.aRecipe().build());
+      await Promise.resolve();
+
+      expect(mockedSetDoc).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("findAll lit la collection 'recipes' et mappe chaque document via documentToRecipe", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);

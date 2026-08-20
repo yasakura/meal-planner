@@ -9,18 +9,35 @@ import {
 
 import { type RecipeRepository } from '../domain/ports/recipe-repository';
 import { type Recipe } from '../domain/entities/recipe';
+import { DEFAULT_ACK_TIMEOUT_MS, withAckDeadline } from './firestore-ack-deadline';
 import { asDomainFailure } from './firestore-failure';
 import { documentToRecipe, recipeToDocument } from './recipe-mapper';
 
-export class FirestoreRecipeRepository implements RecipeRepository {
-  private constructor(private readonly db: Firestore) {}
+export type FirestoreRecipeRepositoryOptions = {
+  ackTimeoutMs?: number;
+};
 
-  static create(db: Firestore): FirestoreRecipeRepository {
-    return new FirestoreRecipeRepository(db);
+export class FirestoreRecipeRepository implements RecipeRepository {
+  private constructor(
+    private readonly db: Firestore,
+    private readonly ackTimeoutMs: number,
+  ) {}
+
+  static create(
+    db: Firestore,
+    options?: FirestoreRecipeRepositoryOptions,
+  ): FirestoreRecipeRepository {
+    return new FirestoreRecipeRepository(db, options?.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS);
   }
 
   async save(recipe: Recipe): Promise<void> {
-    await setDoc(doc(this.db, 'recipes', recipe.id), recipeToDocument(recipe));
+    // Bornée : hors ligne, `setDoc` ne rejette pas, il met l'écriture en file locale et
+    // n'acquitte qu'au serveur — la promesse ne se règle jamais. Sans borne, l'écran resterait
+    // figé sur « enregistrement en cours », sans jamais rien dire.
+    await withAckDeadline(
+      setDoc(doc(this.db, 'recipes', recipe.id), recipeToDocument(recipe)),
+      this.ackTimeoutMs,
+    );
   }
 
   async findAll(): Promise<Recipe[]> {

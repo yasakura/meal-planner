@@ -1,8 +1,10 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
 import { type Recipe } from '../../../domain/entities/recipe';
+import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { type AppThunkApiConfig, type RootState } from '../../store/store';
+import { RECIPE_SAVE_FAILED, RECIPE_SAVE_UNCONFIRMED, type RecipeFormNotice } from './recipe-slice';
 
 /**
  * Statut de la MODIFICATION, délibérément séparé de celui de la création (`recipe-slice`).
@@ -11,8 +13,12 @@ import { type AppThunkApiConfig, type RootState } from '../../store/store';
  * transitoire entre elles ferait qu'une modification réussie renaviguerait le formulaire de
  * création à peine rouvert, et réciproquement — c'est exactement le défaut de l'issue #27,
  * démultiplié. Un statut par opération, aucune cohabitation possible.
+ *
+ * `unconfirmed` : même troisième issue qu'à la création, et pour la même borne d'acquittement —
+ * l'écriture est en file locale et atterrira au retour du réseau. Le VOCABULAIRE est partagé,
+ * l'état ne l'est pas.
  */
-export type RecipeEditStatus = 'idle' | 'saving' | 'success' | 'error';
+export type RecipeEditStatus = 'idle' | 'saving' | 'success' | 'error' | 'unconfirmed';
 
 export type RecipeEditState = {
   status: RecipeEditStatus;
@@ -54,8 +60,10 @@ const recipeEditSlice = createSlice({
       .addCase(updateRecipe.fulfilled, (state) => {
         state.status = 'success';
       })
-      .addCase(updateRecipe.rejected, (state) => {
-        state.status = 'error';
+      .addCase(updateRecipe.rejected, (state, action) => {
+        // Non acquitté ≠ refusé : `action.error` est une copie plate (miniSerializeError), et le
+        // garde du domaine est nominal précisément pour rester lisible ici.
+        state.status = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
       });
   },
 });
@@ -65,3 +73,20 @@ export const { recipeEditFormOpened } = recipeEditSlice.actions;
 export const recipeEditReducer = recipeEditSlice.reducer;
 
 export const selectRecipeEdition = (state: RootState): RecipeEditState => state.recipeEdit;
+
+/**
+ * Projection PURE de l'état de tranche vers le constat affichable, ICI plutôt que dans un
+ * container que la mutation ignore. Deux tons seulement : le SUCCÈS ne se constate pas, il
+ * renvoie au détail de la recette, qui montre déjà le résultat.
+ *
+ * L'ENVOI, lui, n'est jamais verrouillé sur un constat non acquitté — contrairement à la
+ * création : la modification écrit sur le même identifiant, un second envoi ne peut rien
+ * dupliquer, et le verrouiller ferait de l'écran une impasse.
+ */
+export function recipeEditNoticeOf(state: RecipeEditState): RecipeFormNotice | null {
+  if (state.status === 'unconfirmed') {
+    return { tone: 'unconfirmed', message: RECIPE_SAVE_UNCONFIRMED };
+  }
+  if (state.status === 'error') return { tone: 'error', message: RECIPE_SAVE_FAILED };
+  return null;
+}

@@ -289,12 +289,12 @@ test.describe('Modifier une recette', () => {
 
 test.describe('Modifier une recette hors ligne', () => {
   /**
-   * L'échec d'enregistrement doit se VOIR. `toBeVisible()` ne suffit pas : il ne regarde ni le
+   * L'enregistrement non confirmé doit se VOIR. `toBeVisible()` ne suffit pas : il ne regarde ni le
    * recouvrement par un autre élément, ni la sortie du viewport. Le constat vit dans la barre
    * d'action collante précisément pour voyager avec le bouton ; seule une mesure de position au
    * repos le prouve sur cette route, qui est neuve même si l'écran est partagé.
    */
-  test('l’échec d’enregistrement est visible sans défiler, et la recette n’est pas modifiée', async ({
+  test('l’enregistrement non confirmé est visible sans défiler, et la recette n’est pas modifiée', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -306,14 +306,17 @@ test.describe('Modifier une recette hors ligne', () => {
     await page.getByLabel('Titre').fill('Aubergines farcies');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    const constat = page.getByText('Impossible d’enregistrer la recette.');
+    const constat = page.getByText(
+      'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
+    );
     await expect(constat).toBeVisible();
 
     // L'utilisateur n'a pas défilé : il a cliqué une commande qui était là, au repos. Le retour
     // en haut et les deux assertions vivent dans `attendreAtteignable`.
     await attendreAtteignable(constat);
 
-    // On reste sur le formulaire : l'échec ne fait pas croire à un succès en renavigüant.
+    // On reste sur le formulaire : le non-acquittement ne fait pas croire à un succès en
+    // renavigüant.
     await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois/modifier');
 
     // « et la recette n'est pas modifiée » : la seconde moitié du nom, tenue. Rester sur le
@@ -333,7 +336,7 @@ test.describe('Modifier une recette hors ligne', () => {
    * La SORTIE de l'état non-nominal, et non seulement son entrée : réseau rétabli, le même
    * formulaire doit repartir, et l'écran d'arrivée ne doit garder aucune trace du constat.
    */
-  test('réseau rétabli, le même formulaire enregistre et ne laisse aucune trace du constat', async ({
+  test('réseau rétabli, le même formulaire enregistre et ne laisse aucune trace du constat non confirmé', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -343,18 +346,24 @@ test.describe('Modifier une recette hors ligne', () => {
     await page.getByLabel('Titre').fill('Aubergines farcies');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
     // Le localisateur court, celui de l'absence plus bas, vu ici en train de trouver le constat.
-    await expect(page.getByText('Impossible d’enregistrer')).toHaveCount(1);
+    await expect(
+      page.getByText('l’enregistrement de la recette n’a pas pu être confirmé'),
+    ).toHaveCount(1);
 
     await restore(page);
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
     await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois');
     await expect(page.getByRole('heading', { level: 1, name: 'Aubergines farcies' })).toBeVisible();
-    await expect(page.getByText('Impossible d’enregistrer')).toHaveCount(0);
+    await expect(
+      page.getByText('l’enregistrement de la recette n’a pas pu être confirmé'),
+    ).toHaveCount(0);
 
     // Et le constat ne ressuscite pas sur le formulaire rouvert.
     await page.getByRole('link', { name: 'Modifier' }).click();
     await expect(page.getByLabel('Titre')).toHaveValue('Aubergines farcies');
-    await expect(page.getByText('Impossible d’enregistrer')).toHaveCount(0);
+    await expect(
+      page.getByText('l’enregistrement de la recette n’a pas pu être confirmé'),
+    ).toHaveCount(0);
   });
 });

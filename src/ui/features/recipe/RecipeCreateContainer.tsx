@@ -11,7 +11,15 @@ import {
   type IngredientRow,
 } from './ingredient-rows';
 import { isSubmitDisabled } from './recipe-form-submission';
-import { createRecipe, recipeFormOpened, selectRecipeCreation } from './recipe-slice';
+import {
+  createRecipe,
+  recipeCreateNoticeOf,
+  recipeFormEdited,
+  recipeFormOpened,
+  selectIsCreationLocked,
+  selectRecipeCreation,
+  type RecipeFormNotice,
+} from './recipe-slice';
 
 export function RecipeCreateContainer() {
   const [title, setTitle] = useState('');
@@ -23,7 +31,10 @@ export function RecipeCreateContainer() {
   // qu'il annonce, elle, vit dans `ingredient-rows.ts` — le seul des deux que la mutation voit.
   const [rowsConstat, setRowsConstat] = useState<string | null>(null);
 
-  const { status } = useAppSelector(selectRecipeCreation);
+  const creation = useAppSelector(selectRecipeCreation);
+  // Le verrou de l'ENVOI vit dans le slice, qui est muté : il tient pendant l'écriture ET tant
+  // qu'elle n'est pas acquittée. Les CHAMPS, eux, ne se verrouillent jamais — voir plus bas.
+  const envoiVerrouille = useAppSelector(selectIsCreationLocked);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
@@ -46,14 +57,16 @@ export function RecipeCreateContainer() {
     };
   }, []);
 
-  // Le VERROU du bouton vit dans `recipe-form-submission.ts`, partagé avec la modification et
-  // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas.
-  const submitDisabled = isSubmitDisabled({ saving: status === 'saving', title, rows });
-  const submitLabel = status === 'saving' ? 'Enregistrement…' : 'Enregistrer';
-  const confirmation = status === 'success' ? 'Recette enregistrée.' : null;
-  // Le constat de saisie prime sur celui de la panne : c'est le dernier geste de l'utilisateur.
-  const errorMessage =
-    rowsConstat ?? (status === 'error' ? 'Impossible d’enregistrer la recette.' : null);
+  // Le PRÉDICAT DE SAISIE vit dans `recipe-form-submission.ts`, partagé avec la modification et
+  // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas. Le verrou,
+  // lui, est propre à cet écran : `selectIsCreationLocked` tient aussi sur le non-acquitté,
+  // pour ne pas rouvrir la fabrique de doublon.
+  const submitDisabled = isSubmitDisabled({ locked: envoiVerrouille, title, rows });
+  const submitLabel = creation.status === 'saving' ? 'Enregistrement…' : 'Enregistrer';
+  // Le constat de saisie prime sur celui de l'enregistrement : c'est le dernier geste de
+  // l'utilisateur. Le second est projeté par le slice — le message et son ton s'y décident.
+  const notice: RecipeFormNotice | null =
+    rowsConstat !== null ? { tone: 'error', message: rowsConstat } : recipeCreateNoticeOf(creation);
 
   // Retour à la liste sur l'ISSUE de l'enregistrement, jamais sur l'observation du statut :
   // un effet qui regarde `status === 'success'` renavigue au remontage suivant, avant même que
@@ -80,7 +93,32 @@ export function RecipeCreateContainer() {
     });
   };
 
+  /**
+   * La SAISIE est le mécanisme de récupération du constat non acquitté : elle l'efface et lève
+   * le verrou de l'envoi, sans dépendre d'aucun cycle de montage — quitter le formulaire pour le
+   * rouvrir abandonnerait tout ce qui y a été tapé. Les champs restent donc TOUJOURS éditables,
+   * là où le bouton, lui, est verrouillé. Chacun des quatre le déclenche, et c'est le slice —
+   * muté — qui décide s'il y a lieu d'en tenir compte.
+   */
+  const saisieModifiee = () => dispatch(recipeFormEdited());
+
+  const handleTitleChange = (value: string) => {
+    saisieModifiee();
+    setTitle(value);
+  };
+
+  const handleConvivesChange = (value: number) => {
+    saisieModifiee();
+    setConvives(value);
+  };
+
+  const handleInstructionsChange = (value: string) => {
+    saisieModifiee();
+    setInstructions(value);
+  };
+
   const handleRowChange = (index: number, patch: Partial<IngredientRow>) => {
+    saisieModifiee();
     setRowsConstat(null);
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
@@ -101,17 +139,16 @@ export function RecipeCreateContainer() {
       convives={convives}
       rows={rows}
       instructions={instructions}
-      onTitleChange={setTitle}
-      onConvivesChange={setConvives}
-      onInstructionsChange={setInstructions}
+      onTitleChange={handleTitleChange}
+      onConvivesChange={handleConvivesChange}
+      onInstructionsChange={handleInstructionsChange}
       onRowChange={handleRowChange}
       onAddRow={handleAddRow}
       onRemoveRow={handleRemoveRow}
       onSubmit={handleSubmit}
       submitDisabled={submitDisabled}
       submitLabel={submitLabel}
-      confirmation={confirmation}
-      errorMessage={errorMessage}
+      notice={notice}
     />
   );
 }

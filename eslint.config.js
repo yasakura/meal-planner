@@ -139,6 +139,13 @@ export default tseslint.config(
                 'styled-components',
                 'firebase',
                 'firebase/*',
+                // Le domaine n'a AUCUNE bibliothèque de date : `CalendarDate` est une date
+                // civile, sans heure ni fuseau, et son arithmétique est ancrée sur UTC. Un
+                // `import { addDays } from 'date-fns'` ici rendrait `CalendarDate` inutile et
+                // ramènerait un instant — donc un fuseau — dans une couche qui n'en a pas.
+                // Le formatage, lui, reste permis dans `ui/` (`menu-day-label.ts`).
+                'date-fns',
+                'date-fns/*',
               ],
             },
             {

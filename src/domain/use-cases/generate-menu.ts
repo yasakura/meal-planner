@@ -1,3 +1,4 @@
+import { type CalendarDate } from '../entities/calendar-date';
 import { CRENEAUX } from '../entities/creneau';
 import { createMenu, type Menu } from '../entities/menu';
 import { createRepas, type Repas } from '../entities/repas';
@@ -6,11 +7,13 @@ import { elementAt } from '../lib/element-at';
 import { type RandomPicker } from '../ports/random-picker';
 import { type RecipeRepository } from '../ports/recipe-repository';
 
+// `dateDebut` est une ENTRÉE, jamais une déduction : ce n'est pas au use-case de deviner
+// quand commence le menu qu'on lui demande.
 export function generateMenuUseCase(deps: {
   recipeRepository: RecipeRepository;
   randomPicker: RandomPicker;
-}): (input: { days: number }) => Promise<Menu> {
-  return async ({ days }) => {
+}): (input: { days: number; dateDebut: CalendarDate }) => Promise<Menu> {
+  return async ({ days, dateDebut }) => {
     if (!Number.isInteger(days) || days < 1) {
       throw new Error('Le nombre de jours doit être un entier positif');
     }
@@ -31,7 +34,7 @@ export function generateMenuUseCase(deps: {
         repas.push(createRepas({ jour, creneau, slots: [createSlot({ recipeId: recipe.id })] }));
       }
     }
-    return createMenu({ repas });
+    return createMenu({ repas, dateDebut });
   };
 }
 

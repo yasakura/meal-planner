@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { UNITS, type Unit } from '../../../domain/entities/ingredient';
 import { tokens } from '../../theme/tokens';
 import { type IngredientRow } from './ingredient-rows';
+import { type RecipeFormNotice } from './recipe-slice';
 
 const { colors, radii, space, fonts } = tokens;
 
@@ -30,8 +31,10 @@ export type RecipeCreateScreenProps = {
   onSubmit: () => void;
   submitDisabled: boolean;
   submitLabel: string;
-  confirmation: string | null;
-  errorMessage: string | null;
+  // Un seul constat, porteur de son TON : au plus un à la fois, et « deux constats ensemble »
+  // devient irreprésentable. Le ton vient du slice, qui est muté — cet écran ne fait que le
+  // traduire en rôle ARIA et en teinte.
+  notice: RecipeFormNotice | null;
 };
 
 const Page = styled.div`
@@ -205,6 +208,27 @@ const ErrorMessage = styled.p`
   margin: 0;
 `;
 
+// Constat NEUTRE, ni vert de succès ni rouge d'alerte : une écriture non acquittée n'est ni
+// l'un ni l'autre. Même teinte secondaire que les constats hors-ligne du foyer et du menu.
+const Note = styled.p`
+  font-family: ${fonts.body};
+  font-size: 14px;
+  color: ${colors.inkSecondary};
+  margin: 0;
+`;
+
+/**
+ * Le TON choisit le rôle ARIA : `alert` (assertif) est réservé à l'échec, qui appelle une action
+ * de l'utilisateur ; le succès et le constat non acquitté sont annoncés poliment (`status`) —
+ * le second ne demande rien, l'écriture est partie et atterrira au retour du réseau.
+ */
+function NoticeView({ notice }: { notice: RecipeFormNotice | null }) {
+  if (notice === null) return null;
+  if (notice.tone === 'error') return <ErrorMessage role="alert">{notice.message}</ErrorMessage>;
+  if (notice.tone === 'unconfirmed') return <Note role="status">{notice.message}</Note>;
+  return <Confirmation role="status">{notice.message}</Confirmation>;
+}
+
 function unitLabel(unit: Unit): string {
   return unit === 'piece' ? 'pièce' : unit;
 }
@@ -310,12 +334,7 @@ export function RecipeCreateScreen(props: RecipeCreateScreenProps) {
         </Field>
 
         <ActionBar>
-          {props.confirmation !== null && (
-            <Confirmation role="status">{props.confirmation}</Confirmation>
-          )}
-          {props.errorMessage !== null && (
-            <ErrorMessage role="alert">{props.errorMessage}</ErrorMessage>
-          )}
+          <NoticeView notice={props.notice} />
           <SubmitButton type="submit" disabled={props.submitDisabled}>
             {props.submitLabel}
           </SubmitButton>

@@ -1,43 +1,22 @@
 import { useEffect } from 'react';
 
-import { type Menu } from '../../../domain/entities/menu';
-import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   generateMenu,
+  menuSaveNoticeOf,
+  menuScreenOpened,
+  menuStartDateSelected,
   menuWindowSelected,
   NO_RECIPES,
   refreshMenuRecipes,
+  saveMenu,
+  selectIsSaveInFlight,
   selectMenu,
+  selectStartDateFloorIso,
+  selectStartDateIso,
 } from './menu-slice';
-import { MenuScreen, type MenuDay, type MenuScreenProps } from './MenuScreen';
-
-const CRENEAU_LABELS: Record<string, string> = {
-  midi: 'Midi',
-  soir: 'Soir',
-};
-
-function toDays(menu: Menu, recipes: Recipe[]): MenuDay[] {
-  const titleById = new Map(recipes.map((recipe) => [recipe.id, recipe.title]));
-  const byJour = new Map<number, MenuDay>();
-
-  for (const repas of menu.repas) {
-    let day = byJour.get(repas.jour);
-    if (day === undefined) {
-      day = { key: String(repas.jour), label: `Jour ${repas.jour + 1}`, slots: [] };
-      byJour.set(repas.jour, day);
-    }
-    for (const slot of repas.slots) {
-      day.slots.push({
-        key: `${repas.jour}-${repas.creneau}`,
-        creneauLabel: CRENEAU_LABELS[repas.creneau] ?? repas.creneau,
-        title: titleById.get(slot.recipeId) ?? 'Recette inconnue',
-      });
-    }
-  }
-
-  return [...byJour.values()];
-}
+import { menuDays } from './menu-days';
+import { MenuScreen, type MenuScreenProps } from './MenuScreen';
 
 function errorMessage(error: string | null): string {
   return error === NO_RECIPES
@@ -46,15 +25,28 @@ function errorMessage(error: string | null): string {
 }
 
 export function MenuContainer() {
-  const { status, menu, recipes, error, selectedDays } = useAppSelector(selectMenu);
+  const menuState = useAppSelector(selectMenu);
+  const { status, menu, recipes, error, selectedDays, startDateRefused } = menuState;
+  // Le champ natif ne parle qu'en `AAAA-MM-JJ` : c'est le slice, muté, qui traduit — ce fichier
+  // ne convertit rien.
+  const startDateIso = useAppSelector(selectStartDateIso);
+  const startDateFloorIso = useAppSelector(selectStartDateFloorIso);
+  // Le verrou du bouton est une DÉCISION : elle vit dans le slice, qui est muté, et ce fichier
+  // ne fait que la porter jusqu'à l'écran.
+  const saveDisabled = useAppSelector(selectIsSaveInFlight);
   const dispatch = useAppDispatch();
   // La fenêtre choisie vient du store, pas d'un état local : le menu affiché y vit déjà, et un
-  // `useState` repartait à sa valeur par défaut à chaque remontage (issue #28).
+  // `useState` repartait à sa valeur par défaut à chaque remontage (issue #28). La date de début
+  // est une préférence de même nature, et suit le même chemin.
   const selectWindow = (days: number) => dispatch(menuWindowSelected(days));
+  const selectStartDate = (iso: string) => dispatch(menuStartDateSelected(iso));
 
-  // Arriver sur l'écran relit le catalogue. Le container demande sans condition : c'est le thunk,
-  // dans le slice muté, qui décide s'il y a lieu de lire — pas ce fichier, que la mutation ignore.
+  // Arriver sur l'écran relit le catalogue, et relit l'horloge : le plancher proposé par le champ
+  // est celui d'aujourd'hui, et le constat d'une visite précédente tombe. Le container demande
+  // sans condition : ce sont les thunks, dans le slice muté, qui décident — pas ce fichier, que
+  // la mutation ignore.
   useEffect(() => {
+    dispatch(menuScreenOpened());
     void dispatch(refreshMenuRecipes());
   }, [dispatch]);
 
@@ -70,14 +62,26 @@ export function MenuContainer() {
   } else if (status === 'success' && menu !== null && recipes !== null) {
     props = {
       status: 'success',
-      days: toDays(menu, recipes),
+      days: menuDays(menu, recipes),
+      startDateIso,
+      startDateFloorIso,
+      startDateRefused,
+      onStartDateChange: selectStartDate,
       selectedDays,
       onSelect: selectWindow,
       onRegenerate: () => dispatch(generateMenu(selectedDays)),
+      // Sans argument : le menu à enregistrer est celui du store, et c'est le thunk qui l'y lit.
+      onSave: () => void dispatch(saveMenu()),
+      saveDisabled,
+      saveNotice: menuSaveNoticeOf(menuState),
     };
   } else {
     props = {
       status: 'idle',
+      startDateIso,
+      startDateFloorIso,
+      startDateRefused,
+      onStartDateChange: selectStartDate,
       selectedDays,
       onSelect: selectWindow,
       onGenerate: () => dispatch(generateMenu(selectedDays)),

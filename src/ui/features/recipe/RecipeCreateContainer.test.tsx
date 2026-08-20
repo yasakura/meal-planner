@@ -5,6 +5,7 @@ import { Provider } from 'react-redux';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
+import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type CreateRecipe, type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
@@ -49,6 +50,21 @@ function capturingSpy() {
     return savedRecipe;
   };
   return { fn, state };
+}
+
+// Même construction que le menu et les convives : « Aucune connexion — <l'opération> n'a pas pu
+// être confirmé. ». L'opération est nommée comme le bouton et comme le constat d'échec voisin
+// (« Impossible d'enregistrer la recette. »), qui est déjà le MÊME sur les deux écrans.
+const CONSTAT_NON_ACQUITTE =
+  'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
+
+const nonAcquitte: CreateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+
+// Une saisie complète, prête à partir : le point de départ commun des scénarios d'écriture.
+async function saisirUneRecette(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+  await user.type(screen.getByLabelText(/nom/i), 'Poulet');
+  await user.type(screen.getByLabelText(/quantité/i), '500');
 }
 
 describe('RecipeCreateContainer', () => {
@@ -516,5 +532,128 @@ describe('RecipeCreateContainer', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+  /**
+   * L'écriture est en FILE LOCALE, pas perdue : le constat ne demande rien à l'utilisateur, donc
+   * `role="status"` (poli) et non `role="alert"` (assertif), réservé à l'échec réessayable.
+   */
+  it('hors ligne, l’enregistrement n’est pas confirmé : le constat est poli et n’accuse aucun échec', async () => {
+    const user = userEvent.setup();
+    renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_NON_ACQUITTE);
+    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * LE défaut que toute cette passe ferme. Réarmer « Enregistrer » invite le second appui, et
+   * `createRecipeUseCase` génère alors un SECOND cuid : deux documents pour une seule recette,
+   * dès que le réseau revient et que la file locale s'écoule. La saisie, elle, reste en place —
+   * l'effacer obligerait à tout retaper.
+   */
+  it('après un enregistrement non acquitté, « Enregistrer » reste verrouillé et la saisie est conservée', async () => {
+    const user = userEvent.setup();
+    renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await screen.findByText(CONSTAT_NON_ACQUITTE);
+
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
+    expect(screen.getByLabelText(/titre/i)).toHaveValue('Poulet rôti');
+    expect(screen.getByLabelText(/nom/i)).toHaveValue('Poulet');
+  });
+
+  /**
+   * GARANTIE CARDINALE, reprise des convives : le bouton se verrouille, les CHAMPS jamais. C'est
+   * la frappe qui efface le constat — verrouiller la saisie sur le même critère que le bouton
+   * tuerait le mécanisme de récupération et figerait l'écran pour le reste de la session.
+   * Un formulaire de recette n'a pas un champ mais quatre : la règle porte sur la SAISIE entière,
+   * et les trois tests suivants la tiennent pour les trois autres champs.
+   */
+  it('le titre reste éditable après un enregistrement non acquitté, et sa frappe lève le verrou', async () => {
+    const user = userEvent.setup();
+    renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await screen.findByText(CONSTAT_NON_ACQUITTE);
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
+    expect(screen.getByLabelText(/titre/i)).toBeEnabled();
+
+    await user.type(screen.getByLabelText(/titre/i), ' au thym');
+
+    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  it('modifier une ligne d’ingrédient efface le constat non acquitté et lève le verrou', async () => {
+    const user = userEvent.setup();
+    renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await screen.findByText(CONSTAT_NON_ACQUITTE);
+
+    await user.type(screen.getByLabelText(/quantité/i), '0');
+
+    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  it('modifier la préparation efface le constat non acquitté et lève le verrou', async () => {
+    const user = userEvent.setup();
+    renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await screen.findByText(CONSTAT_NON_ACQUITTE);
+
+    await user.type(screen.getByRole('textbox', { name: /préparation/i }), 'Étape 1');
+
+    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  it('modifier le nombre de personnes efface le constat non acquitté et lève le verrou', async () => {
+    const user = userEvent.setup();
+    renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await screen.findByText(CONSTAT_NON_ACQUITTE);
+
+    await user.type(screen.getByLabelText(/personnes/i), '2');
+
+    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  /**
+   * Rémanence : le store est un singleton de session, et `unconfirmed` est un constat
+   * TRANSITOIRE. Resté en place, il rouvrirait le formulaire sur un constat qui parle d'une
+   * recette précédente, bouton verrouillé pour le reste de la session. Le store est
+   * délibérément RÉUTILISÉ d'un render à l'autre : un store recréé ne détecterait rien.
+   */
+  it('remonté sur le MÊME store après un enregistrement non acquitté, rouvre un formulaire neuf', async () => {
+    const user = userEvent.setup();
+    const { store, unmount } = renderWithStore(nonAcquitte);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    // Le localisateur de l'absence affirmée plus bas, vu ici en train de trouver son texte.
+    expect(await screen.findByText(CONSTAT_NON_ACQUITTE)).toBeInTheDocument();
+
+    unmount();
+    renderOn(store);
+
+    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/titre/i)).toHaveValue('');
+    expect(store.getState().recipe.status).toBe('idle');
   });
 });

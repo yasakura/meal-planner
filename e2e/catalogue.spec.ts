@@ -339,15 +339,15 @@ test.describe('Mise en page du catalogue', () => {
   });
 
   /**
-   * F1 — le constat d'échec voyage-t-il AVEC la commande ? Le bouton remonte avec la barre
-   * collante ; un message resté à sa position naturelle finit sous le pli, et l'utilisateur
-   * qui vient de cliquer ne voit rien — il reclique. Même famille que l'échec d'ajout
+   * F1 — le constat de non-acquittement voyage-t-il AVEC la commande ? Le bouton remonte avec
+   * la barre collante ; un message resté à sa position naturelle finit sous le pli, et
+   * l'utilisateur qui vient de cliquer ne voit rien — il reclique. Même famille que l'ajout
    * silencieux de FR-3.
    *
    * `toBeVisible()` ne suffit pas ici : il ne regarde pas si un autre élément recouvre la
    * cible, ni si elle est hors du viewport. Seule la mesure de position le dit.
    */
-  test('le constat d’échec d’enregistrement est visible sans défiler', async ({ page }) => {
+  test('le constat d’enregistrement non confirmé est visible sans défiler', async ({ page }) => {
     // On arme la panne AVANT d'entrer dans le formulaire, et on y entre par le lien : un
     // `page.goto()` recréerait le store, donc le commutateur, et l'écriture réussirait.
     await page.goto('/catalogue');
@@ -360,7 +360,9 @@ test.describe('Mise en page du catalogue', () => {
 
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    const constat = page.getByText('Impossible d’enregistrer la recette.');
+    const constat = page.getByText(
+      'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
+    );
     await expect(constat).toBeVisible();
 
     // Retour au repos : l'utilisateur n'a pas défilé, il a cliqué une commande qui était là.

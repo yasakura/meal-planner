@@ -1,4 +1,5 @@
 import { createAccount, type Account } from '../../domain/entities/account';
+import { createCalendarDate, type CalendarDate } from '../../domain/entities/calendar-date';
 import { createConvive, type Convive } from '../../domain/entities/convive';
 import { createIngredient } from '../../domain/entities/ingredient';
 import { createRecipe, type Recipe } from '../../domain/entities/recipe';
@@ -20,6 +21,13 @@ export const E2E_ACCOUNT: Account = createAccount({
   id: 'e2e-account',
   email: 'e2e@foyer.test',
 });
+
+/**
+ * Jour où « se trouve » le mode e2e. Un JEUDI, délibérément : le menu part du prochain lundi,
+ * donc une implémentation qui prendrait « aujourd'hui » au lieu du lundi suivant se verrait
+ * aussitôt dans les libellés (jeudi 1er janvier au lieu de lundi 5 janvier).
+ */
+export const E2E_TODAY: CalendarDate = createCalendarDate({ year: 2026, month: 1, day: 1 });
 
 export const E2E_CONVIVES: readonly Convive[] = Object.freeze([
   createConvive({ id: 'convive-alice', name: 'Alice' }),

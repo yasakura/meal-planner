@@ -1,6 +1,25 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+/**
+ * Fuseau des tests, figé. Sans lui la suite hérite de la machine : `Europe/Paris` sur un poste
+ * français, `UTC` sur un runner GitHub — deux exécutions qui ne mesurent pas la même chose. Deux
+ * gardes en dépendaient en sens OPPOSÉS, donc l'un des deux mentait toujours : les tests de
+ * changement d'heure de `calendar-date` (dont l'implémentation est ancrée sur UTC, donc
+ * insensible au fuseau, cf. leur commentaire) et le mutant qui vide les options de
+ * `Intl.DateTimeFormat` dans `system-clock.ts`, indistinguable sous `Europe/Paris`. UTC tranche
+ * pour le second et ne coûte rien au premier.
+ *
+ * Cette ligne est tenue par `src/test/runner-timezone.test.ts` : la retirer le fait rougir.
+ *
+ * Sur le PROCESSUS, et non dans `test.env` : `test.env` ne couvre que les workers que Vitest
+ * démarre lui-même. Le runner Vitest de Stryker n'en héritait pas et mesurait sous le fuseau de
+ * la machine — mesuré sur un poste à Paris, `system-clock.ts` sortait à 90 % (1 survivant) avec
+ * `test.env` seul, et 100 % (10 tués) avec cette ligne. Posé ici, avant tout démarrage de
+ * worker, il couvre les deux, et `test.env` devient une ligne que plus rien n'exige.
+ */
+process.env.TZ = 'UTC';
+
 export default defineConfig({
   plugins: [react()],
   test: {
