@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { addDays, createCalendarDate, dayOfWeek, parseIsoDate, toIsoDate } from './calendar-date';
+import {
+  addDays,
+  createCalendarDate,
+  dayOfWeek,
+  isBefore,
+  parseIsoDate,
+  subtractMonths,
+  toIsoDate,
+} from './calendar-date';
 
 describe('CalendarDate', () => {
   it('se crée valide et expose ses composants civils', () => {
@@ -183,5 +191,102 @@ describe('parseIsoDate', () => {
     ['29 février hors année bissextile', '2026-02-29'],
   ])('rejette ce qui ne désigne aucun jour du calendrier : %s', (_label, iso) => {
     expect(() => parseIsoDate(iso)).toThrow('La date civile est invalide');
+  });
+});
+
+/**
+ * Reculer de N mois n'est pas une soustraction : les mois n'ont pas la même longueur. Le
+ * quantième demandé peut ne pas exister dans le mois d'arrivée, et le calendrier n'autorise
+ * alors qu'une réponse — le dernier jour de ce mois-là, jamais un débordement sur le suivant.
+ */
+describe('subtractMonths', () => {
+  it('recule de deux mois en gardant le quantième quand il existe', () => {
+    const date = createCalendarDate({ year: 2026, month: 8, day: 19 });
+
+    expect(subtractMonths(date, 2)).toEqual({ year: 2026, month: 6, day: 19 });
+  });
+
+  it('recule au-delà du 1er janvier : l’année suit', () => {
+    const date = createCalendarDate({ year: 2026, month: 1, day: 15 });
+
+    expect(subtractMonths(date, 2)).toEqual({ year: 2025, month: 11, day: 15 });
+  });
+
+  // Le quantième demandé n'existe pas dans le mois d'arrivée : on RECULE sur son dernier jour.
+  // Un `setUTCMonth` naïf déborderait sur le mois suivant — le 30 avril moins deux mois
+  // deviendrait le 2 mars, et une fenêtre de rétention s'ouvrirait deux jours trop tard.
+  it.each([
+    [
+      '30 avril : février 2026 s’arrête au 28',
+      { year: 2026, month: 4, day: 30 },
+      2,
+      { year: 2026, month: 2, day: 28 },
+    ],
+    [
+      '31 mars : février 2028 est bissextile et s’arrête au 29',
+      { year: 2028, month: 3, day: 31 },
+      1,
+      { year: 2028, month: 2, day: 29 },
+    ],
+    [
+      '31 mai : avril s’arrête au 30',
+      { year: 2026, month: 5, day: 31 },
+      1,
+      { year: 2026, month: 4, day: 30 },
+    ],
+    [
+      '31 janvier : novembre 2025 s’arrête au 30',
+      { year: 2026, month: 1, day: 31 },
+      2,
+      { year: 2025, month: 11, day: 30 },
+    ],
+  ])(
+    'ramène au dernier jour du mois quand le quantième n’y existe pas : %s',
+    (_label, props, months, expected) => {
+      expect(subtractMonths(createCalendarDate(props), months)).toEqual(expected);
+    },
+  );
+});
+
+/**
+ * Comparaison STRICTE de deux jours du calendrier. « Avant » et « le même jour » sont deux
+ * réponses différentes : c'est cette distinction qui rend une borne inclusive ou exclusive.
+ */
+describe('isBefore', () => {
+  it('la veille précède le jour', () => {
+    const veille = createCalendarDate({ year: 2026, month: 6, day: 18 });
+    const jour = createCalendarDate({ year: 2026, month: 6, day: 19 });
+
+    expect(isBefore(veille, jour)).toBe(true);
+  });
+
+  it('un jour ne se précède pas LUI-MÊME : la comparaison est stricte', () => {
+    const jour = createCalendarDate({ year: 2026, month: 6, day: 19 });
+    const memeJour = createCalendarDate({ year: 2026, month: 6, day: 19 });
+
+    expect(isBefore(jour, memeJour)).toBe(false);
+  });
+
+  it('le lendemain ne précède pas', () => {
+    const lendemain = createCalendarDate({ year: 2026, month: 6, day: 20 });
+    const jour = createCalendarDate({ year: 2026, month: 6, day: 19 });
+
+    expect(isBefore(lendemain, jour)).toBe(false);
+  });
+
+  // Les deux cas qu'une comparaison composant par composant, prise dans le mauvais ordre,
+  // laisserait passer : le quantième le plus grand appartient au jour le plus ANCIEN.
+  it('l’année l’emporte sur le quantième : le 31 décembre 2025 précède le 1er janvier 2026', () => {
+    const finDAnnee = createCalendarDate({ year: 2025, month: 12, day: 31 });
+    const nouvelAn = createCalendarDate({ year: 2026, month: 1, day: 1 });
+
+    expect(isBefore(finDAnnee, nouvelAn)).toBe(true);
+  });
+
+  it('le mois l’emporte sur le quantième : le 31 mai précède le 1er juin', () => {
+    const finDeMai = createCalendarDate({ year: 2026, month: 5, day: 31 });
+    const debutDeJuin = createCalendarDate({ year: 2026, month: 6, day: 1 });
+
+    expect(isBefore(finDeMai, debutDeJuin)).toBe(true);
   });
 });

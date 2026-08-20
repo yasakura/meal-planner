@@ -1,6 +1,12 @@
-import { combineReducers, configureStore } from '@reduxjs/toolkit';
+import {
+  combineReducers,
+  configureStore,
+  type ThunkAction,
+  type UnknownAction,
+} from '@reduxjs/toolkit';
 
 import { type AuthGateway } from '../../domain/ports/auth-gateway';
+import { type Clock } from '../../domain/ports/clock';
 import { type AddConvive } from '../../domain/use-cases/add-convive';
 import { type CreateRecipe } from '../../domain/use-cases/create-recipe';
 import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
@@ -10,6 +16,7 @@ import { type ListRecipes } from '../../domain/use-cases/list-recipes';
 import { type NextMonday } from '../../domain/use-cases/next-monday';
 import { type RemoveConvive } from '../../domain/use-cases/remove-convive';
 import { type RenameConvive } from '../../domain/use-cases/rename-convive';
+import { type SaveMenu } from '../../domain/use-cases/save-menu';
 import { type UpdateRecipe } from '../../domain/use-cases/update-recipe';
 import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
@@ -21,12 +28,24 @@ import { recipeReducer } from '../features/recipe/recipe-slice';
 
 export type AppDependencies = {
   authGateway: AuthGateway;
+  /**
+   * Le jour courant, relu à CHAQUE fois qu'une décision en dépend. Le port lui-même, et non un
+   * use-case : il n'y a rien à décider ici, seulement à lire — et le plancher de la date de
+   * début se lit après la naissance du store, à un moment où seule une dépendance injectée
+   * peut encore répondre.
+   */
+  clock: Clock;
   createRecipe: CreateRecipe;
   updateRecipe: UpdateRecipe;
   listRecipes: ListRecipes;
   getRecipe: GetRecipe;
   generateMenu: GenerateMenu;
   nextMonday: NextMonday;
+  /**
+   * Le USE-CASE, pas le dépôt : c'est lui qui porte la règle de rétention (fenêtre glissante de
+   * deux mois), et un slice qui appellerait le dépôt directement la contournerait.
+   */
+  saveMenu: SaveMenu;
   listConvives: ListConvives;
   addConvive: AddConvive;
   renameConvive: RenameConvive;
@@ -51,7 +70,11 @@ export function createStore(dependencies: AppDependencies) {
     // à la fois de ses dépendances et de son état de départ. Corollaire recherché : l'horloge
     // n'est jamais relue au montage d'un écran, donc la date par défaut ne dérive pas d'un
     // aller-retour à l'autre (le port `Clock` ne promet rien entre deux lectures).
-    preloadedState: { menu: menuInitialState(dependencies.nextMonday()) },
+    // Le plancher initial est lu ICI aussi : sans lui, le champ natif naîtrait sans `min` et
+    // proposerait le passé le temps d'un premier rendu.
+    preloadedState: {
+      menu: menuInitialState(dependencies.nextMonday(), dependencies.clock.today()),
+    },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({ thunk: { extraArgument: dependencies } }),
   });
@@ -60,6 +83,14 @@ export function createStore(dependencies: AppDependencies) {
 export type AppStore = ReturnType<typeof createStore>;
 export type RootState = ReturnType<typeof rootReducer>;
 export type AppDispatch = AppStore['dispatch'];
+
+/**
+ * Un thunk qui ne fait que LIRE une dépendance injectée pour la donner à un reducer — la forme
+ * des gestes dont la décision est pure mais dont la donnée d'entrée ne l'est pas (le jour
+ * courant). Rien à attendre, rien à rejeter : `createAsyncThunk` réglerait son action dans une
+ * micro-tâche, alors que le geste de l'utilisateur, lui, est immédiat.
+ */
+export type AppThunk = ThunkAction<void, RootState, AppDependencies, UnknownAction>;
 
 export type AppThunkApiConfig = {
   state: RootState;

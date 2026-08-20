@@ -2,6 +2,7 @@ import { styled, keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
+import { type MenuSaveNotice } from './menu-slice';
 
 const { colors, space, fonts } = tokens;
 
@@ -22,6 +23,8 @@ export type MenuScreenProps =
   | {
       status: 'idle';
       startDateIso: string;
+      startDateFloorIso: string;
+      startDateRefused: boolean;
       onStartDateChange: (iso: string) => void;
       selectedDays: number;
       onSelect: (days: number) => void;
@@ -33,10 +36,16 @@ export type MenuScreenProps =
       status: 'success';
       days: MenuDay[];
       startDateIso: string;
+      startDateFloorIso: string;
+      startDateRefused: boolean;
       onStartDateChange: (iso: string) => void;
       selectedDays: number;
       onSelect: (days: number) => void;
       onRegenerate: () => void;
+      onSave: () => void;
+      /** Décidé par le slice, muté : le bouton se verrouille pendant l'écriture, et là seulement. */
+      saveDisabled: boolean;
+      saveNotice: MenuSaveNotice | null;
     };
 
 const Page = styled.div`
@@ -99,14 +108,32 @@ const DateInput = styled.input`
   padding: ${space.sm}px ${space.md}px;
 `;
 
+const FieldNotice = styled.p`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.terracotta};
+  margin: 0;
+  max-width: 320px;
+`;
+
 const START_DATE_FIELD_ID = 'menu-start-date';
 
 /**
  * Champ natif : sur mobile, le système ouvre son propre sélecteur — localisé, accessible, et
  * gratuit. Il n'échange que des chaînes `AAAA-MM-JJ`, que l'écran transmet telles quelles :
  * la traduction vers une date civile appartient au domaine, pas à un composant.
+ *
+ * `min` est une AFFORDANCE et rien de plus : le sélecteur n'offre pas ce qui sera refusé. Il se
+ * contourne au clavier, et selon le navigateur il se contente de marquer le champ invalide —
+ * c'est le slice, muté, qui refuse pour de bon. D'où le constat, qui dit pourquoi la date
+ * affichée n'est pas celle qu'on vient de saisir.
  */
-function StartDatePicker(props: { value: string; onChange: (iso: string) => void }) {
+function StartDatePicker(props: {
+  value: string;
+  min: string;
+  refused: boolean;
+  onChange: (iso: string) => void;
+}) {
   return (
     <Field>
       <FieldLabel htmlFor={START_DATE_FIELD_ID}>Début du menu</FieldLabel>
@@ -114,8 +141,12 @@ function StartDatePicker(props: { value: string; onChange: (iso: string) => void
         id={START_DATE_FIELD_ID}
         type="date"
         value={props.value}
+        min={props.min}
         onChange={(event) => props.onChange(event.target.value)}
       />
+      {props.refused ? (
+        <FieldNotice role="alert">Le menu ne peut pas commencer avant aujourd’hui.</FieldNotice>
+      ) : null}
     </Field>
   );
 }
@@ -152,7 +183,37 @@ const PrimaryButton = styled.button`
   font-family: ${fonts.body};
   font-size: 15px;
   padding: ${space.sm}px ${space.lg}px;
+
+  &:disabled {
+    opacity: 0.6;
+  }
 `;
+
+// Les deux gestes du menu affiché, côte à côte : `PrimaryButton` s'aligne seul en tête de
+// colonne, deux d'affilée s'empileraient.
+const Actions = styled.div`
+  align-self: flex-start;
+  display: flex;
+  gap: ${space.sm}px;
+`;
+
+// Même sobriété que les constats du foyer : un seul style, deux rôles ARIA. C'est le TON, décidé
+// par le slice, qui choisit — et non ce fichier, que la mutation ignore.
+const Note = styled.p`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.inkSecondary};
+  margin: ${space.sm}px 0 0;
+`;
+
+/**
+ * `alert` (assertif) pour ce qui appelle une action, `status` (poli) pour ce qui n'en demande
+ * aucune : un succès, ou une absence de réponse du dépôt.
+ */
+function SaveNoticeView({ notice }: { notice: MenuSaveNotice | null }) {
+  if (notice === null) return null;
+  return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
+}
 
 const RetryButton = styled.button`
   background: none;
@@ -281,7 +342,12 @@ function Body(props: MenuScreenProps) {
       return (
         <>
           <Intro>Génère un menu à partir de tes recettes.</Intro>
-          <StartDatePicker value={props.startDateIso} onChange={props.onStartDateChange} />
+          <StartDatePicker
+            value={props.startDateIso}
+            min={props.startDateFloorIso}
+            refused={props.startDateRefused}
+            onChange={props.onStartDateChange}
+          />
           <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
           <PrimaryButton type="button" onClick={props.onGenerate}>
             Générer un menu
@@ -334,11 +400,22 @@ function Body(props: MenuScreenProps) {
               </DaySection>
             ))}
           </DayList>
-          <StartDatePicker value={props.startDateIso} onChange={props.onStartDateChange} />
+          <StartDatePicker
+            value={props.startDateIso}
+            min={props.startDateFloorIso}
+            refused={props.startDateRefused}
+            onChange={props.onStartDateChange}
+          />
           <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
-          <PrimaryButton type="button" onClick={props.onRegenerate}>
-            Régénérer
-          </PrimaryButton>
+          <Actions>
+            <PrimaryButton type="button" onClick={props.onRegenerate}>
+              Régénérer
+            </PrimaryButton>
+            <PrimaryButton type="button" onClick={props.onSave} disabled={props.saveDisabled}>
+              Enregistrer
+            </PrimaryButton>
+          </Actions>
+          <SaveNoticeView notice={props.saveNotice} />
         </>
       );
   }

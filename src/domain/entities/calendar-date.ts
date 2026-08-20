@@ -87,3 +87,30 @@ export function parseIsoDate(iso: string): CalendarDate {
   const [, year, month, day] = parts;
   return createCalendarDate({ year: Number(year), month: Number(month), day: Number(day) });
 }
+
+/**
+ * Recule de N mois en CLAMPANT sur le dernier jour du mois d'arrivée. Reculer d'un mois n'est
+ * pas soustraire une durée : les mois n'ont pas la même longueur, et le quantième de départ
+ * peut n'exister nulle part dans le mois visé. Le 30 avril moins deux mois désigne le 28
+ * février, pas le 2 mars — un `setUTCMonth` appliqué à une date de fin de mois déborde
+ * silencieusement sur le mois suivant, et ce débordement décalerait toute borne calculée ici.
+ *
+ * Le 1er du mois d'arrivée sert d'ancrage : aucun quantième ne peut y déborder. Le « jour 0 »
+ * du mois suivant est, par convention JS, le dernier jour du mois courant.
+ */
+export function subtractMonths(date: CalendarDate, months: number): CalendarDate {
+  const arrivee = toUtcInstant({ year: date.year, month: date.month - months, day: 1 });
+  const dernierJour = new Date(
+    Date.UTC(arrivee.getUTCFullYear(), arrivee.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  arrivee.setUTCDate(Math.min(date.day, dernierJour));
+  return fromUtcInstant(arrivee);
+}
+
+/**
+ * Comparaison STRICTE : un jour ne se précède pas lui-même. C'est cette strictesse qui rend
+ * inclusive une borne exprimée par « purger ce qui est avant ».
+ */
+export function isBefore(date: CalendarDate, other: CalendarDate): boolean {
+  return toUtcInstant(date).getTime() < toUtcInstant(other).getTime();
+}

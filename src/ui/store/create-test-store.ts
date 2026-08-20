@@ -8,10 +8,12 @@ import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
+import { saveMenuUseCase } from '../../domain/use-cases/save-menu';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
 import { createCalendarDate } from '../../domain/entities/calendar-date';
 import { DriftingClock } from '../../domain/test-doubles/drifting-clock';
 import { InMemoryConviveRepository } from '../../domain/test-doubles/in-memory-convive-repository';
+import { InMemoryMenuRepository } from '../../domain/test-doubles/in-memory-menu-repository';
 import { InMemoryRecipeRepository } from '../../domain/test-doubles/in-memory-recipe-repository';
 import { StubAuthGateway } from '../../domain/test-doubles/stub-auth-gateway';
 import { StubIdGenerator } from '../../domain/test-doubles/stub-id-generator';
@@ -25,8 +27,16 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
   // faussement vert côté convives, et faussement ROUGE côté recettes — sans indice sur la cause.
   const conviveRepository = InMemoryConviveRepository.create();
   const recipeRepository = InMemoryRecipeRepository.create();
+  const menuRepository = InMemoryMenuRepository.create();
+  // Horloge partie d'un DIMANCHE (23 août 2026), et qui dérive d'un jour par lecture comme le
+  // port l'autorise. Le dimanche interdit de confondre « prochain lundi » avec « aujourd'hui » ;
+  // la dérive interdit de mémoriser la première lecture. UNE instance, partagée par le prochain
+  // lundi et par le plancher de la date de début : c'est cette dérive commune qui rend visible
+  // une horloge qu'on aurait cessé de relire.
+  const clock = DriftingClock.startingOn(createCalendarDate({ year: 2026, month: 8, day: 23 }));
   const defaults: AppDependencies = {
     authGateway: StubAuthGateway.withoutSession(),
+    clock,
     createRecipe: createRecipeUseCase({
       idGenerator: StubIdGenerator.create(),
       recipeRepository,
@@ -38,12 +48,10 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
       recipeRepository,
       randomPicker: MathRandomPicker.create(() => 0),
     }),
-    // Horloge partie d'un DIMANCHE (23 août 2026), et qui dérive d'un jour par lecture comme
-    // le port l'autorise. Le dimanche interdit de confondre « prochain lundi » avec
-    // « aujourd'hui » ; la dérive interdit de mémoriser la première lecture.
-    nextMonday: nextMondayUseCase({
-      clock: DriftingClock.startingOn(createCalendarDate({ year: 2026, month: 8, day: 23 })),
-    }),
+    nextMonday: nextMondayUseCase({ clock }),
+    // La MÊME horloge dérivante que partout ailleurs : la borne de rétention se relit à chaque
+    // enregistrement, et une seconde horloge masquerait une borne qu'on aurait cessé de relire.
+    saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({
       idGenerator: StubIdGenerator.create(),

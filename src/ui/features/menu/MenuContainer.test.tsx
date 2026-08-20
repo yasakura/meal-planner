@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
@@ -9,12 +9,15 @@ import { createMenu, type Menu } from '../../../domain/entities/menu';
 import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
+import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { nextMondayUseCase, type NextMonday } from '../../../domain/use-cases/next-monday';
+import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { DriftingClock } from '../../../domain/test-doubles/drifting-clock';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
+import { deferred } from '../../test-utils/deferred';
 import { MenuContainer } from './MenuContainer';
 
 // Lundi 24 août 2026 : le jour 0 du menu EST cette date, le jour 1 le lendemain.
@@ -56,6 +59,7 @@ function renderWithStore(overrides: {
   generateMenu?: GenerateMenu;
   listRecipes?: ListRecipes;
   nextMonday?: NextMonday;
+  saveMenu?: SaveMenu;
 }) {
   const store = createTestStore(overrides);
   return { store, ...renderOn(store) };
@@ -584,6 +588,102 @@ describe('MenuContainer', () => {
   });
 
   /**
+   * TRANCHE 4b — le PLANCHER. Un menu ne peut pas démarrer dans le passé, et le champ ne propose
+   * donc pas ce qui sera refusé : `min` porte AUJOURD'HUI, relu à chaque arrivée sur l'écran.
+   * `min` reste un confort — il se contourne au clavier — le refus, lui, vit dans le slice.
+   *
+   * L'horloge de test DÉRIVE d'un jour par lecture, et voici le compte des lectures :
+   *
+   *   lecture 0 → dimanche 23 août (naissance du store, `nextMonday` → lundi 24 août)
+   *   lecture 1 → lundi 24 août    (naissance du store, plancher initial)
+   *   lecture 2 → mardi 25 août    (1er montage), lecture 3 → mercredi 26 août (2e montage)
+   *
+   * Une saisie consomme elle aussi une lecture, à sa place dans cet ordre.
+   */
+  const CONSTAT_PLANCHER = 'Le menu ne peut pas commencer avant aujourd’hui.';
+
+  it('le champ ne propose aucun jour antérieur à aujourd’hui, relu à CHAQUE arrivée', () => {
+    const { store, unmount } = renderWithStore({});
+
+    // Lecture 2 : le plancher n'est ni le prochain lundi (24), ni la lecture de naissance (24).
+    expect(screen.getByLabelText('Début du menu')).toHaveAttribute('min', '2026-08-25');
+
+    unmount();
+    renderOn(store);
+
+    // Lecture 3 : un plancher figé à la naissance du store afficherait deux fois le 24 août.
+    expect(screen.getByLabelText('Début du menu')).toHaveAttribute('min', '2026-08-26');
+    // La date de début, elle, n'a pas bougé : le plancher n'est pas la date de début.
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
+  });
+
+  /**
+   * Le champ natif se contourne au clavier : `min` n'empêche rien, c'est le slice qui refuse.
+   * L'écran ne peut pas se taire pour autant — il montrerait alors la date saisie tout en
+   * gardant l'autre, et se contredirait. Il revient donc à la date retenue ET dit pourquoi.
+   */
+  it('une date de début passée est refusée : le champ revient à la date retenue et l’écran le dit', () => {
+    renderWithStore({});
+
+    // Lecture 3 (le montage a pris la 2) → aujourd'hui = 26 août : le 20 est derrière.
+    choisirLaDateDeDebut('2026-08-20');
+
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
+    expect(screen.getByText(CONSTAT_PLANCHER)).toBeInTheDocument();
+  });
+
+  it('corriger la date efface le constat', () => {
+    renderWithStore({});
+    choisirLaDateDeDebut('2026-08-20');
+    expect(screen.getByText(CONSTAT_PLANCHER)).toBeInTheDocument();
+
+    choisirLaDateDeDebut('2026-09-02');
+
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-09-02');
+    expect(screen.queryByText(CONSTAT_PLANCHER)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Le constat est un état TRANSITOIRE dans un store qui, lui, est un singleton de session :
+   * démonter le container ne le remet pas à zéro. Sans remise à zéro à l'arrivée, un aller-retour
+   * vers le catalogue ramènerait « ne peut pas commencer avant aujourd’hui » au-dessus d'un champ
+   * parfaitement valide — un message résiduel qui n'accuse plus aucune saisie.
+   *
+   * Le store est RÉUTILISÉ d'un montage à l'autre : un store neuf ne reproduirait pas le défaut.
+   */
+  it('le constat ne survit pas à un remontage sur le MÊME store', () => {
+    const { store, unmount } = renderWithStore({});
+    choisirLaDateDeDebut('2026-08-20');
+    expect(screen.getByText(CONSTAT_PLANCHER)).toBeInTheDocument();
+
+    unmount();
+    renderOn(store);
+
+    expect(screen.queryByText(CONSTAT_PLANCHER)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
+  });
+
+  /**
+   * Le champ de la branche `success` a son PROPRE câblage : `startDateRefused: false` en dur sur
+   * cette branche-là laisserait verts tous les scénarios qui partent de `idle`, pour un écran qui
+   * refuse en silence une fois le menu affiché. `MenuContainer.tsx` n'est pas muté — ce trou ne
+   * se bouche qu'ici.
+   */
+  it('depuis le menu affiché, une date passée est refusée et l’écran le dit', async () => {
+    const user = userEvent.setup();
+    const generate: GenerateMenu = async ({ dateDebut }) => menuDatedOn(dateDebut);
+    renderWithStore({ generateMenu: generate, listRecipes: async () => twoRecipes() });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
+
+    choisirLaDateDeDebut('2026-08-20');
+
+    expect(screen.getByLabelText('Début du menu')).toHaveValue('2026-08-24');
+    expect(screen.getByText(CONSTAT_PLANCHER)).toBeInTheDocument();
+  });
+
+  /**
    * TRANCHE 3 — une recette du menu MÈNE à sa fiche. Le titre devient un lien, et l'adresse
    * inscrit la provenance : c'est elle, et rien d'autre, qui fera dire « ← Menu » au retour de la
    * fiche. La règle d'adressage vit dans un module pur et muté (`recipe-detail-origin.ts`) ; ce
@@ -610,6 +710,217 @@ describe('MenuContainer', () => {
       'href',
       '/catalogue/r2?depuis=menu',
     );
+  });
+
+  /**
+   * TRANCHE 4a — le menu affiché s'ENREGISTRE, et l'écran le constate. Le constat est un état
+   * TRANSITOIRE du store, qui est un singleton de session : c'est ici, et pas dans le slice, que
+   * se vérifie ce qu'un cycle de montage en fait.
+   */
+  const CONSTAT_ENREGISTRE = 'Menu enregistré';
+  const CONSTAT_PANNE = 'Aucune connexion — l’enregistrement du menu n’a pas pu être confirmé.';
+  const CONSTAT_ECHEC = 'Impossible d’enregistrer le menu.';
+
+  // Le bouton n'existe qu'une fois un menu à l'écran : tout scénario d'enregistrement passe
+  // d'abord par une génération.
+  async function genererLeMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByRole('button', { name: /régénérer/i });
+  }
+
+  it('« Enregistrer » n’apparaît qu’une fois un menu affiché', async () => {
+    const user = userEvent.setup();
+    renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => twoRecipes() });
+
+    // L'écran d'accueil ne propose rien à enregistrer : il n'y a pas encore de menu.
+    expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
+
+    await genererLeMenu(user);
+
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
+  });
+
+  it('enregistrer le menu affiché : l’écran le constate, poliment', async () => {
+    const user = userEvent.setup();
+    renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => twoRecipes() });
+    await genererLeMenu(user);
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    // `status` et non `alert` : un succès n'interrompt pas la lecture d'écran.
+    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_ENREGISTRE);
+  });
+
+  it('pendant l’enregistrement, « Enregistrer » est verrouillé — pas deux écritures concurrentes', async () => {
+    const user = userEvent.setup();
+    const enVol = deferred<void>();
+    renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: () => enVol.promise,
+    });
+    await genererLeMenu(user);
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
+
+    // GAGE : le verrou n'est pas définitif — il retombe au règlement, avec le constat.
+    enVol.resolve();
+    expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  /**
+   * Hors ligne, l'écriture est partie sans être acquittée : le constat ne demande RIEN à
+   * l'utilisateur — pas de « Réessayer », dont le scénario d'échec de génération, plus haut,
+   * montre qu'il sait apparaître ailleurs sur cet écran.
+   */
+  it('dépôt indisponible : l’écran dit que l’enregistrement n’est pas confirmé, sans rien réclamer', async () => {
+    const user = userEvent.setup();
+    renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: () => Promise.reject(RepositoryUnavailableError.create()),
+    });
+    await genererLeMenu(user);
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_PANNE);
+    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    // Pas d'impasse : le bouton reste offert.
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  it('échec franc du dépôt : l’écran alerte', async () => {
+    const user = userEvent.setup();
+    renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: () => Promise.reject(new Error('Boom')),
+    });
+    await genererLeMenu(user);
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    // `alert` et non `status` : celui-là demande une action, contrairement au hors-ligne.
+    expect(await screen.findByRole('alert')).toHaveTextContent(CONSTAT_ECHEC);
+  });
+
+  it('un nouvel essai réussi ne laisse aucune trace du constat d’échec', async () => {
+    const user = userEvent.setup();
+    let premier = true;
+    const save: SaveMenu = async () => {
+      if (premier) {
+        premier = false;
+        throw new Error('Boom');
+      }
+    };
+    renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: save,
+    });
+    await genererLeMenu(user);
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
+    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Le constat acquitte un GESTE, et le store est un singleton de session : sans remise à zéro à
+   * l'arrivée, un aller-retour vers le catalogue ramènerait « Menu enregistré » au-dessus d'un
+   * menu que personne ne vient d'enregistrer. Le store est RÉUTILISÉ d'un montage à l'autre : un
+   * store neuf ne reproduirait pas le défaut.
+   */
+  it('le constat d’enregistrement ne survit pas à un remontage sur le MÊME store', async () => {
+    const user = userEvent.setup();
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+    });
+    await genererLeMenu(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
+
+    unmount();
+    renderOn(store);
+
+    // Le menu, LUI, est toujours là : sans ce gage, l'absence du constat serait tout aussi vraie
+    // d'un écran qui aurait tout perdu.
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
+    expect(screen.queryByText(CONSTAT_ENREGISTRE)).not.toBeInTheDocument();
+  });
+
+  /**
+   * … et le remontage ne déverrouille PAS une écriture en vol. Un thunk RTK n'est pas annulé par
+   * un démontage : réarmer le bouton ici rendrait un second appui possible sur un enregistrement
+   * déjà parti.
+   */
+  it('un enregistrement en vol reste verrouillé après un remontage sur le MÊME store', async () => {
+    const user = userEvent.setup();
+    const enVol = deferred<void>();
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: () => enVol.promise,
+    });
+    await genererLeMenu(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    unmount();
+    renderOn(store);
+
+    expect(await screen.findByRole('button', { name: /enregistrer/i })).toBeDisabled();
+
+    // GAGE : le verrou tombe au règlement, sur l'écran remonté — il n'est pas figé par principe.
+    enVol.resolve();
+    expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+  });
+
+  /**
+   * DEUX écritures en vol, et un seul verdict attendu. « Régénérer » n'est jamais verrouillé :
+   * enregistrer, régénérer pendant que l'écriture est en vol, puis enregistrer le nouveau menu
+   * met deux écritures en l'air — entièrement à la souris, la borne d'acquittement étant de 5 s.
+   *
+   * Le verdict de la PREMIÈRE, désavouée par la génération, ne doit pas être reçu comme celui de
+   * la seconde : l'écran acquitterait un menu que personne n'a fini d'enregistrer, puis JETTERAIT
+   * l'échec réel de l'écriture en cours. Un faux signal de succès, et une panne tue.
+   */
+  it('le verdict d’une écriture désavouée ne se fait pas passer pour celui de la suivante', async () => {
+    const user = userEvent.setup();
+    const premiere = deferred<void>();
+    const seconde = deferred<void>();
+    const enVol = [premiere, seconde];
+    renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: () => enVol.shift()!.promise,
+    });
+    await genererLeMenu(user);
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    // « Régénérer » n'est pas verrouillé : la première écriture reste en vol sous le nouveau menu.
+    await user.click(screen.getByRole('button', { name: /régénérer/i }));
+    await screen.findByRole('button', { name: /enregistrer/i });
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    // La PREMIÈRE aboutit : son verdict parle d'un menu qui n'est plus à l'écran.
+    await act(async () => premiere.resolve());
+
+    expect(screen.queryByText(CONSTAT_ENREGISTRE)).not.toBeInTheDocument();
+
+    // La SECONDE échoue : c'est CE verdict-là que l'écran attend, et il ne doit pas être jeté.
+    seconde.reject(new Error('Boom'));
+
+    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
   });
 
   /**

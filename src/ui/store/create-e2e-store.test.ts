@@ -7,7 +7,7 @@ import { E2E_TODAY } from '../../data/e2e/e2e-fixtures';
 import { observeAuthState, selectAuth } from '../features/auth/auth-slice';
 import { loadCatalogue, selectCatalogue } from '../features/catalogue/catalogue-slice';
 import { addConvive, loadConvives, selectConvives } from '../features/convives/convives-slice';
-import { generateMenu, selectMenu } from '../features/menu/menu-slice';
+import { generateMenu, saveMenu, selectMenu } from '../features/menu/menu-slice';
 import {
   loadRecipeDetail,
   selectRecipeDetail,
@@ -197,6 +197,25 @@ describe('createE2eStore', () => {
     await store.dispatch(loadConvives());
     expect(selectConvives(store.getState()).status).toBe('success');
     expect(selectConvives(store.getState()).convives).toHaveLength(4);
+  });
+
+  /**
+   * Le dépôt de MENUS est câblé, et sur le même commutateur que les autres : sans lui, le mode
+   * e2e n'aurait aucune façon de jouer un enregistrement en panne. La séquence, pas
+   * l'instantané — « échouer, observer, rétablir, observer ».
+   */
+  it('enregistre le menu sur son dépôt e2e, et fait échouer l’écriture à la demande', async () => {
+    const host = hostAt('');
+    const store = createE2eStore(host);
+    await store.dispatch(generateMenu(3));
+
+    controlsOf(host).failWrites();
+    await store.dispatch(saveMenu());
+    expect(selectMenu(store.getState()).saveStatus).toBe('unconfirmed');
+
+    controlsOf(host).restore();
+    await store.dispatch(saveMenu());
+    expect(selectMenu(store.getState()).saveStatus).toBe('saved');
   });
 
   it('fait échouer les écritures à la demande, sans toucher aux lectures', async () => {
