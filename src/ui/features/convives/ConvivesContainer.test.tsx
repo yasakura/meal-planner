@@ -51,7 +51,7 @@ function capturingAdd(): { fn: AddConvive; captured: () => AddConviveInput | und
   let captured: AddConviveInput | undefined;
   const fn: AddConvive = async (input) => {
     captured = input;
-    return ConviveBuilder.aConvive().withId('c-new').withName(input.name).build();
+    return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
   };
   return { fn, captured: () => captured };
 }
@@ -183,7 +183,7 @@ describe('ConvivesContainer', () => {
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
 
     expect(await screen.findByText('Rory')).toBeInTheDocument();
-    expect(add.captured()).toEqual({ name: 'Rory' });
+    expect(add.captured()).toEqual({ id: 'generated-id-1', name: 'Rory' });
     const names = screen
       .getAllByRole('listitem')
       .map((item) => within(item).getByTestId('convive-name').textContent);
@@ -330,7 +330,10 @@ describe('ConvivesContainer', () => {
   // L'écriture est réellement partie : elle atterrira au retour du réseau. Ré-armer
   // « Ajouter » inviterait un second appui, donc un second id cuid2, donc le doublon que
   // toute cette passe cherche à éviter.
-  it('après une écriture non acquittée, « Ajouter » reste désactivé et le prénom saisi est conservé', async () => {
+  // Le verrou tient le temps de l'écriture, et rien de plus. Un ajout non acquitté est parti
+  // avec l'identifiant du brouillon : un second appui le RÉÉCRIT au même endroit, il ne peut
+  // pas dupliquer. Rien ne justifie donc de figer l'écran, ni le bouton ni le champ.
+  it('après une écriture non acquittée, « Ajouter » se réarme et le prénom saisi est conservé', async () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
@@ -343,7 +346,8 @@ describe('ConvivesContainer', () => {
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
 
     await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.');
-    expect(screen.getByRole('button', { name: /ajouter/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
+    expect(screen.getByLabelText(/prénom/i)).toBeEnabled();
     expect(screen.getByLabelText(/prénom/i)).toHaveValue('Rory');
   });
 
@@ -394,50 +398,6 @@ describe('ConvivesContainer', () => {
     expect(screen.getByLabelText(/prénom/i)).toBeDisabled();
   });
 
-  // GARANTIE CARDINALE de cette passe. Verrouiller le champ sur `submitDisabled` — qui
-  // inclut `unconfirmed` — retournerait le correctif contre le bug qu'il corrige : la frappe
-  // ne pourrait plus effacer le constat, et l'écran redeviendrait définitivement figé.
-  // Le verrou porte sur `adding` SEUL.
-  it('le champ prénom reste éditable après un ajout non confirmé, bouton verrouillé ou non', async () => {
-    const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: spyReturning([]).fn, addConvive: unacknowledged });
-    await screen.findByText('Personne dans le foyer pour le moment.');
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText(/n’a pas pu être confirmé/);
-
-    expect(screen.getByRole('button', { name: /ajouter/i })).toBeDisabled();
-    expect(screen.getByLabelText(/prénom/i)).toBeEnabled();
-  });
-
-  // Récupération qui ne dépend d'AUCUN cycle de montage : `AccountSheet` garde son panneau
-  // monté pendant sa transition de sortie (200 ms), donc une réouverture rapide ne remonte
-  // rien et `loadConvives` n'est jamais rejoué. Vérifier la seule disparition du message
-  // laisserait passer un bouton resté verrouillé — c'est le bouton qui fige l'écran.
-  it('saisir un prénom après un ajout non confirmé efface le constat et déverrouille « Ajouter »', async () => {
-    const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
-      ]).fn,
-      addConvive: unacknowledged,
-    });
-    await screen.findByText('Aurélie');
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.');
-    expect(screen.getByRole('button', { name: /ajouter/i })).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/prénom/i), 'x');
-
-    expect(
-      screen.queryByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.'),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
-  });
-
   // Reproduit la contradiction observée en conditions réelles : réseau coupé puis rétabli,
   // sheet fermée puis rouverte, l'écran affichait le convive dans la liste ET « l'ajout n'a
   // pas pu être confirmé », bouton verrouillé pour le reste de la session.
@@ -468,6 +428,63 @@ describe('ConvivesContainer', () => {
     // prénom prouve qu'il redevient actionnable, ce que le verrou de session interdisait.
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
+  });
+
+  // Remplace la frappe comme sortie de l'état non-nominal : ce n'est plus l'utilisateur qui
+  // doit retaper pour se libérer, c'est le second appui qui vise le MÊME document.
+  it('un second appui après un ajout non confirmé réécrit le même convive, sans doublon', async () => {
+    const user = userEvent.setup();
+    const ids: string[] = [];
+    const unacknowledged: AddConvive = (input) => {
+      ids.push(input.id);
+      return Promise.reject(RepositoryUnavailableError.create());
+    };
+    renderWithStore({ listConvives: spyReturning([]).fn, addConvive: unacknowledged });
+    await screen.findByText('Personne dans le foyer pour le moment.');
+    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
+    await user.click(screen.getByRole('button', { name: /ajouter/i }));
+    await screen.findByText(/n’a pas pu être confirmé/);
+
+    await user.click(screen.getByRole('button', { name: /ajouter/i }));
+
+    await waitFor(() => expect(ids).toHaveLength(2));
+    // Valeurs LITTÉRALES, pas `ids[0] === ids[1]` : deux `undefined` seraient égaux, et le
+    // test serait vert sur une écriture sans identifiant du tout.
+    expect(ids).toEqual(['generated-id-1', 'generated-id-1']);
+  });
+
+  // Le pendant du précédent, et la preuve que le container réclame bien un formulaire neuf au
+  // remontage : sans lui, le convive suivant écraserait celui que la saisie précédente visait.
+  it('rouvrir la sheet vise un convive NEUF : la saisie suivante n’écrase pas la précédente', async () => {
+    const user = userEvent.setup();
+    const ids: string[] = [];
+    const unacknowledged: AddConvive = (input) => {
+      ids.push(input.id);
+      return Promise.reject(RepositoryUnavailableError.create());
+    };
+    let count = 0;
+    const store = createTestStore({
+      listConvives: spyReturning([]).fn,
+      addConvive: unacknowledged,
+      newConviveId: () => `draft-${(count += 1)}`,
+    });
+    const sheet = renderWith(store);
+    await screen.findByText('Personne dans le foyer pour le moment.');
+    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
+    await user.click(screen.getByRole('button', { name: /ajouter/i }));
+    await screen.findByText(/n’a pas pu être confirmé/);
+
+    sheet.unmount();
+    renderWith(store);
+    await screen.findByText('Personne dans le foyer pour le moment.');
+    await user.type(screen.getByLabelText(/prénom/i), 'Zoé');
+    await user.click(screen.getByRole('button', { name: /ajouter/i }));
+
+    await waitFor(() => expect(ids).toHaveLength(2));
+    // Décalé d'un cran, comme la création de recette : `draft-1` est celui que la naissance du
+    // store pose, et le premier montage du container en réclame déjà un neuf. Ce qui compte est
+    // que les deux saisies visent DEUX documents.
+    expect(ids).toEqual(['draft-2', 'draft-3']);
   });
 
   it('pendant un ajout en vol, « Ajouter » est désactivé : un second appui n’ajoute pas un doublon', async () => {
@@ -773,7 +790,7 @@ describe('ConvivesContainer', () => {
   // ligne — le constat n'apparaissait JAMAIS. Le convive gardait son ancien prénom sans que
   // rien ne l'ait signalé. Contrairement à l'ajout et au retrait, un renommage hors ligne ne
   // part pas en file : la transaction rejette, l'échec est franc, et il doit se voir.
-  it('un constat de renommage pas encore lu retient l’utilisateur sur sa ligne', async () => {
+  it('un constat de renommage ne retient plus l’utilisateur sur sa ligne', async () => {
     const user = userEvent.setup();
     const offlineRename: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
@@ -788,36 +805,15 @@ describe('ConvivesContainer', () => {
     const constat = await screen.findByText(
       'Aucune connexion — le renommage d’Aurélie n’a pas pu être confirmé.',
     );
+    // Le constat est bien LÀ — sans quoi ce test ne dirait rien du verrou qu'il nie.
     expect(constat).toBeInTheDocument();
-    // Tant qu'il est affiché, les autres lignes n'emportent pas l'utilisateur ailleurs : le
-    // constat mourrait sans avoir été lu.
-    expect(screen.getByRole('button', { name: 'Renommer Lionel' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Retirer Lionel' })).toBeDisabled();
-  });
-
-  it('saisir à nouveau lève le constat et rend les autres lignes actionnables', async () => {
-    const user = userEvent.setup();
-    const offlineRename: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
-      renameConvive: offlineRename,
-    });
-    await screen.findByText('Aurélie');
-    await user.click(screen.getByRole('button', { name: 'Renommer Aurélie' }));
-    await user.type(screen.getByLabelText('Nouveau prénom pour Aurélie'), 'x');
-    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
-    await screen.findByText('Aucune connexion — le renommage d’Aurélie n’a pas pu être confirmé.');
-
-    await user.type(screen.getByLabelText('Nouveau prénom pour Aurélie'), 'y');
-
-    // Le verrou n'est pas une impasse : une frappe suffit à en sortir, comme pour l'ajout.
-    expect(
-      screen.queryByText('Aucune connexion — le renommage d’Aurélie n’a pas pu être confirmé.'),
-    ).not.toBeInTheDocument();
+    // Et il ne retient personne : les autres lignes restent actionnables, sans qu'aucune
+    // frappe n'ait à les réveiller. Le constat reste affiché jusqu'au verdict suivant.
     expect(screen.getByRole('button', { name: 'Renommer Lionel' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Retirer Lionel' })).toBeEnabled();
   });
 
-  it('un constat de retrait pas encore lu retient aussi l’utilisateur sur sa ligne', async () => {
+  it('un constat de retrait ne retient plus non plus l’utilisateur sur sa ligne', async () => {
     const user = userEvent.setup();
     const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
@@ -827,10 +823,13 @@ describe('ConvivesContainer', () => {
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Retirer Lionel' }));
     await user.click(screen.getByRole('button', { name: 'Retirer' }));
-    await screen.findByText('Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.');
+    const constat = await screen.findByText(
+      'Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.',
+    );
 
-    expect(screen.getByRole('button', { name: 'Renommer Aurélie' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Retirer Aurélie' })).toBeDisabled();
+    expect(constat).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Renommer Aurélie' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Retirer Aurélie' })).toBeEnabled();
   });
 
   it('au repos, les actions de toutes les lignes sont disponibles', async () => {

@@ -5,7 +5,7 @@ import { isRepositoryUnavailable } from '../../../domain/errors/repository-unava
 import { type AddConviveInput } from '../../../domain/use-cases/add-convive';
 import { type RemoveConviveInput } from '../../../domain/use-cases/remove-convive';
 import { type RenameConviveInput } from '../../../domain/use-cases/rename-convive';
-import { type AppThunkApiConfig, type RootState } from '../../store/store';
+import { type AppThunk, type AppThunkApiConfig, type RootState } from '../../store/store';
 import { elidedDe } from './french-elision';
 
 // `unavailable` : le dépôt n'a pas répondu. Ni un foyer vide, ni un échec de chargement —
@@ -37,14 +37,12 @@ export type ConviveRow = {
   mode: 'idle' | 'editing' | 'confirming-removal';
   notice: RowNotice | null;
   /**
-   * Verrou des actions d'une ligne AU REPOS pendant qu'une autre porte un cycle inachevé.
+   * Verrou des actions d'une ligne AU REPOS pendant qu'une AUTRE porte une écriture en vol.
    *
-   * Deux défauts d'un coup. Sans lui, ouvrir une autre ligne pendant une écriture en vol
-   * faisait diverger le brouillon local du `editingConviveId` que le reducer refusait de
-   * déplacer : la ligne éditée affichait un texte que personne n'avait tapé. Et un constat
-   * d'échec pouvait être effacé par ce même geste avant d'avoir été lu — hors ligne, un
-   * renommage échoue franchement (la transaction rejette), il n'y a que ce constat pour le
-   * dire.
+   * Une seule raison, et elle dure le temps de l'écriture : `conviveEditRequested` et
+   * `conviveRemovalRequested` refusent de déplacer un cycle en vol, donc laisser ces boutons
+   * actionnables donnerait des clics sans effet. Un constat, lui, ne verrouille plus rien —
+   * retenir l'utilisateur sur sa ligne pour qu'il le lise était une chorégraphie de reprise.
    */
   actionsDisabled: boolean;
   saveDisabled: boolean;
@@ -85,15 +83,26 @@ export type ConvivesState = {
    */
   addSubjectName: string | null;
   /**
+   * L'identifiant du document que la saisie EN COURS écrira. Posé à l'ouverture du formulaire et
+   * conservé jusqu'à la suivante : deux envois de la même saisie visent le même document, deux
+   * saisies successives en visent deux — sans quoi le second convive écraserait le premier.
+   *
+   * Propre à l'AJOUT, qui crée un document. Le renommage et le retrait reçoivent un identifiant
+   * qui existe déjà et n'ont rien à mémoriser.
+   *
+   * `| null` comme la date de début du menu, et pour la même raison : `initialState` est
+   * statique et ne peut appeler aucun port. C'est `convivesInitialState`, appelée à la naissance
+   * du store, qui le pose — seul un appel NU au reducer peut voir le null.
+   */
+  draftConviveId: string | null;
+  /**
    * requestId du DERNIER ajout lancé. Même rôle que `latestLoadRequestId`, sur l'autre cycle
-   * de vie. Enjeu propre à l'ajout : un rejet tardif repasserait en `unconfirmed`, ce qui
-   * VERROUILLE le bouton « Ajouter » jusqu'à la frappe suivante — alors que l'ajout courant
-   * vient de réussir.
+   * de vie. Enjeu propre à l'ajout : un rejet tardif afficherait « aucune connexion » sur un
+   * ajout qui, lui, vient d'aboutir.
    *
    * N'est PAS remis à zéro par `restAddLifecycle` : ce n'est pas un constat destiné à
    * l'utilisateur, c'est un aiguillage. Le mêler au cycle du constat le rendrait
-   * réinitialisable par `conviveNameEdited`, donc par une frappe — sans aucun rapport avec
-   * la fraîcheur d'une réponse en vol.
+   * réinitialisable par un geste sans aucun rapport avec la fraîcheur d'une réponse en vol.
    */
   latestAddRequestId: string | null;
   renameStatus: ConviveRenameStatus;
@@ -136,6 +145,7 @@ const initialState: ConvivesState = {
   addStatus: 'idle',
   addError: null,
   addSubjectName: null,
+  draftConviveId: null,
   latestAddRequestId: null,
   renameStatus: 'idle',
   renameDraft: '',
@@ -146,6 +156,23 @@ const initialState: ConvivesState = {
   latestRemoveRequestId: null,
 };
 
+/**
+ * L'état d'un store RÉEL : il naît avec l'identifiant du premier formulaire d'ajout à venir. Un
+ * reducer ne peut appeler aucun port, et la naissance du store est le seul moment où l'on dispose
+ * à la fois de ses dépendances et de son état de départ — exactement comme la date du menu.
+ */
+export function convivesInitialState(draftConviveId: string): ConvivesState {
+  return { ...initialState, draftConviveId };
+}
+
+/**
+ * L'identifiant de brouillon d'un store réel, jamais nul là où on le lit (voir
+ * `ConvivesState.draftConviveId`). Une seule affirmation, un seul endroit.
+ */
+function draftIdOf(state: ConvivesState): string {
+  return state.draftConviveId as string;
+}
+
 export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>(
   // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
   // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
@@ -155,12 +182,32 @@ export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>
   },
 );
 
-export const addConvive = createAsyncThunk<Convive, AddConviveInput, AppThunkApiConfig>(
+/**
+ * Ce que le FORMULAIRE a à dire : sa saisie, et rien de plus. L'identifiant n'en fait pas
+ * partie — il vient du brouillon ouvert, et c'est le thunk qui l'y joint. Un écran ne fabrique
+ * pas d'identifiant.
+ */
+export type ConviveDraft = Omit<AddConviveInput, 'id'>;
+
+/**
+ * Le convive écrit, ET l'identifiant que la saisie SUIVANTE visera. Le second voyage avec le
+ * succès pour que le reducer — muté, contrairement au thunk — décide seul de le poser, et
+ * seulement si le succès est encore d'actualité.
+ */
+export type ConviveAdded = { convive: Convive; nextDraftId: string };
+
+export const addConvive = createAsyncThunk<ConviveAdded, ConviveDraft, AppThunkApiConfig>(
   // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
   // Les reducers matchent sur l’objet thunk, pas sur la chaîne — mutant équivalent.
   'convives/addConvive',
-  async (input, thunkApi) => {
-    return await thunkApi.extra.addConvive(input);
+  async (draft, thunkApi) => {
+    // OÙ écrire est une décision du slice, qui est muté ; le container, lui, ne l'est pas et ne
+    // connaît aucun identifiant.
+    const convive = await thunkApi.extra.addConvive({
+      id: draftIdOf(thunkApi.getState().convives),
+      ...draft,
+    });
+    return { convive, nextDraftId: thunkApi.extra.newConviveId() };
   },
 );
 
@@ -186,8 +233,7 @@ export const removeConvive = createAsyncThunk<void, RemoveConviveInput, AppThunk
  * Repos du cycle de vie de l'ajout. Les trois champs `add*` se remettent à zéro ENSEMBLE et
  * nulle part ailleurs : un prénom orphelin ferait parler un constat d'un ajout qui n'existe
  * plus, et un constat sans prénom ne saurait pas se nommer. Un seul point de remise à zéro
- * rend la divergence impossible entre `conviveNameEdited`, `loadConvives.pending` et
- * `addConvive.fulfilled`.
+ * rend la divergence impossible entre `loadConvives.pending` et `addConvive.fulfilled`.
  */
 function restAddLifecycle(state: ConvivesState): void {
   state.addStatus = 'idle';
@@ -222,14 +268,17 @@ const convivesSlice = createSlice({
   initialState,
   reducers: {
     /**
-     * DÉCLENCHEUR PRINCIPAL de remise à zéro du constat d'ajout. Une action de
-     * l'utilisateur, donc indépendante de tout cycle de montage — contrairement à
-     * `loadConvives.pending`, dont le remontage n'est pas garanti (voir plus bas).
-     * Même condition que partout : une écriture en vol ne se déverrouille pas.
+     * Le container SIGNALE qu'un formulaire d'ajout s'ouvre ; c'est ici qu'on décide d'en tenir
+     * compte. Un formulaire neuf, c'est un convive neuf — le container repart d'un champ vide,
+     * et ce qui y sera tapé n'est pas ce que la visite précédente visait.
+     *
+     * SAUF si une écriture est en vol : un thunk RTK n'est pas annulé par le démontage de la
+     * sheet. Lui donner un identifiant neuf ferait du réenvoi le doublon qu'on vient précisément
+     * de rendre impossible.
      */
-    conviveNameEdited(state) {
+    conviveFormOpened(state, action: PayloadAction<string>) {
       if (state.addStatus === 'adding') return;
-      restAddLifecycle(state);
+      state.draftConviveId = action.payload;
     },
     /**
      * Ouvre l'édition d'une ligne. Repart d'un constat propre : le précédent parlait d'un
@@ -251,13 +300,11 @@ const convivesSlice = createSlice({
       restRenameLifecycle(state);
     },
     /**
-     * DÉCLENCHEUR PRINCIPAL de remise à zéro du constat de renommage — un geste de
-     * l'utilisateur, donc indépendant de tout cycle de montage, que la sheet ne garantit pas.
-     * Ne referme PAS l'édition : l'utilisateur est justement en train d'y taper.
+     * La saisie, et RIEN d'autre : elle ne chasse aucun constat et ne lève aucun verrou.
+     * Le constat de renommage part avec le verdict suivant (`renameConvive.pending`), avec la
+     * fermeture de l'édition, ou avec la réouverture de l'écran.
      */
     renameDraftEdited(state, action: PayloadAction<string>) {
-      if (state.renameStatus === 'renaming') return;
-      state.renameStatus = 'idle';
       state.renameDraft = action.payload;
     },
     conviveRemovalRequested(state, action: PayloadAction<string>) {
@@ -277,23 +324,21 @@ const convivesSlice = createSlice({
         state.latestLoadRequestId = action.meta.requestId;
         state.status = 'loading';
         state.error = null;
-        // Filet SECONDAIRE, pas le mécanisme de récupération. Il couvre le seul cas que la
-        // saisie ne couvre pas : l'écran est ré-entré et relit le monde sans que
-        // l'utilisateur ne tape rien — sinon un constat périmé s'afficherait à côté d'une
-        // liste fraîche, la contradiction même qu'on corrige.
-        // Il ne GARANTIT rien : `AccountSheet` garde son panneau monté pendant les 200 ms de
+        // La RÉOUVERTURE de l'écran est l'un des deux déclencheurs qui chassent le constat,
+        // l'autre étant le verdict suivant. Elle couvre le cas où l'écran est ré-entré et
+        // relit le monde : sinon un constat périmé s'afficherait à côté d'une liste fraîche,
+        // la contradiction même qu'on corrige.
+        // Elle ne GARANTIT rien : `AccountSheet` garde son panneau monté pendant les 200 ms de
         // sa transition de sortie, donc une réouverture rapide n'entraîne aucun remontage et
-        // ce thunk n'est jamais rejoué (mesuré : 80 ms → non, 700 ms → oui). C'est
-        // `conviveNameEdited` qui porte la garantie.
+        // ce thunk n'est jamais rejoué (mesuré : 80 ms → non, 700 ms → oui).
         // SAUF si une écriture est en vol : fermer puis rouvrir la sheet pendant les 5 s de
-        // la borne passe par ici, et réarmer le bouton à cet instant rendrait un second
-        // appui possible — donc un second id, donc le doublon.
+        // la borne passe par ici, et remettre le cycle à zéro à cet instant déverrouillerait
+        // une opération qui n'est pas annulée par le démontage.
         if (state.addStatus !== 'adding') restAddLifecycle(state);
-        // Mêmes filet et même exception pour les deux autres cycles : ré-entrer dans l'écran
+        // Même geste et même exception pour les deux autres cycles : ré-entrer dans l'écran
         // ne doit pas y retrouver une ligne ouverte en édition sur un brouillon vide (le
         // container repart avec un `useState` neuf), ni une confirmation de suppression
-        // ouverte que personne n'a demandée. Sauf écriture en vol : la déverrouiller ici
-        // rendrait un second appui possible pendant les 5 s de la borne d'acquittement.
+        // ouverte que personne n'a demandée.
         if (state.renameStatus !== 'renaming') restRenameLifecycle(state);
         if (state.removeStatus !== 'removing') restRemoveLifecycle(state);
       })
@@ -330,12 +375,15 @@ const convivesSlice = createSlice({
         // Le convive rejoint sa place alphabétique tout de suite : sans ce tri il
         // resterait en bas de liste jusqu'au prochain chargement, qui lui l'ordonne.
         // Même comparateur que le use-case — la règle appartient au domaine.
-        state.convives.push(action.payload);
+        state.convives.push(action.payload.convive);
         state.convives.sort(compareConvivesByName);
+        // La saisie suivante vise un AUTRE document. Sous le garde de fraîcheur : un succès
+        // dépassé ne tourne pas la page du formulaire courant.
+        state.draftConviveId = action.payload.nextDraftId;
         restAddLifecycle(state);
       })
       .addCase(addConvive.rejected, (state, action) => {
-        // Un échec périmé ne verrouille pas le formulaire d'un ajout qui, lui, a abouti.
+        // Un échec périmé n'affiche pas son constat sur un ajout qui, lui, a abouti.
         if (action.meta.requestId !== state.latestAddRequestId) return;
         // Non acquitté ≠ échoué : la liste n'accueille pas le convive (rien ne prouve qu'il
         // est enregistré) et aucun message d'erreur n'est armé.
@@ -394,8 +442,23 @@ const convivesSlice = createSlice({
   },
 });
 
+// Action NON exportée : elle porte un identifiant que seul le domaine sait produire. L'exposer
+// laisserait n'importe quel écran en inventer un.
+const { conviveFormOpened } = convivesSlice.actions;
+
+/**
+ * L'ouverture du formulaire d'ajout, seul moment où un identifiant neuf est posé sans qu'une
+ * écriture ait abouti. Un THUNK, et non une action nue : le reducer ne peut pas appeler le
+ * domaine. Il ne fait que la lecture — la décision d'en tenir compte, elle, reste dans le
+ * reducer, qui est muté.
+ */
+export function conviveFormScreenOpened(): AppThunk {
+  return (dispatch, _getState, extra) => {
+    dispatch(conviveFormOpened(extra.newConviveId()));
+  };
+}
+
 export const {
-  conviveNameEdited,
   conviveEditRequested,
   conviveEditCancelled,
   renameDraftEdited,
@@ -408,11 +471,12 @@ export const convivesReducer = convivesSlice.reducer;
 export const selectConvives = (state: RootState): ConvivesState => state.convives;
 
 /**
- * Verrou du CHAMP de saisie — délibérément distinct du verrou du bouton.
- * Le bouton se verrouille aussi en `unconfirmed` ; le champ, NON : c'est la frappe qui
- * efface le constat (`conviveNameEdited`). Verrouiller le champ sur le même critère que le
- * bouton tuerait le mécanisme de récupération et figerait l'écran définitivement.
- * Vit ici, et pas dans le container, pour que la mutation couvre la distinction.
+ * Verrou de l'ajout : le temps de l'écriture, et rien de plus. Il tient le champ — sans quoi
+ * une saisie préparée pendant l'attente serait effacée sans un mot par le vidage de l'ajout qui
+ * aboutit — et il tient le bouton, contre un second appui dont on n'a pas encore le verdict.
+ * Un ajout non acquitté ne verrouille RIEN : son écriture est partie avec l'identifiant du
+ * brouillon, et un second envoi la réécrit au même endroit.
+ * Vit ici, et pas dans le container, pour que la mutation couvre la décision.
  */
 export const selectIsAddInFlight = (state: RootState): boolean =>
   state.convives.addStatus === 'adding';
@@ -457,9 +521,13 @@ function rowNotice(state: ConvivesState, convive: Convive): RowNotice | null {
  * dans un `useMemo`, sur la référence stable de la tranche.
  */
 export function conviveRowsOf(convives: ConvivesState): ConviveRow[] {
-  // « Au repos » = aucune écriture en vol, et aucun constat en attente d'être lu. Le verrou
-  // n'est pas une impasse : une frappe ou une annulation sur la ligne concernée le lève.
-  const cyclesAtRest = convives.renameStatus === 'idle' && convives.removeStatus === 'idle';
+  // Le verrou des AUTRES lignes tient le temps de l'écriture, et rien de plus. Il couvre le
+  // seul défaut qui subsiste : pendant une écriture en vol, `conviveEditRequested` et
+  // `conviveRemovalRequested` refusent de se déplacer, donc un bouton actionnable ne ferait
+  // rien — un écran qui ment. Un constat, lui, ne retient plus personne : le lire est un
+  // droit, pas un péage.
+  const writeInFlight =
+    convives.renameStatus === 'renaming' || convives.removeStatus === 'removing';
   return convives.convives.map((convive) => {
     const editing = convives.editingConviveId === convive.id;
     const confirmingRemoval = convives.pendingRemovalId === convive.id;
@@ -469,21 +537,17 @@ export function conviveRowsOf(convives: ConvivesState): ConviveRow[] {
       name: convive.name,
       mode: editing ? 'editing' : confirmingRemoval ? 'confirming-removal' : 'idle',
       notice: rowNotice(convives, convive),
-      actionsDisabled: !editing && !confirmingRemoval && !cyclesAtRest,
+      actionsDisabled: !editing && !confirmingRemoval && writeInFlight,
       // Verrouillé sur le prénom actuel : renommer « Lionel » en « Lionel » n'est pas un
       // renommage. L'écriture partirait pour rien et, hors ligne, produirait un constat
       // d'échec pour une opération qui ne changeait rien. Trimé comme le fait le domaine ;
       // la casse, elle, est un vrai changement.
-      // Verrouillé aussi tant qu'un renommage n'est pas acquitté : l'écriture est réellement
-      // partie et atterrira au retour du réseau, un second envoi n'apporterait rien.
+      // Le temps de l'écriture, et rien de plus : un renommage non acquitté ne verrouille RIEN.
+      // Il vise un identifiant qui EXISTE déjà — un second envoi est le même upsert, il ne peut
+      // rien dupliquer.
       saveDisabled:
-        !editing ||
-        draft === '' ||
-        draft === convive.name ||
-        convives.renameStatus === 'renaming' ||
-        convives.renameStatus === 'unconfirmed',
-      // Le CHAMP se verrouille pendant l'écriture seulement : c'est la frappe qui efface le
-      // constat non acquitté, le verrouiller figerait l'écran définitivement.
+        !editing || draft === '' || draft === convive.name || convives.renameStatus === 'renaming',
+      // Le CHAMP se verrouille exactement comme le bouton : le temps de l'écriture.
       editInputDisabled: editing && convives.renameStatus === 'renaming',
       confirmDisabled: confirmingRemoval && convives.removeStatus === 'removing',
     };

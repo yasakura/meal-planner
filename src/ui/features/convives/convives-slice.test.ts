@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
 import { type Convive } from '../../../domain/entities/convive';
-import { type AddConvive } from '../../../domain/use-cases/add-convive';
+import { type AddConvive, type AddConviveInput } from '../../../domain/use-cases/add-convive';
+import { type NewConviveId } from '../../../domain/use-cases/new-convive-id';
 import { type ListConvives } from '../../../domain/use-cases/list-convives';
 import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
@@ -18,8 +19,8 @@ import {
 import {
   addConvive,
   conviveEditCancelled,
+  conviveFormScreenOpened,
   conviveEditRequested,
-  conviveNameEdited,
   conviveRemovalCancelled,
   conviveRemovalRequested,
   loadConvives,
@@ -37,6 +38,28 @@ function twoConvives(): Convive[] {
   ];
 }
 
+// Identifiants de brouillon DISTINCTS d'un appel à l'autre. Un stub à valeur constante rendrait
+// vrai « deux saisies successives portent le même identifiant » — le défaut même qu'on traque.
+function sequentialDraftIds(): NewConviveId {
+  let count = 0;
+  return () => `draft-${(count += 1)}`;
+}
+
+// Stub-spy d'ajout : retient l'identifiant sous lequel chaque écriture est partie.
+function recordingAdd(outcome: (input: AddConviveInput) => Promise<Convive>): {
+  fn: AddConvive;
+  ids: string[];
+} {
+  const ids: string[] = [];
+  return {
+    ids,
+    fn: (input) => {
+      ids.push(input.id);
+      return outcome(input);
+    },
+  };
+}
+
 describe('convives slice', () => {
   it('un store neuf est idle, sans convives ni erreur', () => {
     const store = createTestStore();
@@ -49,6 +72,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
@@ -75,6 +99,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
@@ -107,6 +132,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
@@ -132,6 +158,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
@@ -145,7 +172,7 @@ describe('convives slice', () => {
 
   it('addConvive appelle le use case avec le prénom saisi et ajoute le convive créé à la liste', async () => {
     const existing = twoConvives();
-    const captured: { input: { name: string } | undefined } = { input: undefined };
+    const captured: { input: AddConviveInput | undefined } = { input: undefined };
     const addConviveUseCase: AddConvive = async (input) => {
       captured.input = input;
       return ConviveBuilder.aConvive().withId('c3').withName(input.name).build();
@@ -158,7 +185,7 @@ describe('convives slice', () => {
 
     const added = await store.dispatch(addConvive({ name: 'Rory' }));
 
-    expect(captured.input).toEqual({ name: 'Rory' });
+    expect(captured.input).toEqual({ id: 'generated-id-1', name: 'Rory' });
     expect(selectConvives(store.getState())).toEqual({
       status: 'success',
       convives: [...existing, ConviveBuilder.aConvive().withId('c3').withName('Rory').build()],
@@ -167,6 +194,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: added.meta.requestId,
       renameStatus: 'idle',
       renameDraft: '',
@@ -220,6 +248,7 @@ describe('convives slice', () => {
       addStatus: 'error',
       addError: 'Firestore indisponible',
       addSubjectName: 'Rory',
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: failed.meta.requestId,
       renameStatus: 'idle',
       renameDraft: '',
@@ -250,6 +279,7 @@ describe('convives slice', () => {
       addStatus: 'adding',
       addError: null,
       addSubjectName: 'Rory',
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: inFlight.requestId,
       renameStatus: 'idle',
       renameDraft: '',
@@ -277,6 +307,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
@@ -310,6 +341,7 @@ describe('convives slice', () => {
       addStatus: 'unconfirmed',
       addError: null,
       addSubjectName: 'Rory',
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: unacked.meta.requestId,
       renameStatus: 'idle',
       renameDraft: '',
@@ -372,16 +404,6 @@ describe('convives slice', () => {
     expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
   });
 
-  it('saisir un prénom oublie le prénom soumis avec le reste du cycle de vie', async () => {
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ addConvive: unacknowledged });
-    await store.dispatch(addConvive({ name: 'Rory' }));
-
-    store.dispatch(conviveNameEdited());
-
-    expect(selectConvives(store.getState()).addSubjectName).toBeNull();
-  });
-
   // Même règle que `addStatus`/`addError`, sans exception : un prénom orphelin qui survivrait
   // à un rechargement ferait parler un constat d'un ajout qui n'existe plus.
   it('un nouveau chargement oublie le prénom soumis, sauf si l’ajout est encore en vol', async () => {
@@ -431,36 +453,6 @@ describe('convives slice', () => {
   // monté pendant les 200 ms de sa transition de sortie : rouvrir avant la fin annule le
   // démontage sans qu'aucun cycle n'ait lieu, et `loadConvives` n'est jamais rejoué.
   // Mesuré : réouverture à 80 ms → pas de remontage ; à 700 ms → remontage.
-  it('saisir un prénom remet le cycle de vie de l’ajout au repos', async () => {
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      addConvive: unacknowledged,
-    });
-    await store.dispatch(loadConvives());
-    await store.dispatch(addConvive({ name: 'Rory' }));
-    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
-
-    store.dispatch(conviveNameEdited());
-
-    expect(selectConvives(store.getState()).addStatus).toBe('idle');
-    expect(selectConvives(store.getState()).addError).toBeNull();
-  });
-
-  // Symétrique de la condition posée sur `loadConvives.pending`, pour la même raison : une
-  // écriture en vol ne se déverrouille pas. Taper pendant les 5 s de la borne ne doit rien
-  // débloquer, sinon un second appui produit un second id, donc le doublon.
-  it('saisir un prénom pendant un ajout en vol ne déverrouille rien', () => {
-    const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
-    const store = createTestStore({ addConvive: pendingAdd });
-    void store.dispatch(addConvive({ name: 'Rory' }));
-    expect(selectConvives(store.getState()).addStatus).toBe('adding');
-
-    store.dispatch(conviveNameEdited());
-
-    expect(selectConvives(store.getState()).addStatus).toBe('adding');
-  });
-
   it('un ajout réussi ramène le cycle de vie au repos et efface l’erreur de l’échec précédent', async () => {
     const existing = twoConvives();
     let shouldFail = true;
@@ -486,6 +478,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: retried.meta.requestId,
       renameStatus: 'idle',
       renameDraft: '',
@@ -525,6 +518,7 @@ describe('convives slice', () => {
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
+      draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
@@ -647,6 +641,134 @@ describe('convives slice', () => {
       'Lionel',
       'Rory',
     ]);
+  });
+
+  // Symétrique du renommage : le VERDICT SUIVANT est le déclencheur garanti de la remise à
+  // zéro du constat d'ajout — celui qu'aucun cycle de montage ne conditionne, depuis que la
+  // frappe ne joue plus ce rôle.
+  it('un nouvel envoi chasse le constat de l’ajout précédent', async () => {
+    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({ addConvive: unacknowledged });
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+
+    const renvoi = store.dispatch(addConvive({ name: 'Rory' }));
+
+    expect(selectConvives(store.getState()).addStatus).toBe('adding');
+    await renvoi;
+  });
+
+  // Et sur le troisième cycle, pour la même raison.
+  it('un nouvel envoi chasse le constat du retrait précédent', async () => {
+    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({
+      listConvives: async () => twoConvives(),
+      removeConvive: unacknowledged,
+    });
+    await store.dispatch(loadConvives());
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+
+    const renvoi = store.dispatch(removeConvive({ id: 'c2' }));
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('removing');
+    await renvoi;
+  });
+
+  // ─── L'identifiant du brouillon ────────────────────────────────────────────────────
+
+  // Rend le doublon IMPOSSIBLE au lieu de l'empêcher par un verrou : l'écriture vise un
+  // document décidé à l'avance, pas un cuid tiré au moment de partir.
+  it('écrit l’ajout sous l’identifiant du brouillon courant', async () => {
+    const add = recordingAdd(async (input) =>
+      ConviveBuilder.aConvive().withId(input.id).withName(input.name).build(),
+    );
+    const store = createTestStore({ newConviveId: sequentialDraftIds(), addConvive: add.fn });
+
+    await store.dispatch(addConvive({ name: 'Rory' }));
+
+    expect(add.ids).toEqual(['draft-1']);
+    expect(selectConvives(store.getState()).convives.map((c) => c.id)).toEqual(['draft-1']);
+  });
+
+  // LE point du lot : réappuyer après un non-acquitté réécrit le MÊME document. C'est ce qui
+  // autorise à retirer le verrou — il n'y a plus rien à empêcher.
+  it('réenvoie un ajout non acquitté sous le MÊME identifiant, sans fabriquer de doublon', async () => {
+    const add = recordingAdd(() => Promise.reject(RepositoryUnavailableError.create()));
+    const store = createTestStore({ newConviveId: sequentialDraftIds(), addConvive: add.fn });
+
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    await store.dispatch(addConvive({ name: 'Rory' }));
+
+    expect(add.ids).toEqual(['draft-1', 'draft-1']);
+  });
+
+  // Le pendant indispensable du précédent : un identifiant MÉMORISÉ ferait de la seconde
+  // saisie l'écrasement de la première. Deux convives ajoutés à la suite sont deux documents.
+  it('pose un identifiant neuf après un ajout abouti : deux saisies successives ne s’écrasent pas', async () => {
+    const add = recordingAdd(async (input) =>
+      ConviveBuilder.aConvive().withId(input.id).withName(input.name).build(),
+    );
+    const store = createTestStore({ newConviveId: sequentialDraftIds(), addConvive: add.fn });
+
+    await store.dispatch(addConvive({ name: 'Rory' }));
+    await store.dispatch(addConvive({ name: 'Zoé' }));
+
+    expect(add.ids).toEqual(['draft-1', 'draft-2']);
+    expect(selectConvives(store.getState()).convives.map((c) => [c.id, c.name])).toEqual([
+      ['draft-1', 'Rory'],
+      ['draft-2', 'Zoé'],
+    ]);
+  });
+
+  it('rouvrir l’écran pose un identifiant neuf pour la saisie suivante', () => {
+    const store = createTestStore({ newConviveId: sequentialDraftIds() });
+    // Le store naît avec l'identifiant du premier brouillon : un `initialState` statique ne
+    // peut appeler aucun port, c'est la naissance du store qui le pose.
+    expect(selectConvives(store.getState()).draftConviveId).toBe('draft-1');
+
+    store.dispatch(conviveFormScreenOpened());
+
+    expect(selectConvives(store.getState()).draftConviveId).toBe('draft-2');
+  });
+
+  // Un thunk RTK n'est pas annulé par le démontage : rouvrir la sheet pendant les 5 s de la
+  // borne ne doit PAS donner un identifiant neuf, sinon le réenvoi redevient le doublon qu'on
+  // vient de rendre impossible.
+  it('rouvrir l’écran pendant un ajout en vol garde l’identifiant de l’écriture partie', () => {
+    const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
+    const store = createTestStore({ newConviveId: sequentialDraftIds(), addConvive: pendingAdd });
+    void store.dispatch(addConvive({ name: 'Rory' }));
+    expect(selectConvives(store.getState()).addStatus).toBe('adding');
+
+    store.dispatch(conviveFormScreenOpened());
+
+    expect(selectConvives(store.getState()).draftConviveId).toBe('draft-1');
+  });
+
+  // Symétrique du garde de fraîcheur qui protège déjà le constat : un succès dépassé ne doit
+  // pas tourner la page du formulaire courant, sinon la saisie en cours change de document
+  // en plein vol.
+  it('un succès tardif d’un ajout dépassé ne renouvelle pas l’identifiant du brouillon', async () => {
+    const slow = deferred<Convive>();
+    let call = 0;
+    const add: AddConvive = (input) => {
+      call += 1;
+      return call === 1
+        ? slow.promise
+        : Promise.resolve(ConviveBuilder.aConvive().withId(input.id).withName(input.name).build());
+    };
+    const store = createTestStore({ newConviveId: sequentialDraftIds(), addConvive: add });
+
+    const abandoned = store.dispatch(addConvive({ name: 'Rory' }));
+    await store.dispatch(addConvive({ name: 'Zoé' }));
+    // L'ajout courant a abouti : le brouillon a tourné une fois, et une seule.
+    expect(selectConvives(store.getState()).draftConviveId).toBe('draft-2');
+    slow.resolve(ConviveBuilder.aConvive().withId('draft-1').withName('Rory').build());
+    await abandoned;
+
+    expect(selectConvives(store.getState()).draftConviveId).toBe('draft-2');
   });
 
   // ─── Renommer (FR-3) ────────────────────────────────────────────────────────────────
@@ -837,9 +959,10 @@ describe('convives slice', () => {
     expect(selectConvives(store.getState()).editingConviveId).toBeNull();
   });
 
-  // Même déclencheur que sur l'ajout, pour la même raison : c'est un geste de l'utilisateur,
-  // il ne suppose rien du cycle de montage — que la sheet ne garantit pas.
-  it('modifier le brouillon de renommage efface le constat périmé', async () => {
+  // Le constat SURVIT à la frappe : c'est le verdict suivant qui le chasse, jamais la saisie.
+  // Un renommage vise un id qui EXISTE déjà, donc rien n'exige de l'utilisateur qu'il tape
+  // pour se libérer — il n'y avait rien à libérer.
+  it('modifier le brouillon laisse le constat en place, sans refermer l’édition', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
       listConvives: async () => twoConvives(),
@@ -852,23 +975,29 @@ describe('convives slice', () => {
 
     store.dispatch(renameDraftEdited('Li'));
 
-    expect(selectConvives(store.getState()).renameStatus).toBe('idle');
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
     // L'édition NE se referme PAS : l'utilisateur est en train de taper dedans.
     expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
+    expect(selectConvives(store.getState()).renameDraft).toBe('Li');
   });
 
-  it('modifier le brouillon pendant un renommage en vol ne déverrouille rien', async () => {
-    const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
+  // Le VERDICT SUIVANT, lui, chasse le constat : c'est le seul déclencheur qu'aucun cycle de
+  // montage ne conditionne, et il ne demande rien d'autre à l'utilisateur que de réessayer.
+  it('un nouvel envoi chasse le constat du renommage précédent', async () => {
+    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
       listConvives: async () => twoConvives(),
-      renameConvive: pendingRename,
+      renameConvive: unacknowledged,
     });
     await store.dispatch(loadConvives());
-    void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    store.dispatch(conviveEditRequested('c2'));
+    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
 
-    store.dispatch(renameDraftEdited('Li'));
+    const renvoi = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
     expect(selectConvives(store.getState()).renameStatus).toBe('renaming');
+    await renvoi;
   });
 
   // Rémanence : le store est un singleton de session. Sans cette remise à zéro, rouvrir la
@@ -1190,7 +1319,7 @@ describe('convives slice', () => {
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(false);
   });
 
-  it('verrouille l’enregistrement pendant le renommage en vol et tant qu’il n’est pas acquitté', async () => {
+  it('verrouille l’enregistrement pendant le renommage en vol', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
       listConvives: async () => twoConvives(),
@@ -1208,10 +1337,10 @@ describe('convives slice', () => {
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.editInputDisabled).toBe(true);
   });
 
-  // Même distinction que sur l'ajout : le bouton reste verrouillé sur un renommage non
-  // acquitté (l'écriture est partie et atterrira), mais le champ NON — c'est la frappe qui
-  // efface le constat, et verrouiller le champ figerait l'écran définitivement.
-  it('après un renommage non acquitté, le bouton reste verrouillé mais le champ redevient saisissable', async () => {
+  // Le verrou tient le temps de l'écriture, et rien de plus : dès qu'un verdict tombe — même
+  // « on ne sait pas » —, les DEUX se réarment. Un second envoi vise le même id : il réécrit,
+  // il ne duplique pas.
+  it('après un renommage non acquitté, le bouton et le champ se réarment tous les deux', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
       listConvives: async () => twoConvives(),
@@ -1224,7 +1353,7 @@ describe('convives slice', () => {
     store.dispatch(renameDraftEdited('Lio'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
-    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(false);
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.editInputDisabled).toBe(false);
   });
 
@@ -1500,7 +1629,7 @@ describe('convives slice', () => {
     ]);
   });
 
-  it('garde les autres lignes verrouillées tant que le constat de renommage n’est pas levé', async () => {
+  it('un constat de renommage ne verrouille plus les autres lignes', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
       listConvives: async () => twoConvives(),
@@ -1510,16 +1639,13 @@ describe('convives slice', () => {
     store.dispatch(conviveEditRequested('c1'));
     await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
 
-    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.actionsDisabled).toBe(true);
-
-    // Une frappe lève le constat, donc le verrou : le mécanisme de sortie est le même que
-    // pour l'ajout, et il tient en un geste.
-    store.dispatch(renameDraftEdited('Li'));
-
+    // Le constat est bien LÀ — sans quoi ce test ne dirait rien du verrou qu'il nie.
+    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    // Et il ne retient personne : l'utilisateur va ailleurs sans avoir à taper quoi que ce soit.
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.actionsDisabled).toBe(false);
   });
 
-  it('verrouille aussi les autres lignes tant que le constat de retrait n’est pas levé', async () => {
+  it('un constat de retrait ne verrouille plus les autres lignes', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
       listConvives: async () => twoConvives(),
@@ -1529,10 +1655,7 @@ describe('convives slice', () => {
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
 
-    expect(conviveRowsOf(selectConvives(store.getState()))[0]?.actionsDisabled).toBe(true);
-
-    store.dispatch(conviveRemovalCancelled());
-
+    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
     expect(conviveRowsOf(selectConvives(store.getState()))[0]?.actionsDisabled).toBe(false);
   });
 

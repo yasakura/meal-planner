@@ -12,6 +12,8 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { newConviveIdUseCase } from '../../domain/use-cases/new-convive-id';
+import { newRecipeIdUseCase } from '../../domain/use-cases/new-recipe-id';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
@@ -31,10 +33,8 @@ export function createAppStore() {
   return createStore({
     authGateway: FirebaseAuthGateway.create(auth),
     clock,
-    createRecipe: createRecipeUseCase({
-      idGenerator: IdGeneratorCuid2.create(),
-      recipeRepository,
-    }),
+    createRecipe: createRecipeUseCase({ recipeRepository }),
+    newRecipeId: newRecipeIdUseCase({ idGenerator: IdGeneratorCuid2.create() }),
     updateRecipe: updateRecipeUseCase({ recipeRepository }),
     listRecipes: listRecipesUseCase({ recipeRepository }),
     getRecipe: getRecipeUseCase({ recipeRepository }),
@@ -47,10 +47,8 @@ export function createAppStore() {
     // sur aujourd'hui, et deux horloges pourraient purger un menu que l'écran vient d'accepter.
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),
-    addConvive: addConviveUseCase({
-      idGenerator: IdGeneratorCuid2.create(),
-      conviveRepository,
-    }),
+    addConvive: addConviveUseCase({ conviveRepository }),
+    newConviveId: newConviveIdUseCase({ idGenerator: IdGeneratorCuid2.create() }),
     renameConvive: renameConviveUseCase({ conviveRepository }),
     removeConvive: removeConviveUseCase({ conviveRepository }),
   });

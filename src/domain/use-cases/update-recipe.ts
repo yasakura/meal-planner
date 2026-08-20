@@ -13,8 +13,10 @@ export type UpdateRecipeInput = {
 /**
  * Modifier une recette existante.
  *
- * L'identifiant est CONSERVÉ : c'est la même recette, pas une nouvelle — d'où l'absence de
- * `IdGenerator` parmi les dépendances, seule différence de câblage avec `createRecipeUseCase`.
+ * L'identifiant est CONSERVÉ : c'est la même recette, pas une nouvelle. Ni ce use-case ni
+ * `createRecipeUseCase` ne dépendent d'un `IdGenerator` — la création reçoit elle aussi son
+ * identifiant, posé à l'ouverture du formulaire par `newRecipeIdUseCase`. Les deux ne se
+ * distinguent donc plus que par leur INTENTION, et c'est elle que l'écran choisit.
  *
  * La modification REMPLACE intégralement le contenu, elle ne le fusionne pas : ce que le
  * formulaire n'envoie plus disparaît. C'est le comportement naturel de `save`, qui est un

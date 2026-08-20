@@ -5,6 +5,8 @@ import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
 import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
+import { newConviveIdUseCase } from '../../domain/use-cases/new-convive-id';
+import { newRecipeIdUseCase } from '../../domain/use-cases/new-recipe-id';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
 import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
@@ -37,10 +39,8 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
   const defaults: AppDependencies = {
     authGateway: StubAuthGateway.withoutSession(),
     clock,
-    createRecipe: createRecipeUseCase({
-      idGenerator: StubIdGenerator.create(),
-      recipeRepository,
-    }),
+    createRecipe: createRecipeUseCase({ recipeRepository }),
+    newRecipeId: newRecipeIdUseCase({ idGenerator: StubIdGenerator.create() }),
     updateRecipe: updateRecipeUseCase({ recipeRepository }),
     listRecipes: listRecipesUseCase({ recipeRepository }),
     getRecipe: getRecipeUseCase({ recipeRepository }),
@@ -53,10 +53,8 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
     // enregistrement, et une seconde horloge masquerait une borne qu'on aurait cessé de relire.
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),
-    addConvive: addConviveUseCase({
-      idGenerator: StubIdGenerator.create(),
-      conviveRepository,
-    }),
+    addConvive: addConviveUseCase({ conviveRepository }),
+    newConviveId: newConviveIdUseCase({ idGenerator: StubIdGenerator.create() }),
     renameConvive: renameConviveUseCase({ conviveRepository }),
     removeConvive: removeConviveUseCase({ conviveRepository }),
   };

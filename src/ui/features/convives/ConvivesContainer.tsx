@@ -7,7 +7,7 @@ import {
   addConvive,
   conviveEditCancelled,
   conviveEditRequested,
-  conviveNameEdited,
+  conviveFormScreenOpened,
   conviveRemovalCancelled,
   conviveRemovalRequested,
   loadConvives,
@@ -49,6 +49,9 @@ export function ConvivesContainer() {
   const dispatch = useAppDispatch();
 
   useEffect(() => {
+    // Un formulaire d'ajout s'ouvre : on le SIGNALE au slice, qui décide seul s'il pose
+    // l'identifiant du document à écrire. Le container n'en connaît aucun.
+    dispatch(conviveFormScreenOpened());
     dispatch(loadConvives());
   }, [dispatch]);
 
@@ -75,19 +78,11 @@ export function ConvivesContainer() {
 
   const form = {
     name,
-    // Saisir efface le constat d'ajout périmé. Le container ne DÉCIDE rien : il rapporte le
-    // geste, le slice tranche (il est le seul des deux à être couvert par la mutation).
-    onNameChange: (value: string) => {
-      setName(value);
-      dispatch(conviveNameEdited());
-    },
+    onNameChange: setName,
     onSubmit: () => void handleSubmit(),
-    // Verrouillé aussi après un ajout non acquitté : l'écriture est réellement partie et
-    // atterrira au retour du réseau. Ré-armer le bouton inviterait un second appui, donc un
-    // second id, donc le doublon que tout ceci cherche à éviter. Le verrou se lève dès que
-    // l'utilisateur retape quelque chose (`conviveNameEdited`) — pas au remontage, qui n'est
-    // pas garanti.
-    submitDisabled: addStatus === 'adding' || addStatus === 'unconfirmed' || name.trim() === '',
+    // Le verrou vit dans le slice, qui est muté : le temps de l'écriture, et rien de plus. Un
+    // ajout non acquitté ne verrouille rien — un second envoi vise le même document.
+    submitDisabled: isAddInFlight || name.trim() === '',
     inputDisabled: isAddInFlight,
     addNotice: addNoticeFor(addStatus, addSubjectName),
   };

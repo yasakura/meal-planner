@@ -9,6 +9,7 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { type CreateRecipe, type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
+import { deferred } from '../../test-utils/deferred';
 import { RecipeCreateContainer } from './RecipeCreateContainer';
 
 // La page de création navigue vers /catalogue à l'enregistrement réussi (useNavigate) et expose
@@ -59,6 +60,18 @@ const CONSTAT_NON_ACQUITTE =
   'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
 
 const nonAcquitte: CreateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+
+// L'identifiant que le store de test pose à la naissance, et que le formulaire renouvelle à
+// chacune de ses ouvertures : `StubIdGenerator` rend toujours le même.
+const ID_DU_FORMULAIRE = 'generated-id-1';
+
+// Un générateur qui rend un identifiant DIFFÉRENT à chaque appel, comme celui de production :
+// le stub par défaut ne saurait pas distinguer « renouvelé » de « conservé ». `id-1` part à la
+// naissance du store, le premier formulaire ouvert porte donc `id-2`.
+function identifiantsSuccessifs() {
+  let rang = 0;
+  return () => `id-${++rang}`;
+}
 
 // Une saisie complète, prête à partir : le point de départ commun des scénarios d'écriture.
 async function saisirUneRecette(user: ReturnType<typeof userEvent.setup>) {
@@ -176,7 +189,10 @@ describe('RecipeCreateContainer', () => {
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Recette enregistrée.');
+    // L'identifiant vient du BROUILLON ouvert, jamais du formulaire : le container n'en connaît
+    // aucun, c'est le slice qui le joint à ce qu'il envoie.
     expect(spy.state.captured).toEqual({
+      id: ID_DU_FORMULAIRE,
       title: 'Poulet rôti',
       ingredients: [{ name: 'Poulet', quantity: 500, unit: 'kg' }],
       convivesReference: 4,
@@ -551,12 +567,11 @@ describe('RecipeCreateContainer', () => {
   });
 
   /**
-   * LE défaut que toute cette passe ferme. Réarmer « Enregistrer » invite le second appui, et
-   * `createRecipeUseCase` génère alors un SECOND cuid : deux documents pour une seule recette,
-   * dès que le réseau revient et que la file locale s'écoule. La saisie, elle, reste en place —
-   * l'effacer obligerait à tout retaper.
+   * Le verrou d'envoi ne tient plus que pendant l'écriture. L'écriture non acquittée est PARTIE
+   * avec l'identifiant du formulaire, et le second appui la réécrit AU MÊME endroit : il n'y a
+   * plus de doublon à empêcher. La saisie, elle, reste en place — l'effacer ferait tout retaper.
    */
-  it('après un enregistrement non acquitté, « Enregistrer » reste verrouillé et la saisie est conservée', async () => {
+  it('après un enregistrement non acquitté, « Enregistrer » se réarme et la saisie est conservée', async () => {
     const user = userEvent.setup();
     renderWithStore(nonAcquitte);
 
@@ -564,80 +579,117 @@ describe('RecipeCreateContainer', () => {
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
     await screen.findByText(CONSTAT_NON_ACQUITTE);
 
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
     expect(screen.getByLabelText(/titre/i)).toHaveValue('Poulet rôti');
     expect(screen.getByLabelText(/nom/i)).toHaveValue('Poulet');
   });
 
   /**
-   * GARANTIE CARDINALE, reprise des convives : le bouton se verrouille, les CHAMPS jamais. C'est
-   * la frappe qui efface le constat — verrouiller la saisie sur le même critère que le bouton
-   * tuerait le mécanisme de récupération et figerait l'écran pour le reste de la session.
-   * Un formulaire de recette n'a pas un champ mais quatre : la règle porte sur la SAISIE entière,
-   * et les trois tests suivants la tiennent pour les trois autres champs.
+   * Ce qui rend ce réarmement sans danger, vu de l'écran : le second appui part sous le MÊME
+   * identifiant — deux écritures d'une recette, jamais deux recettes. Et le constat de panne ne
+   * PÉRIME pas : le verdict suivant prend sa place, ici la confirmation d'un envoi abouti.
    */
-  it('le titre reste éditable après un enregistrement non acquitté, et sa frappe lève le verrou', async () => {
+  it('le réseau revenu, réenvoyer réécrit le même document et solde le constat', async () => {
     const user = userEvent.setup();
-    renderWithStore(nonAcquitte);
+    const ids: string[] = [];
+    let enPanne = true;
+    const depot: CreateRecipe = async (input) => {
+      ids.push(input.id);
+      if (enPanne) throw RepositoryUnavailableError.create();
+      return RecipeBuilder.aRecipe().build();
+    };
+    renderWithStore(depot);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
     await screen.findByText(CONSTAT_NON_ACQUITTE);
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
-    expect(screen.getByLabelText(/titre/i)).toBeEnabled();
 
-    await user.type(screen.getByLabelText(/titre/i), ' au thym');
+    enPanne = false;
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
+    expect(await screen.findByRole('status')).toHaveTextContent('Recette enregistrée.');
     expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+    expect(ids).toEqual([ID_DU_FORMULAIRE, ID_DU_FORMULAIRE]);
   });
 
-  it('modifier une ligne d’ingrédient efface le constat non acquitté et lève le verrou', async () => {
+  /**
+   * Le risque de symétrie du geste : un identifiant qui vivrait plus longtemps que son
+   * formulaire ferait de la seconde recette l'ÉCRASEMENT de la première. Le store est
+   * délibérément RÉUTILISÉ d'un render à l'autre — c'est le remontage qui doit en poser un neuf,
+   * et un store recréé rendrait la garantie invisible.
+   */
+  it('deux formulaires successifs sur le MÊME store écrivent deux documents distincts', async () => {
     const user = userEvent.setup();
-    renderWithStore(nonAcquitte);
+    const ids: string[] = [];
+    const depot: CreateRecipe = async (input) => {
+      ids.push(input.id);
+      return RecipeBuilder.aRecipe().build();
+    };
+    const store = createTestStore({ createRecipe: depot, newRecipeId: identifiantsSuccessifs() });
+    const { unmount } = renderOn(store);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_NON_ACQUITTE);
+    await vi.waitFor(() => expect(ids).toEqual(['id-2']));
 
-    await user.type(screen.getByLabelText(/quantité/i), '0');
+    unmount();
+    renderOn(store);
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
-    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+    // `id-3` est celui que le SUCCÈS du premier envoi a posé ; la réouverture, qui a lieu après,
+    // en pose un quatrième. Deux documents distincts, ce que ce scénario examine.
+    await vi.waitFor(() => expect(ids).toEqual(['id-2', 'id-4']));
   });
 
-  it('modifier la préparation efface le constat non acquitté et lève le verrou', async () => {
+  /**
+   * Le même risque, mais atteint ENTIÈREMENT à la souris et sans attendre le verdict : la barre
+   * de navigation du bas n'est pas verrouillée pendant les 5 s de la borne d'acquittement.
+   * Quitter le formulaire et le rouvrir pendant ce temps fait tomber l'ouverture sous le garde
+   * « une écriture est en vol », qui REFUSE le renouvellement — et rien ne le rattrapait ensuite.
+   * La seconde recette repartait alors sous l'identifiant de la première et l'écrasait.
+   */
+  it('rouvert PENDANT une écriture en vol, le formulaire n’écrase pas la recette en cours', async () => {
     const user = userEvent.setup();
-    renderWithStore(nonAcquitte);
+    const ids: string[] = [];
+    const enVol = deferred<Recipe>();
+    let appels = 0;
+    const depot: CreateRecipe = (input) => {
+      ids.push(input.id);
+      appels += 1;
+      return appels === 1 ? enVol.promise : Promise.resolve(RecipeBuilder.aRecipe().build());
+    };
+    const store = createTestStore({ createRecipe: depot, newRecipeId: identifiantsSuccessifs() });
+    const { unmount } = renderOn(store);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_NON_ACQUITTE);
+    await vi.waitFor(() => expect(ids).toEqual(['id-2']));
 
-    await user.type(screen.getByRole('textbox', { name: /préparation/i }), 'Étape 1');
+    // « Recettes » dans la barre du bas, puis « + » : l'écriture, elle, est toujours en vol.
+    unmount();
+    renderOn(store);
+    // Le formulaire rouvert ne constate rien : aucun verdict n'est encore tombé. Le localisateur
+    // est vu trouver son texte sur cet écran dans le scénario témoin voisin (« remonté sur le
+    // MÊME store après une création réussie »), où il tient « Recette enregistrée. ».
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
-    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
-  });
-
-  it('modifier le nombre de personnes efface le constat non acquitté et lève le verrou', async () => {
-    const user = userEvent.setup();
-    renderWithStore(nonAcquitte);
+    // Le réseau revient : la PREMIÈRE écriture se règle, sur un formulaire déjà rouvert.
+    enVol.resolve(RecipeBuilder.aRecipe().build());
+    await vi.waitFor(() => expect(store.getState().recipe.status).toBe('success'));
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_NON_ACQUITTE);
 
-    await user.type(screen.getByLabelText(/personnes/i), '2');
-
-    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+    // `id-3` a été tiré puis jeté par le garde à la réouverture : c'est le succès qui a posé
+    // `id-4`. Deux documents distincts — la recette n° 1 survit.
+    await vi.waitFor(() => expect(ids).toEqual(['id-2', 'id-4']));
   });
 
   /**
    * Rémanence : le store est un singleton de session, et `unconfirmed` est un constat
    * TRANSITOIRE. Resté en place, il rouvrirait le formulaire sur un constat qui parle d'une
-   * recette précédente, bouton verrouillé pour le reste de la session. Le store est
+   * recette précédente, alors qu'il parle d'un formulaire qui n'est plus là. Le store est
    * délibérément RÉUTILISÉ d'un render à l'autre : un store recréé ne détecterait rien.
    */
   it('remonté sur le MÊME store après un enregistrement non acquitté, rouvre un formulaire neuf', async () => {

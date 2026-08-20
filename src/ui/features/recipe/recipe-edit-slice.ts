@@ -79,9 +79,9 @@ export const selectRecipeEdition = (state: RootState): RecipeEditState => state.
  * container que la mutation ignore. Deux tons seulement : le SUCCÈS ne se constate pas, il
  * renvoie au détail de la recette, qui montre déjà le résultat.
  *
- * L'ENVOI, lui, n'est jamais verrouillé sur un constat non acquitté — contrairement à la
- * création : la modification écrit sur le même identifiant, un second envoi ne peut rien
- * dupliquer, et le verrouiller ferait de l'écran une impasse.
+ * L'ENVOI, lui, n'est jamais verrouillé sur un constat non acquitté — comme à la création, et
+ * pour la même raison : les deux écrans écrivent sur l'identifiant de leur formulaire, un second
+ * envoi ne peut rien dupliquer, et le verrouiller ferait de l'écran une impasse.
  */
 export function recipeEditNoticeOf(state: RecipeEditState): RecipeFormNotice | null {
   if (state.status === 'unconfirmed') {

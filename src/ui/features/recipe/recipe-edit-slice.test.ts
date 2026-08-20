@@ -94,8 +94,9 @@ describe('recipe edit slice', () => {
     expect(recipeEditReducer(saving, recipeEditFormOpened())).toEqual({ status: 'saving' });
   });
 
-  // La séparation des slices n'est pas décorative : une modification ne doit RIEN dire du
-  // statut de création, sans quoi rouvrir « + » après une modification réussie renaviguerait.
+  // La séparation des slices n'est pas décorative : une modification ne doit RIEN dire du cycle
+  // de création, sans quoi rouvrir « + » après une modification réussie renaviguerait — ni de
+  // son identifiant de brouillon, sans quoi elle ferait écrire la recette suivante ailleurs.
   it('une modification réussie ne touche pas au statut de création', async () => {
     const savedRecipe: Recipe = RecipeBuilder.aRecipe().build();
     const spy: UpdateRecipe = async () => savedRecipe;
@@ -103,7 +104,12 @@ describe('recipe edit slice', () => {
 
     await store.dispatch(updateRecipe(anInput()));
 
-    expect(store.getState().recipe).toEqual({ status: 'idle' });
+    expect(store.getState().recipe).toEqual({
+      status: 'idle',
+      draftId: 'generated-id-1',
+      // Aucun envoi de CRÉATION n'est parti : la modification n'en attend aucun verdict.
+      latestCreateRequestId: null,
+    });
   });
   /**
    * Même borne d'acquittement, même troisième issue qu'à la création : l'écriture est partie et

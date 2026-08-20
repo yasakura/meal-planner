@@ -45,9 +45,8 @@ export type ConvivesSectionProps = {
   onNameChange: (value: string) => void;
   onSubmit: () => void;
   submitDisabled: boolean;
-  // Verrou du champ, volontairement séparé de `submitDisabled` : le bouton se verrouille
-  // aussi sur un ajout non confirmé, le champ jamais — la frappe est le mécanisme de
-  // récupération. Deux props, parce que ce sont deux règles.
+  // Verrou du champ, volontairement séparé de `submitDisabled` : le bouton se verrouille aussi
+  // sur une saisie vide, le champ jamais. Deux props, parce que ce sont deux règles.
   inputDisabled: boolean;
   addNotice: AddNotice | null;
 } & (
