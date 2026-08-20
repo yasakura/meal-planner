@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
+import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type UpdateRecipe, type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
 import {
   recipeEditFormOpened,
+  recipeEditNoticeOf,
   recipeEditReducer,
   selectRecipeEdition,
   updateRecipe,
@@ -102,5 +104,61 @@ describe('recipe edit slice', () => {
     await store.dispatch(updateRecipe(anInput()));
 
     expect(store.getState().recipe).toEqual({ status: 'idle' });
+  });
+  /**
+   * Même borne d'acquittement, même troisième issue qu'à la création : l'écriture est partie et
+   * atterrira au retour du réseau. Aucun doublon possible ici — la modification écrit sur le
+   * même identifiant — mais un écran qui annonce l'échec d'une écriture en file ment tout autant.
+   */
+  it('le dépôt qui n’a pas répondu : la modification n’est pas confirmée, elle n’a pas échoué', async () => {
+    const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({ updateRecipe: nonAcquitte });
+
+    await store.dispatch(updateRecipe(anInput()));
+
+    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'unconfirmed' });
+  });
+  const PANNE = {
+    tone: 'unconfirmed',
+    message: 'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
+  };
+  const ECHEC = { tone: 'error', message: 'Impossible d’enregistrer la recette.' };
+
+  function constat(store: ReturnType<typeof createTestStore>) {
+    return recipeEditNoticeOf(selectRecipeEdition(store.getState()));
+  }
+
+  it('une modification non acquittée se constate poliment', async () => {
+    const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+    const store = createTestStore({ updateRecipe: nonAcquitte });
+
+    await store.dispatch(updateRecipe(anInput()));
+
+    expect(constat(store)).toEqual(PANNE);
+  });
+
+  it('un échec franc du dépôt : l’écran dit que l’enregistrement a échoué', async () => {
+    const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({ updateRecipe: failing });
+
+    await store.dispatch(updateRecipe(anInput()));
+
+    expect(constat(store)).toEqual(ECHEC);
+  });
+
+  // Pendant l'écriture, l'écran n'a rien à dire : le constat parle de l'ISSUE, pas de l'attente.
+  it('pendant la modification, l’écran ne constate rien encore', () => {
+    const pending: UpdateRecipe = () => new Promise<Recipe>(() => {});
+    const store = createTestStore({ updateRecipe: pending });
+
+    void store.dispatch(updateRecipe(anInput()));
+
+    expect(constat(store)).toBeNull();
+  });
+
+  it('l’ouverture d’un formulaire efface un constat non acquitté', () => {
+    const nonConfirme: RecipeEditState = { status: 'unconfirmed' };
+
+    expect(recipeEditReducer(nonConfirme, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 });

@@ -113,6 +113,13 @@ function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
   );
 }
 
+// Le MÊME libellé qu'à la création : les deux écrans nomment déjà la même opération
+// (« Impossible d'enregistrer la recette. »), et c'est bien le même geste — « Enregistrer ».
+const CONSTAT_NON_ACQUITTE =
+  'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
+
+const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+
 function capturingSpy() {
   const state: { captured: UpdateRecipeInput | undefined } = { captured: undefined };
   const fn: UpdateRecipe = async (input) => {
@@ -603,5 +610,49 @@ describe('RecipeEditContainer', () => {
     expect(await screen.findByDisplayValue('Omelette aux herbes')).toBeInTheDocument();
     expect(store.getState().recipeEdit.status).toBe('idle');
     expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
+  });
+  /**
+   * Même troisième issue qu'à la création, même ton poli : l'écriture est en file locale et
+   * atterrira au retour du réseau, il n'y a rien à faire d'utile — donc `role="status"` et non
+   * `role="alert"`, qui est réservé à l'échec réessayable.
+   */
+  it('hors ligne, la modification n’est pas confirmée : le constat est poli et n’accuse aucun échec', async () => {
+    const user = userEvent.setup();
+    renderWithStore({ updateRecipe: nonAcquitte });
+
+    await screen.findByLabelText(/titre/i);
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_NON_ACQUITTE);
+    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Contrairement à la création, « Enregistrer » n'est PAS verrouillé : la modification écrit sur
+   * le même identifiant, un second envoi ne peut rien dupliquer, et le verrouiller ferait de
+   * l'écran une impasse. Même arbitrage que l'enregistrement du menu, pour la même raison.
+   */
+  it('une modification non acquittée n’est pas une impasse : le second envoi repart et le constat s’efface', async () => {
+    const user = userEvent.setup();
+    let horsLigne = true;
+    const reseau: UpdateRecipe = async (input) => {
+      if (horsLigne) throw RepositoryUnavailableError.create();
+      return RecipeBuilder.aRecipe().withId(input.id).build();
+    };
+    renderWithStore({ updateRecipe: reseau });
+
+    await screen.findByLabelText(/titre/i);
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+    // Le localisateur de l'absence affirmée plus bas, vu ici en train de trouver son texte.
+    expect(await screen.findByText(CONSTAT_NON_ACQUITTE)).toBeInTheDocument();
+
+    horsLigne = false;
+    expect(screen.getByRole('button', { name: /^enregistrer$/i })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+
+    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1'));
+    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
   });
 });

@@ -17,7 +17,13 @@ import {
   type IngredientRow,
 } from './ingredient-rows';
 import { isSubmitDisabled } from './recipe-form-submission';
-import { recipeEditFormOpened, selectRecipeEdition, updateRecipe } from './recipe-edit-slice';
+import {
+  recipeEditFormOpened,
+  recipeEditNoticeOf,
+  selectRecipeEdition,
+  updateRecipe,
+} from './recipe-edit-slice';
+import { type RecipeFormNotice } from './recipe-slice';
 import { recipeForRoute } from './recipe-for-route';
 
 type FormState = {
@@ -61,7 +67,7 @@ function RecipeEditForm(props: {
   recipe: Recipe;
   back: BackLink;
   saving: boolean;
-  errorMessage: string | null;
+  notice: RecipeFormNotice | null;
   onSave: (values: RecipeEditValues) => void;
 }) {
   const [form, setForm] = useState<FormState>(() => formOf(props.recipe));
@@ -112,18 +118,20 @@ function RecipeEditForm(props: {
           instructions: form.instructions,
         });
       }}
-      // Le VERROU du bouton vit dans `recipe-form-submission.ts`, partagé avec la création et
-      // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas.
+      // Le PRÉDICAT DE SAISIE vit dans `recipe-form-submission.ts`, partagé avec la création et
+      // muté : la décision n'a rien à faire dans un `.tsx` que Stryker ne regarde pas. Le
+      // verrou, lui, est propre à cet écran : l'écriture est un upsert sur un identifiant
+      // conservé, qui ne peut rien dupliquer, donc l'écriture en vol suffit.
       submitDisabled={isSubmitDisabled({
-        saving: props.saving,
+        locked: props.saving,
         title: form.title,
         rows: form.rows,
       })}
       submitLabel={props.saving ? 'Enregistrement…' : 'Enregistrer'}
       // La modification renvoie au détail : une confirmation n'aurait le temps de rien dire, et
-      // l'écran d'arrivée montre déjà le résultat. Seul l'échec a quelque chose à annoncer.
-      confirmation={null}
-      errorMessage={rowsConstat ?? props.errorMessage}
+      // l'écran d'arrivée montre déjà le résultat. Seule une issue manquée a quelque chose à
+      // annoncer — et le constat de saisie prime, c'est le dernier geste de l'utilisateur.
+      notice={rowsConstat !== null ? { tone: 'error', message: rowsConstat } : props.notice}
     />
   );
 }
@@ -136,7 +144,7 @@ export function RecipeEditContainer() {
   // qui sache fabriquer ces adresses.
   const [searchParams] = useSearchParams();
   const { status: loadStatus, recipe } = useAppSelector(selectRecipeDetail);
-  const { status: saveStatus } = useAppSelector(selectRecipeEdition);
+  const edition = useAppSelector(selectRecipeEdition);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const origin = originOf(searchParams);
@@ -200,8 +208,11 @@ export function RecipeEditContainer() {
       key={loaded.id}
       recipe={loaded}
       back={origin.backToRecipe(loaded.id)}
-      saving={saveStatus === 'saving'}
-      errorMessage={saveStatus === 'error' ? 'Impossible d’enregistrer la recette.' : null}
+      saving={edition.status === 'saving'}
+      // Le message et son ton se décident dans le slice, qui est muté ; ce container ne fait que
+      // les câbler. Le bouton, lui, n'est verrouillé QUE pendant l'écriture : la modification
+      // écrit sur le même identifiant, un second envoi ne peut rien dupliquer.
+      notice={recipeEditNoticeOf(edition)}
       onSave={handleSave}
     />
   );
