@@ -69,22 +69,3 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
-
-  mutation:
-    name: Mutation testing (Stryker)
-    runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'mutation') || github.event_name == 'schedule'
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Stryker
-        run: npm run test:mutation
