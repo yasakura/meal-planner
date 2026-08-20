@@ -11,7 +11,15 @@ import { isRepositoryUnavailable } from '../../../domain/errors/repository-unava
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type AppThunk, type AppThunkApiConfig, type RootState } from '../../store/store';
 
-export type MenuStatus = 'idle' | 'loading' | 'success' | 'error';
+/**
+ * `unavailable` : le dépôt n'a pas répondu — que ce soit à la relecture du catalogue ou à une
+ * génération demandée. Toute absence de réseau sur l'écran du menu donne CE constat-là, le même
+ * que la page des recettes, et lui seul n'offre AUCUNE action : rien ne peut aboutir sans réseau.
+ *
+ * `error` reste pour ce qu'un réessai peut encore régler : un catalogue vide (constat métier,
+ * dont le remède s'applique ailleurs) et une panne franche du dépôt (droits, quota).
+ */
+export type MenuStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
 
 /**
  * Cycle de vie de l'ENREGISTREMENT, distinct de `status` qui reste celui de la génération : un
@@ -279,8 +287,7 @@ export const saveMenu = createAsyncThunk<void, void, AppThunkApiConfig>(
  *
  * INCONDITIONNELLE : le garde vit chez l'APPELANT, et diffère de l'un à l'autre — `menuOpened`
  * en a un (`saveStatus !== 'saving'`), `generateMenu.pending` n'en a délibérément pas. Un
- * nouvel appelant doit donc décider du sien. À ne pas lire par analogie avec l'homonyme
- * `restCreationLifecycle` (`recipe-slice.ts`), qui EMBARQUE le sien.
+ * nouvel appelant doit donc décider du sien.
  */
 function restSaveLifecycle(state: MenuState): void {
   state.saveStatus = 'idle';
@@ -322,6 +329,19 @@ const menuSlice = createSlice({
     menuOpened(state, action: PayloadAction<CalendarDate>) {
       state.startDateFloor = action.payload;
       state.startDateRefused = false;
+      // SORTIE du constat réseau, et la seule qui existe : il n'offre aucun bouton. Encore
+      // faut-il que rien ne puisse l'en sortir autrement — d'où les DEUX conditions.
+      // — `menu === null` : une génération empêchée n'a rien laissé derrière elle, donc
+      //   `refreshMenuRecipes` ne partira pas (son `condition` exige ce menu) et l'écran serait
+      //   une impasse pour toute la session. AVEC un menu, la relecture part et c'est ELLE qui
+      //   lèvera le constat : rendre l'offre de générer entre-temps ferait clignoter un
+      //   formulaire proposant de produire un menu qui existe déjà. Les deux prédicats sont donc
+      //   le même à dessein : qui touche au `condition` doit revenir ici.
+      // — `status === 'unavailable'` : le constat MÉTIER (« Ajoute d'abord des recettes ») nomme
+      //   un remède que l'utilisateur va appliquer ailleurs, et son « Réessayer » doit l'attendre
+      //   au retour ; une génération en vol (`loading`) ne doit pas non plus voir son écran
+      //   remplacé par le formulaire à chaque remontage.
+      if (state.status === 'unavailable' && state.menu === null) state.status = 'idle';
       // SAUF si une écriture est en vol : un thunk RTK n'est pas annulé par un démontage, et
       // réarmer le bouton ici rendrait un second appui possible pendant la borne d'acquittement.
       // Pire, le verdict du premier ne serait plus reconnu (voir `saveMenu.fulfilled`) et
@@ -355,6 +375,15 @@ const menuSlice = createSlice({
         state.error = null;
       })
       .addCase(generateMenu.rejected, (state, action) => {
+        // Le RÉSEAU absent, et lui seul, bascule sur le constat du menu : le même écran que
+        // la relecture échouée et que la page des recettes, sans aucun bouton. `error` reste à
+        // null (posé par pending) — un message d'échec laissé en réserve finirait affiché à côté
+        // du constat. Le garde est le même que partout ailleurs : `action.error` est une copie
+        // plate (miniSerializeError), d'où la reconnaissance nominale du domaine.
+        if (isRepositoryUnavailable(action.error)) {
+          state.status = 'unavailable';
+          return;
+        }
         state.status = 'error';
         // menu/recipes sont déjà à null (transition pending) : pas de reset redondant.
         // Erreur métier (rejectWithValue) → payload discriminant ; sinon message brut.
@@ -362,16 +391,31 @@ const menuSlice = createSlice({
       })
       // `pending` ne porte QUE la mémoire de fraîcheur : surtout pas de passage en `loading`,
       // l'écran ne doit pas clignoter en chargement pour une relecture que l'utilisateur n'a
-      // pas demandée. Rien du tout pour `rejected` : la relecture échouée conserve le menu
-      // affiché avec ses anciens titres, sans message d'erreur — il n'a rien demandé, on ne
-      // lui montre pas de panne.
+      // pas demandée.
       .addCase(refreshMenuRecipes.pending, (state, action) => {
         state.latestRecipesRequestId = action.meta.requestId;
       })
       .addCase(refreshMenuRecipes.fulfilled, (state, action) => {
         // Une relecture périmée ne dit rien du catalogue courant : jetée avant tout examen.
         if (action.meta.requestId !== state.latestRecipesRequestId) return;
+        // Le menu revient à l'écran — il n'en était parti que le temps d'une panne, et c'est la
+        // seule façon d'en sortir : le constat hors ligne n'offre aucun bouton.
+        state.status = 'success';
         state.recipes = action.payload as typeof state.recipes;
+      })
+      // L'écran DEVIENT le constat : le menu affiché disparaît plutôt que de montrer des titres
+      // dont plus rien ne dit qu'ils sont à jour. Il n'est pas PERDU pour autant — `menu` et
+      // `recipes` restent en place, et la relecture suivante les remet sous les yeux.
+      .addCase(refreshMenuRecipes.rejected, (state, action) => {
+        // Même garde de fraîcheur que `fulfilled`, et pour la même raison : l'échec tardif d'une
+        // lecture abandonnée effacerait un menu que la lecture COURANTE vient de rafraîchir.
+        if (action.meta.requestId !== state.latestRecipesRequestId) return;
+        // Le RÉSEAU absent, et lui seul, bascule sur le constat sans bouton — même FORME d'écran
+        // que `generateMenu.rejected` juste au-dessus, que le catalogue et que les convives ; les
+        // mots, eux, nomment chaque écran. Un refus franc du dépôt (droits, quota) a une réponse :
+        // il se dit comme un échec, sinon la même panne prendrait deux formes différentes sur
+        // /catalogue et sur /menu.
+        state.status = isRepositoryUnavailable(action.error) ? 'unavailable' : 'error';
       })
       .addCase(saveMenu.pending, (state, action) => {
         state.saveStatus = 'saving';

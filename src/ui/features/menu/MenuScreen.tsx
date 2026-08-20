@@ -32,6 +32,10 @@ export type MenuScreenProps =
     }
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
+  // Hors ligne : un constat, et RIEN d'autre — ni « Régénérer », ni « Réessayer ». Aucun des
+  // deux ne peut aboutir sans réseau, et le menu revient tout seul dès que la lecture aboutit.
+  // C'est ce qui distingue cet état de `error`, où le réessai a du sens.
+  | { status: 'unavailable'; message: string }
   | {
       status: 'success';
       days: MenuDay[];
@@ -256,7 +260,9 @@ const Spinner = styled.svg`
   animation: ${spin} 0.8s linear infinite;
 `;
 
-const LoadingText = styled.p`
+// Constat neutre (chargement, absence de réseau) : teinte secondaire, aucun rouge d'alerte —
+// un état n'est pas un jugement. Le rouge reste réservé à `ErrorMessage`.
+const StateText = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
   color: ${colors.inkSecondary};
@@ -366,7 +372,7 @@ function Body(props: MenuScreenProps) {
               strokeLinecap="round"
             />
           </Spinner>
-          <LoadingText>Génération…</LoadingText>
+          <StateText>Génération…</StateText>
         </CenteredState>
       );
     case 'error':
@@ -377,6 +383,15 @@ function Body(props: MenuScreenProps) {
             Réessayer
           </RetryButton>
         </ErrorBox>
+      );
+    // `role="status"` (poli) et non `role="alert"` (assertif) : une absence de réseau est un
+    // constat, pas une alerte, et rien n'est attendu de l'utilisateur dans l'immédiat.
+    // Pas de bouton non plus — voir le commentaire sur le type.
+    case 'unavailable':
+      return (
+        <CenteredState>
+          <StateText role="status">{props.message}</StateText>
+        </CenteredState>
       );
     case 'success':
       return (

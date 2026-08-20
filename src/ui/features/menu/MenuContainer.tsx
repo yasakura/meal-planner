@@ -16,6 +16,7 @@ import {
   selectStartDateIso,
 } from './menu-slice';
 import { menuDays } from './menu-days';
+import { MENU_UNAVAILABLE_NOTICE } from './menu-notice';
 import { MenuScreen, type MenuScreenProps } from './MenuScreen';
 
 function errorMessage(error: string | null): string {
@@ -53,6 +54,10 @@ export function MenuContainer() {
   let props: MenuScreenProps;
   if (status === 'loading') {
     props = { status: 'loading' };
+  } else if (status === 'unavailable') {
+    // La lecture qui a échoué est celle du catalogue, mais on n'est pas dans un catalogue : cet
+    // écran-ci nomme ce qu'il n'a pas pu montrer, et c'est le menu.
+    props = { status: 'unavailable', message: MENU_UNAVAILABLE_NOTICE };
   } else if (status === 'error') {
     props = {
       status: 'error',

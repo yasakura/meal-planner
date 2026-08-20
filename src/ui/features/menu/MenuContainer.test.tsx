@@ -223,6 +223,78 @@ describe('MenuContainer', () => {
     expect(count).toBe(2);
   });
 
+  /**
+   * Itération « hors ligne simplifié » : toute absence de réseau sur /menu donne le MÊME écran,
+   * qu'un menu soit déjà affiché (test voisin, sur la relecture) ou qu'on vienne de demander une
+   * génération. Le constat du menu, et aucun bouton — aucun ne peut aboutir sans réseau.
+   */
+  it('hors ligne, la génération porte le constat du menu et n’offre aucun bouton', async () => {
+    const user = userEvent.setup();
+    renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
+    });
+
+    // GAGE de l'absence affirmée plus bas : le bouton est bel et bien à l'écran avant que la
+    // panne ne l'en retire. Sans lui, « aucun bouton » serait vrai sur un écran qui n'en a
+    // jamais eu.
+    expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    // Cet écran-ci nomme ce qu'il n'a pas pu montrer — le MENU, et non le catalogue de la page
+    // des recettes. Même rôle en revanche : `status` (poli) et non `alert` (assertif) — une
+    // absence de réseau est un constat, pas une alerte.
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Aucune connexion — le menu n’a pas pu être chargé.',
+    );
+    expect(screen.queryByRole('button', { name: /générer un menu/i })).not.toBeInTheDocument();
+    // « Réessayer » et « Impossible de générer le menu. » ont pour TÉMOIN le scénario voisin
+    // « affiche un message sobre + « Réessayer » en cas d'échec », où les deux localisateurs
+    // trouvent bien leur cible — là où le réessai a un sens, c'est-à-dire sur une panne franche.
+    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Impossible de générer le menu.')).not.toBeInTheDocument();
+    // Et le constat de l'autre branche, témoin par le scénario « catalogue vide », reste muet :
+    // le réseau qui manque n'est pas un catalogue vide.
+    expect(screen.queryByText(/Ajoute d'abord des recettes/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * SORTIE de ce constat-là, sans aucun bouton pour la déclencher : rien n'a été généré, donc
+   * aucune relecture ne peut partir. C'est l'ARRIVÉE sur l'écran qui rend l'offre de générer —
+   * sinon l'écran resterait une impasse pour toute la session.
+   *
+   * Remontage sur le MÊME store : c'est la seule façon de rejouer une arrivée en cours de
+   * session (le store est un singleton en prod).
+   */
+  it('le réseau revenu, revenir sur l’écran rend l’offre de générer, et le menu se génère', async () => {
+    const user = userEvent.setup();
+    let enPanne = true;
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => {
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    // GAGE : l'écran est bel et bien passé sur le constat avant qu'on ne l'en fasse sortir.
+    const constat = await screen.findByText('Aucune connexion — le menu n’a pas pu être chargé.');
+    expect(constat).toBeInTheDocument();
+
+    unmount();
+    enPanne = false;
+    renderOn(store);
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
+    // Le MÊME localisateur, vu trouver son texte quelques lignes plus haut : plus aucune trace.
+    expect(
+      screen.queryByText('Aucune connexion — le menu n’a pas pu être chargé.'),
+    ).not.toBeInTheDocument();
+  });
+
   it('catalogue vide : affiche un message actionnable invitant à ajouter des recettes', async () => {
     const user = userEvent.setup();
     renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => [] });
@@ -472,6 +544,98 @@ describe('MenuContainer', () => {
     // Sans lui, « pas d'indicateur » serait tout aussi vrai sur un écran vide.
     expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  /**
+   * Itération « hors ligne simplifié » : sur le menu comme sur les recettes, l'absence de réseau
+   * se dit d'un constat qui NOMME l'écran, et l'écran n'offre plus rien qui ne puisse aboutir. Le menu
+   * affiché disparaît — on n'affiche pas des titres dont on ne sait plus s'ils sont à jour.
+   *
+   * Le remontage se fait sur le MÊME store : c'est la seule façon de rejouer une arrivée sur
+   * l'écran en cours de session (le store est un singleton en prod).
+   */
+  it('hors ligne, l’écran du menu porte le constat du menu et n’offre plus aucun bouton', async () => {
+    const user = userEvent.setup();
+    let enPanne = false;
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => {
+        // « Hors ligne » au sens propre : c'est l'absence de RÉSEAU qui retire les boutons. Un
+        // refus franc du dépôt donne l'écran d'échec, avec son « Réessayer ».
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    // GAGES des absences affirmées plus bas : les deux boutons du menu affiché et ses titres
+    // sont bel et bien à l'écran avant que la panne ne les en retire. Sans eux, « aucun bouton »
+    // serait tout aussi vrai sur un écran qui n'en a jamais eu.
+    expect(await screen.findByRole('button', { name: /régénérer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
+    expect(screen.getAllByText('Ratatouille')).toHaveLength(2);
+
+    unmount();
+    enPanne = true;
+    renderOn(store);
+
+    // Cet écran-ci nomme ce qu'il n'a pas pu montrer — le MENU, et non le catalogue de la page
+    // des recettes. Même rôle en revanche : `status` (poli) et non `alert` (assertif) — une
+    // absence de réseau est un constat, pas une alerte.
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Aucune connexion — le menu n’a pas pu être chargé.',
+    );
+    expect(screen.queryByRole('button', { name: /régénérer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
+    // « Réessayer » n'a jamais existé sur cet écran-là : son TÉMOIN est le scénario voisin
+    // « affiche un message sobre + « Réessayer » en cas d'échec », où le même localisateur
+    // trouve bien son bouton là où le réessai a un sens.
+    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    expect(screen.queryAllByText('Ratatouille')).toHaveLength(0);
+  });
+
+  /**
+   * L'autre moitié : le constat n'est pas une impasse, et il n'a besoin d'aucun bouton pour en
+   * sortir. Le menu n'a jamais quitté le store — revenir sur l'écran relance la lecture, et il
+   * réapparaît avec ses titres à JOUR.
+   */
+  it('le réseau revenu, revenir sur l’écran fait réapparaître le menu avec ses titres à jour', async () => {
+    const user = userEvent.setup();
+    let catalogue = twoRecipes();
+    let enPanne = false;
+    const { store, unmount } = renderWithStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => {
+        // Le constat dont on sort ici est celui du réseau absent : c'est le seul sans bouton.
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return catalogue;
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
+
+    unmount();
+    enPanne = true;
+    const horsLigne = renderOn(store);
+    // GAGE : l'écran est bel et bien passé sur le constat avant qu'on ne l'en fasse revenir.
+    const constat = await screen.findByText('Aucune connexion — le menu n’a pas pu être chargé.');
+    expect(constat).toBeInTheDocument();
+
+    horsLigne.unmount();
+    enPanne = false;
+    catalogue = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+    renderOn(store);
+
+    expect(await screen.findAllByText('Tian de légumes')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /régénérer/i })).toBeInTheDocument();
+    // Le MÊME localisateur, vu trouver son texte quelques lignes plus haut : plus aucune trace.
+    expect(
+      screen.queryByText('Aucune connexion — le menu n’a pas pu être chargé.'),
+    ).not.toBeInTheDocument();
   });
 
   it('sans menu généré, arriver sur l’écran ne relit pas les recettes', async () => {

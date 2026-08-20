@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { CATALOGUE_UNAVAILABLE_NOTICE } from './catalogue-notice';
 import { loadCatalogue, selectCatalogue } from './catalogue-slice';
 import {
   RecipeListScreen,
@@ -27,7 +28,7 @@ export function CatalogueContainer() {
   if (status === 'unavailable') {
     props = {
       status: 'unavailable',
-      message: 'Aucune connexion — le catalogue n’a pas pu être chargé.',
+      message: CATALOGUE_UNAVAILABLE_NOTICE,
     };
   } else if (status === 'error') {
     props = {

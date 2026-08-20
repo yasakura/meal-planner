@@ -31,6 +31,11 @@ import {
 // d'un DIMANCHE (23 août). Une date de début égale à « aujourd'hui » ne pourrait pas passer.
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
 
+// Mardi 25 août 2026 : la TROISIÈME lecture de l'horloge dérivante, celle qu'une arrivée sur
+// l'écran déclenche après les deux de la naissance du store. Un plancher qui vaudrait encore le
+// 24 dirait qu'on a cessé de relire l'horloge.
+const MARDI_25_AOUT = createCalendarDate({ year: 2026, month: 8, day: 25 });
+
 // Mercredi 2 septembre 2026 : ni le prochain lundi vu de l'horloge de test (24 août), ni celui
 // de la lecture suivante (31 août). Une date de début qui vaut ce jour-là ne peut avoir été
 // que CHOISIE.
@@ -280,6 +285,136 @@ describe('menu slice', () => {
     expect(generateCalled).toBe(false);
   });
 
+  /**
+   * Décision produit (itération « hors ligne simplifié ») : une génération que le RÉSEAU empêche
+   * ne dit plus « Impossible de générer le menu » sous un « Réessayer » qui ne peut pas aboutir.
+   * Elle bascule l'écran sur le MÊME constat que la relecture échouée et que la page des
+   * recettes — celui du catalogue, qui n'offre aucun bouton.
+   *
+   * Les DEUX autres causes de rejet ne bougent pas, et leurs tests voisins en font foi : le
+   * catalogue vide reste un constat métier actionnable, une panne franche garde son « Réessayer ».
+   */
+  it('le dépôt indisponible : la génération bascule l’écran sur le constat, sans message', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
+    });
+
+    // Fenêtre NON-défaut : gage l'assertion sur selectedDays contre un reset en rejected.
+    store.dispatch(menuWindowSelected(7));
+
+    const refuse = await store.dispatch(generateMenu(7));
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'unavailable',
+      menu: null,
+      recipes: null,
+      // Aucun message en réserve : c'est le statut qui porte le constat, comme au catalogue.
+      // Le message brut du domaine (« Le dépôt n'a pas répondu. ») laissé ici finirait affiché
+      // à côté du constat par le premier écran qui lirait les deux.
+      error: null,
+      selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
+      // Plancher posé à la naissance du store, par la lecture qui suit celle du prochain
+      // lundi : l'horloge dérive d'un jour, et part du dimanche 23 août.
+      startDateFloor: LUNDI_24_AOUT,
+      // Aucune date n'a été refusée : il n'y a pas de constat à porter.
+      startDateRefused: false,
+      latestRecipesRequestId: refuse.meta.requestId,
+      saveStatus: 'idle',
+      latestSaveRequestId: null,
+    });
+  });
+
+  /**
+   * SORTIE de ce constat-là, et la seule qui existe : l'écran n'offre aucun bouton, et une
+   * génération empêchée n'a laissé AUCUN menu derrière elle — `refreshMenuRecipes` ne partira
+   * donc pas, son `condition` l'exige. Sans cette remise à zéro, l'écran serait une impasse pour
+   * toute la session : y revenir, réseau rétabli, n'y changerait rien.
+   */
+  it('après une génération empêchée par le réseau, revenir sur l’écran rend l’offre de générer', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
+    });
+
+    store.dispatch(menuWindowSelected(7));
+    const refuse = await store.dispatch(generateMenu(7));
+    // GAGE : l'écran est bel et bien passé sur le constat avant qu'on ne l'en fasse sortir.
+    expect(selectMenu(store.getState()).status).toBe('unavailable');
+
+    store.dispatch(menuScreenOpened());
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'idle',
+      menu: null,
+      recipes: null,
+      error: null,
+      // La fenêtre choisie est une PRÉFÉRENCE : revenir sur l'écran ne la repose pas à 14.
+      selectedDays: 7,
+      startDate: LUNDI_24_AOUT,
+      // Le plancher, LUI, est relu : troisième lecture de l'horloge dérivante, mardi 25 août.
+      startDateFloor: MARDI_25_AOUT,
+      startDateRefused: false,
+      // La mémoire de fraîcheur n'est pas remise à zéro : elle dit « dernière lecture lancée ».
+      latestRecipesRequestId: refuse.meta.requestId,
+      saveStatus: 'idle',
+      latestSaveRequestId: null,
+    });
+  });
+
+  /**
+   * … mais JAMAIS quand un menu attend derrière le constat. Là, l'arrivée relance une relecture
+   * (`refreshMenuRecipes`, dont le `condition` exige précisément ce menu), et c'est ELLE qui
+   * lèvera le constat si elle aboutit. Rendre l'offre de générer entre-temps ferait clignoter un
+   * formulaire proposant de produire un menu qui existe déjà, pour rebasculer sur le constat une
+   * seconde plus tard si la lecture échoue encore.
+   */
+  it('l’arrivée sur l’écran ne lève pas le constat quand un menu attend sa relecture', async () => {
+    let failPhase = false;
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => {
+        if (failPhase) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
+    });
+
+    await store.dispatch(generateMenu(7));
+    failPhase = true;
+    await store.dispatch(refreshMenuRecipes());
+    // GAGE : le constat est bien là, et un menu est bien resté derrière lui.
+    expect(selectMenu(store.getState()).status).toBe('unavailable');
+    expect(selectMenu(store.getState()).menu).not.toBeNull();
+
+    store.dispatch(menuScreenOpened());
+
+    expect(selectMenu(store.getState()).status).toBe('unavailable');
+  });
+
+  /**
+   * … et jamais non plus le constat MÉTIER. « Ajoute d'abord des recettes » nomme un remède que
+   * l'utilisateur va appliquer AILLEURS dans l'application, et son « Réessayer » doit l'attendre
+   * au retour. Seul le constat RÉSEAU, qui n'offre aucun bouton, a besoin que l'arrivée le lève.
+   */
+  it('l’arrivée sur l’écran conserve le constat de catalogue vide', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => [],
+    });
+
+    await store.dispatch(generateMenu(7));
+    // GAGE : c'est bien le constat métier qui est en place avant l'arrivée.
+    expect(selectMenu(store.getState()).error).toBe('no-recipes');
+
+    store.dispatch(menuScreenOpened());
+
+    expect(selectMenu(store.getState()).status).toBe('error');
+    expect(selectMenu(store.getState()).error).toBe('no-recipes');
+  });
+
   // [guard] tue le mutant `state.error = null` de la transition FULFILLED :
   // un menu regénéré avec succès efface l'erreur périmée d'une tentative précédente.
   it('generateMenu réussi depuis un état en erreur efface l’erreur périmée', () => {
@@ -513,12 +648,15 @@ describe('menu slice', () => {
   });
 
   /**
-   * Décision produit : si la relecture ÉCHOUE (hors réseau en arrivant sur l'écran), le menu
-   * affiché est CONSERVÉ avec ses anciens titres, sans message d'erreur. Un rafraîchissement que
-   * l'utilisateur n'a pas demandé ne détruit pas un écran qui fonctionne, et ne lui affiche pas
-   * une panne pour une action qu'il n'a pas faite.
+   * Décision produit RÉVOQUÉE (itération « hors ligne simplifié ») : la relecture échouée ne
+   * conserve plus le menu à l'écran avec ses anciens titres. L'écran DEVIENT le constat — rien
+   * n'est affiché dont on ne sait plus s'il est encore vrai.
+   *
+   * Le menu n'est pas PERDU pour autant : il reste dans le store, intact, et c'est la relecture
+   * suivante qui le remet à l'écran (test voisin). Les deux moitiés vont ensemble — on n'affiche
+   * rien de faux, et on ne perd rien.
    */
-  it('un rafraîchissement en échec laisse le menu, les recettes et le statut inchangés', async () => {
+  it('une relecture échouée bascule l’écran sur le constat, sans effacer le menu du store', async () => {
     const menu = aMenu();
     const recipes = twoRecipes();
     let failPhase = false;
@@ -529,6 +667,67 @@ describe('menu slice', () => {
         generations += 1;
         return menu;
       },
+      listRecipes: async () => {
+        lectures += 1;
+        // Le RÉSEAU absent, et lui seul, mène à ce constat : une panne franche du dépôt est un
+        // échec, et le test voisin l'exerce.
+        if (failPhase) throw RepositoryUnavailableError.create();
+        return recipes;
+      },
+    });
+
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    failPhase = true;
+    const result = await store.dispatch(refreshMenuRecipes());
+
+    // Le compte de lectures prouve que la relecture est PARTIE (un `condition` resserré la
+    // bloquerait sans que rien ne le signale), et le match qu'elle a bien REJETÉ (une lecture
+    // qui cesserait d'échouer rendrait le constat inexplicable).
+    expect(lectures).toBe(2);
+    expect(refreshMenuRecipes.rejected.match(result)).toBe(true);
+    // Même gage que le test voisin : un rafraîchissement ne rejoue pas la génération.
+    expect(generations).toBe(1);
+    expect(selectMenu(store.getState())).toEqual({
+      // L'écran bascule sur le constat : « Aucune connexion — le catalogue n'a pas pu être
+      // chargé. », le même que la page des recettes.
+      status: 'unavailable',
+      // … mais le menu et son catalogue restent EN PLACE : revenir sur l'écran les retrouve.
+      menu,
+      recipes,
+      // Pas de message d'erreur : c'est le statut qui porte le constat, comme au catalogue.
+      error: null,
+      selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
+      // Plancher posé à la naissance du store, par la lecture qui suit celle du prochain
+      // lundi : l'horloge dérive d'un jour, et part du dimanche 23 août.
+      startDateFloor: LUNDI_24_AOUT,
+      // Aucune date n'a été refusée : il n'y a pas de constat à porter.
+      startDateRefused: false,
+      // La relecture a bien pris la main au DÉPART, alors même qu'elle a échoué à l'arrivée.
+      latestRecipesRequestId: result.meta.requestId,
+      saveStatus: 'idle',
+      latestSaveRequestId: null,
+    });
+  });
+
+  /**
+   * L'AUTRE panne, et l'autre constat. `unavailable` est réservé au réseau absent : c'est le
+   * seul cas où l'écran n'offre aucun bouton, parce qu'il n'y a rien à réessayer. Un refus franc
+   * du dépôt — droits, quota — a une réponse, et se raconte comme partout ailleurs (catalogue,
+   * convives, génération) : un échec. Sans ce partage, la même panne dirait deux choses
+   * différentes sur /catalogue et sur /menu.
+   */
+  it('une relecture REFUSÉE par le dépôt bascule l’écran sur l’échec, pas sur le constat hors ligne', async () => {
+    const menu = aMenu();
+    const recipes = twoRecipes();
+    let failPhase = false;
+    let lectures = 0;
+    const store = createTestStore({
+      generateMenu: async () => menu,
       listRecipes: async () => {
         lectures += 1;
         if (failPhase) throw new Error('Boom firestore');
@@ -542,20 +741,65 @@ describe('menu slice', () => {
     failPhase = true;
     const result = await store.dispatch(refreshMenuRecipes());
 
-    // Ce test est l'UNIQUE gage de l'absence de cas `rejected`. Sans les deux lignes qui
-    // suivent, il deviendrait vide en restant vert — une invariance après une action qui ne
-    // fait rien : le compte de lectures prouve que la relecture est PARTIE (un `condition`
-    // resserré la bloquerait sans que rien ne le signale), et le match prouve qu'elle a
-    // REJETÉ (une lecture qui cesserait d'échouer rendrait l'invariance triviale).
+    // Mêmes gages que le test voisin : la relecture est bien PARTIE, et elle a bien REJETÉ.
     expect(lectures).toBe(2);
     expect(refreshMenuRecipes.rejected.match(result)).toBe(true);
-    // Même gage que le test voisin : un rafraîchissement ne rejoue pas la génération.
-    expect(generations).toBe(1);
+    expect(selectMenu(store.getState())).toEqual({
+      // Le dépôt a répondu, et il a refusé : l'écran dit l'échec — pas « aucune connexion ».
+      status: 'error',
+      menu,
+      recipes,
+      // Aucun message n'est armé : `errorMessage` du container ne lit `error` que pour
+      // distinguer le catalogue vide, et rien ici ne parle de la génération.
+      error: null,
+      selectedDays: 7,
+      startDate: LUNDI_24_AOUT,
+      startDateFloor: LUNDI_24_AOUT,
+      startDateRefused: false,
+      latestRecipesRequestId: result.meta.requestId,
+      saveStatus: 'idle',
+      latestSaveRequestId: null,
+    });
+  });
+
+  /**
+   * L'autre moitié de la décision : le constat n'est pas une impasse, et il n'a besoin d'aucun
+   * bouton pour en sortir. Revenir sur l'écran relance la lecture ; si elle aboutit, le menu
+   * réapparaît — avec ses titres à JOUR, et non ceux figés à la génération.
+   */
+  it('après le constat, une relecture qui aboutit remet le menu à l’écran, titres à jour', async () => {
+    const menu = aMenu();
+    let catalogue = twoRecipes();
+    let failPhase = false;
+    const store = createTestStore({
+      generateMenu: async () => menu,
+      listRecipes: async () => {
+        // Le constat dont on sort ici est celui du réseau absent : c'est le seul sans bouton.
+        if (failPhase) throw RepositoryUnavailableError.create();
+        return catalogue;
+      },
+    });
+
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    failPhase = true;
+    await store.dispatch(refreshMenuRecipes());
+    // GAGE : l'écran est bel et bien passé sur le constat avant qu'on ne l'en fasse revenir.
+    // Sans lui, le retour au menu serait tout aussi vrai sur un écran qui n'en est jamais parti.
+    expect(selectMenu(store.getState()).status).toBe('unavailable');
+
+    failPhase = false;
+    catalogue = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+    const revenue = await store.dispatch(refreshMenuRecipes());
+
     expect(selectMenu(store.getState())).toEqual({
       status: 'success',
       menu,
-      recipes,
-      // Pas de message d'erreur : l'utilisateur n'a rien demandé.
+      recipes: catalogue,
       error: null,
       selectedDays: 7,
       // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
@@ -566,8 +810,64 @@ describe('menu slice', () => {
       startDateFloor: LUNDI_24_AOUT,
       // Aucune date n'a été refusée : il n'y a pas de constat à porter.
       startDateRefused: false,
-      // La relecture a bien pris la main au DÉPART, alors même qu'elle a échoué à l'arrivée.
-      latestRecipesRequestId: result.meta.requestId,
+      latestRecipesRequestId: revenue.meta.requestId,
+      saveStatus: 'idle',
+      latestSaveRequestId: null,
+    });
+  });
+
+  /**
+   * Le pendant, côté REJET, de « la relecture tardive ne fait pas revenir un ancien titre ». Le
+   * `condition` filtre le DÉPART d'une relecture, jamais son ARRIVÉE : deux lectures peuvent être
+   * en vol et se régler dans le désordre. Sans garde de fraîcheur sur `rejected`, l'échec tardif
+   * d'une lecture abandonnée effacerait de l'écran un menu que la lecture COURANTE vient de
+   * rafraîchir — un constat « aucune connexion » posé par une panne déjà périmée.
+   */
+  it('le rejet tardif d’une relecture abandonnée ne bascule pas l’écran sur le constat', async () => {
+    const menu = aMenu();
+    const ancien = twoRecipes();
+    const aJour = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+    const lente = deferred<Recipe[]>();
+    let lectures = 0;
+    const list: ListRecipes = () => {
+      lectures += 1;
+      if (lectures === 1) return Promise.resolve(ancien);
+      if (lectures === 2) return lente.promise;
+      return Promise.resolve(aJour);
+    };
+    const store = createTestStore({ generateMenu: async () => menu, listRecipes: list });
+
+    // Fenêtre NON-défaut : gage l'assertion sur selectedDays contre un reset.
+    store.dispatch(menuWindowSelected(7));
+    await store.dispatch(generateMenu(7));
+
+    const abandonnee = store.dispatch(refreshMenuRecipes());
+    const courante = store.dispatch(refreshMenuRecipes());
+    await courante;
+    // Deux lectures RÉELLEMENT en vol, réglées dans le désordre : l'abandonnée ÉCHOUE, et son
+    // échec arrive APRÈS que la courante a rendu les titres à jour. Le réseau absent, et lui
+    // seul, produit le constat que le nom de ce scénario refuse à l'écran.
+    lente.reject(RepositoryUnavailableError.create());
+    await abandonnee;
+
+    expect(selectMenu(store.getState())).toEqual({
+      status: 'success',
+      menu,
+      recipes: aJour,
+      error: null,
+      selectedDays: 7,
+      // Préférence de même nature que la fenêtre : posée à la naissance du store, jamais
+      // touchée par une transition du cycle de génération.
+      startDate: LUNDI_24_AOUT,
+      // Plancher posé à la naissance du store, par la lecture qui suit celle du prochain
+      // lundi : l'horloge dérive d'un jour, et part du dimanche 23 août.
+      startDateFloor: LUNDI_24_AOUT,
+      // Aucune date n'a été refusée : il n'y a pas de constat à porter.
+      startDateRefused: false,
+      latestRecipesRequestId: courante.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
