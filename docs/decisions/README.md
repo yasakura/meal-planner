@@ -67,3 +67,4 @@ Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou
 | [0023](0023-elision-francaise-compromis-assume.md)           | L'élision française : se tromper sur les h aspirés, sciemment        | 2026-08-12 |
 | [0024](0024-geometrie-mobile-et-hauteurs-declarees.md)       | Géométrie mobile : des hauteurs déclarées, jamais émergentes         | 2026-08-18 |
 | [0025](0025-un-lien-quand-on-change-de-route.md)             | Un lien quand on change de route, un ton par rôle ARIA               | 2026-08-18 |
+| [0026](0026-regles-type-aware-et-runtime.md)                 | Trois règles type-aware, et ce qu'elles ignorent du runtime          | 2026-08-21 |

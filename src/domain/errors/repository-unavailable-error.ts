@@ -16,6 +16,6 @@ export function isRepositoryUnavailable(candidate: unknown): boolean {
     typeof candidate === 'object' &&
     candidate !== null &&
     'name' in candidate &&
-    (candidate as { name: unknown }).name === REPOSITORY_UNAVAILABLE_NAME
+    candidate.name === REPOSITORY_UNAVAILABLE_NAME
   );
 }

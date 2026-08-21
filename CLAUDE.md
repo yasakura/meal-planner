@@ -104,6 +104,16 @@ Le rapport de fin de cycle inclut un **diff d'architecture** :
 
 ## Conventions de code
 
+### Aucun commentaire dans le code
+
+- Le code productif, les tests et les scénarios de `e2e/` ne portent **aucun commentaire hors directive**. L'intention est dans le code : noms, types, découpage, nom du test.
+- Seules subsistent les **directives**, qui ne sont pas de la prose : `// Stryker disable …`, `// Stryker restore …`, `// eslint-disable …`, `@ts-expect-error`, `/// <reference …>`, `// prettier-ignore`. Une règle ESLint refuse tout le reste, et le hook de pré-commit fait échouer le commit.
+- **La justification d'une directive fait partie de la directive**, et elle est souhaitable : `// Stryker disable next-line StringLiteral : boilerplate RTK, mutant équivalent.` dit _pourquoi_ le geste est fait, et ce savoir doit rester près du geste. La tolérance porte sur le **début** du commentaire ; ce qui suit la directive est libre. `@ts-expect-error` va plus loin et **exige** cette justification (`ban-ts-comment`, description d'au moins 3 caractères).
+- **L'explication a trois destinations, et le code n'en fait pas partie.** Un savoir mesuré sur un système externe, ou une décision avec ses alternatives, va en **ADR** (`docs/decisions/`). Le raisonnement d'un changement va dans le **message de commit**. Ce qui s'adresse à l'utilisateur va dans le **rapport**.
+- Un besoin d'expliquer une ligne est un signal : le nom est mauvais, la fonction fait deux choses, ou la décision n'est pas à sa place. Corriger la cause, pas la lisibilité.
+- **Le gage d'une assertion vit dans le NOM du test.** « la ligne d'une recette absente n'est pas un lien, et le créneau voisin l'est » porte son témoin sans un mot de prose.
+- Motif : sur une seule session, **dix commentaires devenus faux** ont été trouvés, chacun par une revue, **aucun par un test**. Rien ne garde la vérité d'un commentaire — ni sa proximité avec le code, ni son emplacement.
+
 ### Construction — une factory statique, un constructeur privé
 
 Toute classe exportée constructible expose une **factory statique** comme unique point d'entrée, et rend son **constructeur privé** pour forcer son usage (pas de `new X()` sur les classes du projet).

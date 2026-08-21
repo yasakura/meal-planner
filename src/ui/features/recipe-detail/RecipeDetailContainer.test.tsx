@@ -52,7 +52,7 @@ function SondeDeFrames(props: { frames: Frame[] }) {
   useAppSelector(selectRecipeDetail);
   useLayoutEffect(() => {
     props.frames.push({
-      texte: document.body.textContent ?? '',
+      texte: document.body.textContent,
       liensModifier: Array.from(document.querySelectorAll('a'))
         .filter((lien) => lien.textContent === 'Modifier')
         .map((lien) => lien.getAttribute('href')),

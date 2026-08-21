@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createCalendarDate, type CalendarDate } from './calendar-date';
+import { createCalendarDate } from './calendar-date';
 import { createMenu } from './menu';
 import { createRepas } from './repas';
 import { createSlot } from './slot';
@@ -48,11 +48,5 @@ describe('Menu', () => {
     const menu = createMenu({ repas: [aRepas()], dateDebut: LUNDI_24_AOUT });
 
     expect(menu.dateDebut).toEqual({ year: 2026, month: 8, day: 24 });
-  });
-
-  it('refuse un menu sans date de début', () => {
-    expect(() =>
-      createMenu({ repas: [aRepas()], dateDebut: undefined as unknown as CalendarDate }),
-    ).toThrow('La date de début du menu est obligatoire');
   });
 });

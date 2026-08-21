@@ -12,9 +12,6 @@ export type MenuProps = {
 };
 
 export function createMenu(props: MenuProps): Menu {
-  if (props.dateDebut === undefined) {
-    throw new Error('La date de début du menu est obligatoire');
-  }
   return Object.freeze({
     dateDebut: props.dateDebut,
     repas: Object.freeze([...props.repas]),

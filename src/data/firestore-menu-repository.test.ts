@@ -60,7 +60,7 @@ describe('FirestoreMenuRepository', () => {
   it('save écrit le menu à menus/{date ISO de début} avec le document mappé', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
-    mockedSetDoc.mockResolvedValue(undefined as never);
+    mockedSetDoc.mockResolvedValue(undefined);
     const menu = menuCommencantLe24Aout();
     const repository = FirestoreMenuRepository.create(db);
 
@@ -94,7 +94,7 @@ describe('FirestoreMenuRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
       const repository = FirestoreMenuRepository.create(db, { ackTimeoutMs: 10 });
 
       await expect(repository.save(menuCommencantLe24Aout())).rejects.toSatisfy(
@@ -107,7 +107,7 @@ describe('FirestoreMenuRepository', () => {
     vi.useFakeTimers();
     try {
       mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockResolvedValue(undefined as never);
+      mockedSetDoc.mockResolvedValue(undefined);
       const repository = FirestoreMenuRepository.create(db);
 
       await repository.save(menuCommencantLe24Aout());
@@ -183,7 +183,7 @@ describe('FirestoreMenuRepository', () => {
   it('remove efface le document menus/{date ISO de début}', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
-    mockedDeleteDoc.mockResolvedValue(undefined as never);
+    mockedDeleteDoc.mockResolvedValue(undefined);
     const repository = FirestoreMenuRepository.create(db);
 
     await repository.remove(createCalendarDate({ year: 2026, month: 1, day: 5 }));
@@ -214,7 +214,7 @@ describe('FirestoreMenuRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}));
       const repository = FirestoreMenuRepository.create(db, { ackTimeoutMs: 10 });
 
       await expect(repository.remove(LUNDI_24_AOUT)).rejects.toSatisfy(isRepositoryUnavailable);
@@ -225,7 +225,7 @@ describe('FirestoreMenuRepository', () => {
     vi.useFakeTimers();
     try {
       mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockResolvedValue(undefined as never);
+      mockedDeleteDoc.mockResolvedValue(undefined);
       const repository = FirestoreMenuRepository.create(db);
 
       await repository.remove(LUNDI_24_AOUT);

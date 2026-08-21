@@ -52,7 +52,7 @@ describe('FirestoreRecipeRepository', () => {
   it('save écrit la recette à recipes/{id} avec le document mappé', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
-    mockedSetDoc.mockResolvedValue(undefined as never);
+    mockedSetDoc.mockResolvedValue(undefined);
     const recipe = RecipeBuilder.aRecipe().withId('recipe-42').build();
     const repository = FirestoreRecipeRepository.create(db);
 
@@ -76,7 +76,7 @@ describe('FirestoreRecipeRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
       const repository = FirestoreRecipeRepository.create(db, { ackTimeoutMs: 10 });
 
       await expect(repository.save(RecipeBuilder.aRecipe().build())).rejects.toSatisfy(
@@ -89,7 +89,7 @@ describe('FirestoreRecipeRepository', () => {
     vi.useFakeTimers();
     try {
       mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockResolvedValue(undefined as never);
+      mockedSetDoc.mockResolvedValue(undefined);
       const repository = FirestoreRecipeRepository.create(db);
 
       await repository.save(RecipeBuilder.aRecipe().build());
