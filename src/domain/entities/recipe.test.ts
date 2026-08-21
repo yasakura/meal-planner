@@ -96,8 +96,6 @@ describe('Recipe', () => {
     );
   });
 
-  // Guard de mutation (non red-driven) : verrouille la borne basse inclusive (>= 1)
-  // contre un mutant `< 1` → `<= 1` que le mutation testing exigerait de tuer — vert-à-l'écriture assumé.
   it('accepte un convivesReference égal à 1 (borne basse valide)', () => {
     const recipe = RecipeBuilder.aRecipe().withConvivesReference(1).build();
 

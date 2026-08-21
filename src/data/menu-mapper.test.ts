@@ -13,10 +13,6 @@ import {
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
 
-/**
- * Menu à deux repas et à créneaux multiples : c'est l'imbrication (repas → slots) que le
- * mapper doit tenir, un menu à un seul repas d'un seul slot ne prouverait rien.
- */
 function menuImbrique(): Menu {
   return createMenu({
     dateDebut: LUNDI_24_AOUT,
@@ -59,8 +55,6 @@ describe('menu-mapper', () => {
   });
 
   it('menuToDocument produit un objet plat sans date de début, avec le seul champ repas', () => {
-    // La date de début est l'IDENTIFIANT du document : la répéter dans le corps ouvrirait la
-    // porte à deux vérités contradictoires sur la période d'un même menu.
     const doc = menuToDocument(menuImbrique());
 
     expect(doc).not.toHaveProperty('dateDebut');

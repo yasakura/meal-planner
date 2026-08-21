@@ -2,13 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { createCalendarDate } from '../entities/calendar-date';
 import { DriftingClock } from './drifting-clock';
 
-/**
- * Le port `Clock` ne promet RIEN entre deux lectures : à minuit, deux appels consécutifs
- * tombent sur deux jours différents. Un double qui rendrait éternellement la même date
- * promettrait plus que son port, et rendrait verte toute logique qui lit l'horloge deux fois
- * en supposant la stabilité. Ce double exerce donc activement l'absence de garantie : il
- * avance d'un jour à chaque lecture.
- */
 describe('DriftingClock', () => {
   it('rend la date de départ à la première lecture', () => {
     const clock = DriftingClock.startingOn(createCalendarDate({ year: 2026, month: 8, day: 19 }));

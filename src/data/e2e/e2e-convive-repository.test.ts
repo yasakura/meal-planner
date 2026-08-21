@@ -12,8 +12,6 @@ const chloe = ConviveBuilder.aConvive().withId('c-3').withName('Chloé').build()
 
 describe('E2eConviveRepository', () => {
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
-    // Vécu FR-3 : un double qui rendait l'ordre d'insertion, et un écran qui affichait un
-    // ordre aléatoire une fois branché sur Firestore. L'adapter e2e exerce l'absence.
     const repository = E2eConviveRepository.seededWith(
       [alice, bruno, chloe],
       E2eFailureSwitch.create(),
@@ -42,8 +40,6 @@ describe('E2eConviveRepository', () => {
   });
 
   it('REJOUE transform : le port prévient qu’une transaction rejoue son corps', async () => {
-    // Une transformation impure (compteur, générateur d'id, horloge) doit casser ici, et
-    // pas des mois plus tard sur une écriture concurrente réelle.
     const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
     let appels = 0;
 
@@ -56,15 +52,11 @@ describe('E2eConviveRepository', () => {
   });
 
   it('écrit sous l’id DEMANDÉ, jamais sous celui rendu par transform', async () => {
-    // L'adapter Firestore réécrit le document convives/{id} qu'il vient de lire ; il ne
-    // déplace aucun document. Un adapter e2e plus arrangeant rendrait vert un renommage
-    // d'identifiant que le vrai n'a jamais su faire.
     const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
 
     await repository.updateExisting('c-1', () => createConvive({ id: 'autre-id', name: 'Alicia' }));
 
     expect(await repository.findAll()).toEqual([createConvive({ id: 'autre-id', name: 'Alicia' })]);
-    // Toujours rangé sous « c-1 » : aucune entrée n'a été créée sous « autre-id ».
     expect(await repository.updateExisting('autre-id', (existing) => existing)).toBeUndefined();
   });
 

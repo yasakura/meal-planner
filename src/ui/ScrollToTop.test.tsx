@@ -20,7 +20,6 @@ describe('ScrollToTop', () => {
         <Link to="/catalogue/nouvelle">aller à la création</Link>
       </MemoryRouter>,
     );
-    // Ignore l'appel éventuel au montage : on cible le comportement au changement de route.
     scrollSpy.mockClear();
 
     await user.click(screen.getByText('aller à la création'));

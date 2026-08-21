@@ -18,8 +18,6 @@ describe('E2eAuthGateway', () => {
   });
 
   it('résout signIn sur le même compte, quels que soient les identifiants', async () => {
-    // Appelé À TRAVERS le port : c'est cette signature-là que l'application utilise, et le
-    // test doit prouver que l'adapter la satisfait, pas seulement sa propre signature courte.
     const gateway: AuthGateway = E2eAuthGateway.signedInAs(compte);
 
     await expect(gateway.signIn('e2e@foyer.test', 'peu-importe')).resolves.toEqual(compte);
@@ -36,8 +34,6 @@ describe('E2eAuthGateway', () => {
   });
 
   it('coupe les notifications après désabonnement', () => {
-    // AuthGate se désabonne à chaque démontage, et StrictMode l'y force dès le premier
-    // rendu : un désabonnement inopérant empilerait les auditeurs.
     const gateway = E2eAuthGateway.signedInAs(compte);
     const vus: (Account | null)[] = [];
     const unsubscribe = gateway.observeAuthState((account) => vus.push(account));

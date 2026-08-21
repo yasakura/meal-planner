@@ -10,14 +10,6 @@ import { App } from './App';
 import { type AppDependencies } from './store/store';
 import { createTestStore } from './store/create-test-store';
 
-// App rend désormais <Routes> (routing) → montage sous <Router> requis en plus du <Provider>.
-// On monte sur /catalogue : cette route affiche le Layout partagé (TopBar marque + icône Compte,
-// tab bar basse, sheet Compte) et son contenu (catalogue + création).
-//
-// RUPTURE VOLONTAIRE (refonte du chrome, validée) : la déconnexion et l'info env ne sont plus
-// dans un bandeau texte toujours visible, mais derrière l'icône Compte de la TopBar, dans une
-// sheet fermée par défaut. Les assertions correspondantes ont été reciblées sur ce parcours
-// (ouvrir la sheet puis vérifier). Intention préservée, pas affaiblie.
 function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession(), ...overrides });
   return render(
@@ -73,8 +65,6 @@ describe('App', () => {
   });
 
   it('rend l’écran de création de recette sur /catalogue/nouvelle', () => {
-    // DÉMÉNAGEMENT VOLONTAIRE : le formulaire n'est plus rendu inline sous /catalogue (liste) ;
-    // il vit désormais sur sa page dédiée /catalogue/nouvelle.
     renderAppAt('/catalogue/nouvelle');
     expect(screen.getByText('Nouvelle recette')).toBeInTheDocument();
   });
@@ -103,22 +93,18 @@ describe('App', () => {
     renderAppAt('/catalogue/r-1', { getRecipe: async () => recipe });
 
     expect(await screen.findByRole('heading', { name: 'Ratatouille' })).toBeInTheDocument();
-    // Même localisateur que le test ci-dessus, où il trouve bien son titre.
     expect(screen.queryByText('Modifier la recette')).not.toBeInTheDocument();
   });
 
   it('/catalogue/:id rend le détail (route dynamique), pas le formulaire', async () => {
     renderAppAt('/catalogue/r-1');
 
-    // Recette absente du store par défaut → écran détail « introuvable ».
     expect(await screen.findByRole('alert')).toHaveTextContent(/introuvable/i);
     expect(screen.queryByText('Nouvelle recette')).not.toBeInTheDocument();
   });
 
   it('rend le catalogue', () => {
     renderApp();
-    // Libellé visible « Recettes » (renommage volontaire) ; on vise le <h1> de la page, distinct
-    // du lien de nav « Recettes » de la tab bar.
     expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 
@@ -132,7 +118,6 @@ describe('App', () => {
   it('redirige la racine / vers /catalogue', () => {
     renderAppAt('/');
 
-    // Cf. « rend le catalogue » : on vise le titre de page, pas le lien de nav.
     expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 

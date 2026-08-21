@@ -4,10 +4,6 @@ import { InMemoryConviveRepository } from '../test-doubles/in-memory-convive-rep
 import { type ConviveRepository } from '../ports/convive-repository';
 
 describe('addConviveUseCase', () => {
-  // L'identifiant est REÇU, jamais inventé ici : il est posé à l'ouverture du formulaire
-  // (`newConviveIdUseCase`) et vaut pour tous les envois de cette saisie-là. Un identifiant
-  // tiré à chaque écriture ferait, d'un second envoi hors ligne, un second document — deux
-  // convives pour une seule personne.
   it("attribue au convive l'id reçu en entrée", async () => {
     const addConvive = addConviveUseCase({
       conviveRepository: InMemoryConviveRepository.create(),

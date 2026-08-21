@@ -69,7 +69,6 @@ describe('auth slice', () => {
     });
   });
 
-  // [guard] câblage extra.authGateway — vert à l'écriture (thunk déjà branché), verrouille la non-régression du wiring DI
   it('le thunk forwarde email et password au authGateway injecté via extra', async () => {
     const gateway = StubAuthGateway.resolvingWith(AccountBuilder.anAccount().build());
     const store = createTestStore({ authGateway: gateway });
@@ -80,9 +79,6 @@ describe('auth slice', () => {
     expect(gateway.lastPassword).toBe('secret-42');
   });
 
-  // [guard] Nettoyage depuis un état SALE (ui hors périmètre mutation → seul filet).
-  // Les tests de flux partent d'un état déjà propre : ils n'exercent jamais `account = null`
-  // (rejected) ni `error = null` (fulfilled). Ces deux guards verrouillent ces lignes.
   it('signIn échoué depuis un état authentifié remet account à null', () => {
     const account = AccountBuilder.anAccount().build();
     const authenticated: AuthState = { account, status: 'authenticated', error: null };
@@ -202,7 +198,6 @@ describe('auth slice', () => {
     });
   });
 
-  // [guard] loading observé sur le FLUX RÉEL (dispatch via store, pas le reducer isolé).
   it('pendant un signIn en vol, le status passe à loading', () => {
     const store = createTestStore({
       authGateway: StubAuthGateway.resolvingWith(AccountBuilder.anAccount().build()),

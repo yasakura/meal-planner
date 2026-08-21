@@ -32,8 +32,6 @@ const mockedCollection = vi.mocked(collection);
 const mockedGetDocs = vi.mocked(getDocs);
 const mockedGetDocsFromServer = vi.mocked(getDocsFromServer);
 
-// Une erreur du SDK Firestore telle qu'elle arrive à l'adapter : c'est le `code` qui
-// porte la nature du problème, pas le message.
 function firestoreError(code: string): Error {
   return Object.assign(new Error(`firestore: ${code}`), { code, name: 'FirebaseError' });
 }
@@ -59,9 +57,6 @@ describe('FirestoreMenuRepository', () => {
     mockedGetDocsFromServer.mockReset();
   });
 
-  // C'est l'IDENTIFIANT du document qui réalise « un menu par période » : deux
-  // enregistrements sur la même date de début écrivent le même document, sans qu'aucun
-  // garde applicatif n'ait à comparer quoi que ce soit.
   it('save écrit le menu à menus/{date ISO de début} avec le document mappé', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
@@ -85,9 +80,6 @@ describe('FirestoreMenuRepository', () => {
     );
   });
 
-  // Jeu DISCRIMINANT : sans cette contrainte, l'adapter pourrait traduire TOUT rejet en
-  // indisponibilité, et l'app dirait « aucune connexion » à quelqu'un qui a du réseau mais
-  // pas le droit d'écrire.
   it("save ne traduit pas un refus de permission : l'erreur remonte telle quelle", async () => {
     mockedDoc.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
@@ -97,9 +89,6 @@ describe('FirestoreMenuRepository', () => {
     await expect(repository.save(menuCommencantLe24Aout())).rejects.toBe(refus);
   });
 
-  // Réseau coupé, `setDoc` NE REJETTE PAS : il met l'écriture en file locale et n'acquitte
-  // qu'au serveur — la promesse ne se règle jamais. Sans borne, l'écran resterait figé sur
-  // « enregistrement en cours », sans jamais rien dire.
   it(
     "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
     { timeout: 1000 },
@@ -114,8 +103,6 @@ describe('FirestoreMenuRepository', () => {
     },
   );
 
-  // La borne d'attente ne doit pas survivre à l'écriture qu'elle surveille : sans nettoyage,
-  // chaque enregistrement réussi laisserait un timer de 5 s derrière lui.
   it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
     vi.useFakeTimers();
     try {
@@ -151,9 +138,6 @@ describe('FirestoreMenuRepository', () => {
     ]);
   });
 
-  // La rétention est une RÈGLE, elle appartient au domaine (`saveMenuUseCase`). Un adapter
-  // qui filtrerait les périodes trop vieilles priverait le domaine de ce qu'il doit effacer,
-  // et l'historique enflerait sans que rien ne le signale.
   it('findAllStartDates rend TOUTES les périodes, même très anciennes : aucun filtre de rétention', async () => {
     mockedCollection.mockReturnValue({} as never);
     mockedGetDocsFromServer.mockResolvedValue({
@@ -167,9 +151,6 @@ describe('FirestoreMenuRepository', () => {
     expect(dates).toContainEqual(createCalendarDate({ year: 2019, month: 3, day: 4 }));
   });
 
-  // `getDocsFromServer` et non `getDocs` : hors ligne, `getDocs` sert le cache et rend un
-  // snapshot VIDE. Le domaine croirait l'historique vide et n'effacerait rien, sans jamais
-  // savoir qu'il n'avait pas lu.
   it('findAllStartDates interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
@@ -228,9 +209,6 @@ describe('FirestoreMenuRepository', () => {
     await expect(repository.remove(LUNDI_24_AOUT)).rejects.toBe(refus);
   });
 
-  // Même défaut que `setDoc`, mesuré identiquement : hors ligne `deleteDoc` ne rejette pas
-  // non plus, il met l'effacement en file locale et n'acquitte qu'au serveur — la promesse ne
-  // se règle jamais. La borne est ce qui permet à l'app d'avouer qu'elle ne sait pas.
   it(
     "signale un effacement que le serveur n'a pas acquitté dans la borne d'attente",
     { timeout: 1000 },

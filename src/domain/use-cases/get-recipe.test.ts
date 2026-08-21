@@ -5,13 +5,12 @@ import { ThrowingRecipeRepository } from '../test-doubles/throwing-recipe-reposi
 import { RecipeBuilder } from '../test-builders/recipe.builder';
 
 describe('getRecipeUseCase', () => {
-  it("retourne la recette stockée sous l'id demandé", async () => {
+  it("retourne la recette stockée sous l'id demandé, elle-même et non une copie", async () => {
     const recipe = RecipeBuilder.aRecipe().withId('id-connu-42').build();
     const recipeRepository = InMemoryRecipeRepository.create();
     await recipeRepository.save(recipe);
     const getRecipe = getRecipeUseCase({ recipeRepository });
 
-    // Identité de référence : l'entité renvoyée EST celle du repository, pas une copie.
     expect(await getRecipe('id-connu-42')).toBe(recipe);
   });
 

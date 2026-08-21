@@ -20,7 +20,6 @@ describe('listRecipesUseCase', () => {
 
   it('trie les recettes par titre, alphabétique croissant, insensible casse/accents (fr)', async () => {
     const recipeRepository = InMemoryRecipeRepository.create();
-    // Seedé DANS LE DÉSORDRE : l'ordre d'insertion ne doit PAS être l'ordre de sortie.
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').withTitle('Zeste').build());
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r2').withTitle('éclair').build());
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r3').withTitle('Ananas').build());
@@ -29,9 +28,6 @@ describe('listRecipesUseCase', () => {
 
     const recipes = await listRecipes();
 
-    // Jeu DISCRIMINANT (locale fr vs tri brut code-point) :
-    // un tri brut par code-point donnerait ['Ananas', 'Zeste', 'banane', 'éclair']
-    // (Z=90 < b=98 < é=233) — l'attendu fr valide donc localeCompare('fr') vs tri naïf.
     expect(recipes.map((r) => r.title)).toEqual(['Ananas', 'banane', 'éclair', 'Zeste']);
   });
 
@@ -44,12 +40,6 @@ describe('listRecipesUseCase', () => {
     expect(recipes).toEqual([]);
   });
 
-  // [guard] le tri se fait sur une COPIE défensive (`[...recipes]`), jamais en
-  // place sur le tableau renvoyé par le repository. InMemoryRecipeRepository
-  // renvoie un tableau frais à chaque findAll() → il ne peut pas prouver la
-  // non-mutation. On utilise donc un stub qui renvoie TOUJOURS LA MÊME référence
-  // et on vérifie qu'après tri, la source garde son ordre d'origine. Tue le
-  // mutant `[...recipes].sort()` → `recipes.sort()` (tri en place).
   it('ne mute pas le tableau source renvoyé par le repository', async () => {
     const source = [
       RecipeBuilder.aRecipe().withId('r1').withTitle('Zeste').build(),

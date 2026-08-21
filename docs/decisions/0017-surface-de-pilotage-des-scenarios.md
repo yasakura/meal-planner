@@ -2,7 +2,8 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-17 (`10a4f4e`)
-- **Portée** : `src/data/e2e/e2e-failure-switch.ts`, `src/data/e2e/e2e-seed.ts`
+- **Portée** : `src/data/e2e/e2e-failure-switch.ts`, `src/data/e2e/e2e-seed.ts`,
+  `e2e/support/e2e-controls.ts`
 
 ## Contexte
 
@@ -64,3 +65,26 @@ application.
   de charger » là où le vrai adapter dit « aucune connexion ».
 - Un seul commutateur est **partagé** par tous les dépôts : `failReads()` couvre tout ce que l'écran
   courant peut lire.
+
+## Ce que la surface impose au CÔTÉ scénario
+
+Trois contraintes qui ne se lisent pas dans `src/`, parce qu'elles vivent chez l'appelant.
+
+- **Le type `E2eControls` est REDÉCLARÉ côté `e2e/`** plutôt qu'importé de `src/data/e2e/`. C'est la
+  raison même qui l'a fait sortir du type global `Window` : rien du code applicatif ne doit pouvoir
+  le voir, et un chemin d'import depuis `e2e/` rouvrirait cette porte. La duplication porte sur
+  **trois signatures sans argument ni retour** ; un décalage entre les deux déclarations ne se
+  paierait pas en silence mais par l'échec **immédiat de tous** les scénarios de panne. Coût assumé
+  contre risque de fuite du type dans la production.
+- **`window.__e2e` n'existe pas encore quand `page.goto()` rend la main.** `main.tsx` construit le
+  store derrière un import **dynamique** ([ADR 0016](0016-mode-e2e-embarque.md)) : l'événement
+  `load`, celui qu'attend `goto()`, **précède** la résolution du module. Armer une panne juste après
+  une navigation lève alors « Cannot read properties of undefined » — et **par intermittence**,
+  selon la vitesse du transform Vite, ce qui en fait le pire genre d'échec. D'où une attente
+  explicite `page.waitForFunction(() => '__e2e' in window)` en tête de **chaque** helper de
+  pilotage, et non un délai fixe.
+- **Un scénario de panne navigue par les LIENS de l'application, jamais par l'URL.** La panne étant
+  un **état** porté par le store, elle appartient au chargement de page courant : `page.goto()`
+  recrée la page, donc le store, donc le commutateur — toute panne armée est perdue. Le scénario ne
+  casse pas pour autant : il voit l'écran **nominal** en croyant regarder un écran de panne, et
+  passe. Règle transverse à toute la suite, pas propriété d'un helper.

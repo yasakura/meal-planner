@@ -11,9 +11,6 @@ const omelette = RecipeBuilder.aRecipe().withId('r-3').withTitle('Omelette').bui
 
 describe('E2eRecipeRepository', () => {
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
-    // Convention test-doubles : là où le port déclare une garantie absente, l'adapter
-    // exerce activement l'absence. Rendre l'ordre d'insertion « par gentillesse » ferait
-    // passer en vert un tri que personne n'a écrit.
     const repository = E2eRecipeRepository.seededWith(
       [gratin, curry, omelette],
       E2eFailureSwitch.create(),

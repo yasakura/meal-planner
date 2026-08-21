@@ -30,8 +30,6 @@ describe('E2eFailureSwitch', () => {
   });
 
   it('reste armé jusqu’à restore : la panne est un état, pas un coup unique', () => {
-    // Un one-shot serait ininterprétable : StrictMode rejoue les effets, donc un écran
-    // émet deux lectures au montage — la panne tomberait sur l'une ou l'autre au hasard.
     const failures = E2eFailureSwitch.create();
 
     failures.failReads();

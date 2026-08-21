@@ -8,7 +8,6 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { menuDays } from './menu-days';
 
-// Lundi 24 août 2026 : le jour 0 du menu EST cette date, le jour 1 le lendemain.
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
 
 function menuOf(repas: ReturnType<typeof createRepas>[]): Menu {
@@ -67,16 +66,7 @@ describe('menuDays', () => {
     ]);
   });
 
-  /**
-   * LA règle de cette tranche. Un créneau dont la recette n'est plus au catalogue retombe sur le
-   * repli « Recette inconnue » : il n'y a alors aucune fiche vers laquelle mener, et la ligne ne
-   * doit porter AUCUNE destination. Le type l'impose — la variante `unknown` n'a pas de champ
-   * `href` — mais c'est ici que la règle se lit.
-   *
-   * Le créneau voisin, lui, est bien résolu : c'est le gage de l'absence affirmée sur le premier.
-   * Sans lui, « pas de href » serait tout aussi vrai d'une fonction qui n'en produirait jamais.
-   */
-  it('un créneau dont la recette est absente du catalogue n’a ni titre ni destination', () => {
+  it('un créneau dont la recette est absente du catalogue n’a ni titre ni destination, là où son voisin résolu a les deux', () => {
     const menu = menuOf([
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'disparue' })] }),
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),

@@ -22,9 +22,6 @@ describe('CalendarDate', () => {
     expect(Object.isFrozen(date)).toBe(true);
   });
 
-  // Une date civile DÉSIGNE un jour du calendrier : un triplet qui n'en désigne aucun n'est pas
-  // une date. Le 30 février et le 31 avril sont les cas que seule une vraie règle de calendrier
-  // attrape — une simple borne 1..31 les laisserait passer.
   it.each([
     ['30 février (mois court)', { year: 2026, month: 2, day: 30 }],
     ['31 avril (mois de 30 jours)', { year: 2026, month: 4, day: 31 }],
@@ -85,17 +82,6 @@ describe('addDays', () => {
     expect(addDays(date, 1)).toEqual({ year: 2028, month: 2, day: 29 });
   });
 
-  /**
-   * Les deux dates ci-dessous sont les jours de changement d'heure en France : 23 h le 29 mars,
-   * 25 h le 25 octobre. Ce que ces deux tests prouvent, c'est que `addDays` ne les traite PAS à
-   * part — l'arithmétique est ancrée sur UTC, où tout jour dure 24 h.
-   *
-   * Ce qu'ils ne prouvent PAS, malgré leur nom d'origine (« franchit le passage à l'heure
-   * d'été… ») : attraper une addition en millisecondes sur un instant LOCAL. Un tel défaut
-   * n'apparaîtrait que sous un fuseau qui change d'heure ces jours-là, or la suite s'exécute
-   * sous `TZ=UTC` (`vitest.config.ts`), qui n'en change jamais. Ces deux tests ne PEUVENT pas
-   * rougir sur un changement d'heure : ils tiennent l'ancrage, pas la survie à un fuseau.
-   */
   it('ajoute des jours pleins autour du 29 mars, jour de 23 h en France, sans le traiter à part', () => {
     const date = createCalendarDate({ year: 2026, month: 3, day: 28 });
 
@@ -126,8 +112,6 @@ describe('addDays', () => {
 });
 
 describe('dayOfWeek', () => {
-  // Convention JS : 0 = dimanche … 6 = samedi. Les sept jours sont pris pour qu'aucune
-  // implémentation décalée d'un cran ne puisse se cacher.
   it.each([
     ['dimanche', { year: 2026, month: 8, day: 23 }, 0],
     ['lundi', { year: 2026, month: 8, day: 24 }, 1],
@@ -141,16 +125,11 @@ describe('dayOfWeek', () => {
   });
 });
 
-/**
- * Format d'ÉCHANGE, pas concept métier : `<input type="date">` ne parle que cette chaîne-là.
- * La traduction vit ici, dans l'entité, et non dans un container — un `.tsx` n'est pas muté.
- */
 describe('toIsoDate', () => {
   it('rend le format du champ natif : AAAA-MM-JJ', () => {
     expect(toIsoDate(createCalendarDate({ year: 2026, month: 8, day: 24 }))).toBe('2026-08-24');
   });
 
-  // Le champ natif n'accepte QUE la forme à zéros : « 2026-1-5 » ne le renseigne pas.
   it('complète le mois et le quantième par un zéro', () => {
     expect(toIsoDate(createCalendarDate({ year: 2026, month: 1, day: 5 }))).toBe('2026-01-05');
   });
@@ -169,11 +148,6 @@ describe('parseIsoDate', () => {
     expect(Object.isFrozen(parseIsoDate('2026-08-24'))).toBe(true);
   });
 
-  /**
-   * Deux familles d'échecs, et la seconde est celle qu'un contrôle de FORME laisserait passer :
-   * « 2026-02-30 » est parfaitement bien formé et ne désigne aucun jour. La chaîne vide est le
-   * cas RÉEL du champ natif — c'est ce qu'il rend quand l'utilisateur l'efface.
-   */
   it.each([
     ['chaîne vide (le champ natif effacé)', ''],
     ['date partielle', '2026-08'],
@@ -194,11 +168,6 @@ describe('parseIsoDate', () => {
   });
 });
 
-/**
- * Reculer de N mois n'est pas une soustraction : les mois n'ont pas la même longueur. Le
- * quantième demandé peut ne pas exister dans le mois d'arrivée, et le calendrier n'autorise
- * alors qu'une réponse — le dernier jour de ce mois-là, jamais un débordement sur le suivant.
- */
 describe('subtractMonths', () => {
   it('recule de deux mois en gardant le quantième quand il existe', () => {
     const date = createCalendarDate({ year: 2026, month: 8, day: 19 });
@@ -212,9 +181,6 @@ describe('subtractMonths', () => {
     expect(subtractMonths(date, 2)).toEqual({ year: 2025, month: 11, day: 15 });
   });
 
-  // Le quantième demandé n'existe pas dans le mois d'arrivée : on RECULE sur son dernier jour.
-  // Un `setUTCMonth` naïf déborderait sur le mois suivant — le 30 avril moins deux mois
-  // deviendrait le 2 mars, et une fenêtre de rétention s'ouvrirait deux jours trop tard.
   it.each([
     [
       '30 avril : février 2026 s’arrête au 28',
@@ -248,10 +214,6 @@ describe('subtractMonths', () => {
   );
 });
 
-/**
- * Comparaison STRICTE de deux jours du calendrier. « Avant » et « le même jour » sont deux
- * réponses différentes : c'est cette distinction qui rend une borne inclusive ou exclusive.
- */
 describe('isBefore', () => {
   it('la veille précède le jour', () => {
     const veille = createCalendarDate({ year: 2026, month: 6, day: 18 });
@@ -274,8 +236,6 @@ describe('isBefore', () => {
     expect(isBefore(lendemain, jour)).toBe(false);
   });
 
-  // Les deux cas qu'une comparaison composant par composant, prise dans le mauvais ordre,
-  // laisserait passer : le quantième le plus grand appartient au jour le plus ANCIEN.
   it('l’année l’emporte sur le quantième : le 31 décembre 2025 précède le 1er janvier 2026', () => {
     const finDAnnee = createCalendarDate({ year: 2025, month: 12, day: 31 });
     const nouvelAn = createCalendarDate({ year: 2026, month: 1, day: 1 });

@@ -8,8 +8,6 @@ import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { Layout } from './Layout';
 import { createTestStore } from './store/create-test-store';
 
-// Layout est le chrome partagé : on le monte avec une route enfant factice pour vérifier sa
-// composition (TopBar + BottomTabBar + Outlet) et son câblage propre (ouverture de la sheet).
 function renderLayout() {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
   return render(
@@ -29,13 +27,10 @@ describe('Layout', () => {
   it('compose le chrome : marque, accès Compte, tab bar et contenu de route', () => {
     renderLayout();
 
-    // TopBar
     expect(screen.getByText('Meal Planner')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /compte/i })).toBeInTheDocument();
-    // BottomTabBar
     expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
-    // Outlet
     expect(screen.getByText('contenu de route')).toBeInTheDocument();
   });
 
@@ -57,7 +52,6 @@ describe('Layout', () => {
 
     expect(screen.getByText('Foyer')).toBeInTheDocument();
     expect(await screen.findByText('Personne dans le foyer pour le moment.')).toBeInTheDocument();
-    // La sheet reste la sheet Compte : titre, info dev et déconnexion inchangés.
     expect(screen.getByText('Compte')).toBeInTheDocument();
     expect(screen.getByText(/Environnement : dev/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();

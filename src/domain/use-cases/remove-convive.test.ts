@@ -12,11 +12,6 @@ async function foyerSeedeAvecTroisConvives(): Promise<InMemoryConviveRepository>
   return conviveRepository;
 }
 
-/**
- * Attendus DÉRIVÉS de ce que le repository rend, jamais de l'ordre d'insertion : le port ne
- * garantit aucun ordre et le double l'exerce activement (il inverse). Le tri est appliqué à
- * l'assertion pour ne comparer que l'APPARTENANCE au foyer, jamais son ordre.
- */
 async function idsDuFoyer(conviveRepository: ConviveRepository): Promise<string[]> {
   const foyer = await conviveRepository.findAll();
   return foyer.map((c) => c.id).sort();
@@ -38,7 +33,6 @@ describe('removeConviveUseCase', () => {
 
     await removeConvive({ id: 'c2' });
 
-    // Pas de tombstone, pas de champ « retiré » : le convive disparaît, son prénom est perdu.
     expect(conviveRepository.byId('c2')).toBeUndefined();
   });
 
@@ -58,8 +52,6 @@ describe('removeConviveUseCase', () => {
 
     await removeConvive({ id: 'c1' });
 
-    // Un foyer neuf est déjà vide : interdire le retour à zéro protégerait un invariant que
-    // l'application doit de toute façon savoir afficher.
     expect(await idsDuFoyer(conviveRepository)).toEqual([]);
   });
 
@@ -69,9 +61,6 @@ describe('removeConviveUseCase', () => {
 
     await expect(removeConvive({ id: 'inconnu' })).resolves.toBeUndefined();
 
-    // L'appel énonce un état cible déjà atteint : c'est un succès, pas une erreur. Il part
-    // quand même au dépôt — pas de lecture préalable qui coûterait un round-trip et
-    // resterait de toute façon perdable dans une course entre les deux comptes du board.
     expect(conviveRepository.removeCount).toBe(1);
     expect(await idsDuFoyer(conviveRepository)).toEqual(['c1', 'c2', 'c3']);
   });

@@ -12,8 +12,6 @@ describe('newRecipeIdUseCase', () => {
     expect(newRecipeId()).toBe('id-connu-42');
   });
 
-  // Un identifiant MÉMORISÉ ferait écrire deux formulaires successifs dans le même document :
-  // la seconde recette écraserait la première. Chaque appel redemande donc au générateur.
   it('redemande un identifiant au générateur à CHAQUE appel', () => {
     const idGenerator = StubIdGenerator.returning('id-connu-42');
     const newRecipeId = newRecipeIdUseCase({ idGenerator });

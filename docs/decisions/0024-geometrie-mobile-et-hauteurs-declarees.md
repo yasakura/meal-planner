@@ -4,7 +4,7 @@
 - **Date** : 2026-08-18 (`c7b0a6e`, `fix(ui): rendre cliquable ce que l'utilisateur voit`) ; mesures
   de compression d'onglet le 2026-08-19 (`f2c7701`)
 - **Portée** : `src/ui/Layout.tsx`, `BottomTabBar.tsx`, `RecipeCreateScreen.tsx`,
-  `ConvivesSection.tsx`, `AccountSheet.tsx`
+  `ConvivesSection.tsx`, `AccountSheet.tsx`, `e2e/support/atteignabilite.ts`
 
 ## Contexte
 
@@ -54,6 +54,30 @@ de la **police effectivement résolue**, et donc de la machine.
    distribue. Un `<main>` en `display: block` ne transmet pas la hauteur qu'il reçoit — d'où la
    colonne flex. Seul le formulaire de recette y échappe **délibérément** : il déborde toujours,
    rien n'a de hauteur à distribuer.
+6. **L'atteignabilité se mesure par `document.elementFromPoint` au centre de la cible**, jamais par
+   la seule visibilité. `elementFromPoint` rend l'élément **réellement peint** en ce point, donc
+   celui que le doigt toucherait : c'est le seul moyen de voir un recouvrement. La mesure rend
+   `obstacle: null` quand le point tombe sur la cible ou l'un de ses descendants — une icône, un
+   `<span>` — et **nomme le coupable** sinon, pour qu'un échec dise qui masquait quoi.
+
+## Gager une mesure d'atteignabilité — `toBeVisible()` oui, `toBeEnabled()` non
+
+`elementFromPoint` sur une boîte de taille **nulle** rend un obstacle tout aussi nul : le scénario
+passerait sans avoir rien vu. Toute mesure a donc besoin d'un **gage** que la boîte est non vide. Le
+piège est que ce gage est parfois déjà là, et parfois pas :
+
+- **`toBeVisible()` exige déjà une boîte englobante non vide.** Là où il précède la mesure, un
+  `expect(largeur).toBeGreaterThan(0)` **ne peut pas rougir** : c'est un faux filet, et il a été
+  retiré partout où ce cas s'appliquait.
+- **`toBeEnabled()` n'implique AUCUNE boîte.** Un bouton actif de taille nulle franchirait la
+  vérification. Là où c'est le seul gage disponible, `toBeGreaterThan(0)` est **vivant** et doit
+  rester.
+
+D'où la règle : le gage est **à la charge de l'appelant**, et il se décide au cas par cas.
+`attendreAtteignable` rend `largeur` et `hauteur` **sans les asserter** lui-même, précisément parce
+qu'il ne peut pas savoir lequel des deux cas s'applique chez son appelant. Les assertions de taille
+qui subsistent dans la suite ne sont donc ni à généraliser par symétrie, ni à supprimer par
+symétrie : chacune se juge sur le gage qui la précède.
 
 ## Conséquences
 

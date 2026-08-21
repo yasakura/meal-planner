@@ -103,7 +103,6 @@ describe('AccountSheet', () => {
     expect(screen.getByText('Compte')).toBeInTheDocument();
 
     rerender(sheet(false));
-    // Animation de sortie en cours → le contenu doit rester monté.
     expect(screen.getByText('Compte')).toBeInTheDocument();
 
     fireEvent.transitionEnd(screen.getByTestId('account-sheet-panel'));
@@ -127,7 +126,6 @@ describe('AccountSheet', () => {
 
     rerender(sheet(false));
 
-    // Aucun transitionEnd attendu : démontage immédiat.
     expect(screen.queryByText('Compte')).not.toBeInTheDocument();
   });
 });
