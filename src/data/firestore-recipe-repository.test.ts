@@ -32,8 +32,6 @@ const mockedGetDocsFromServer = vi.mocked(getDocsFromServer);
 const mockedGetDoc = vi.mocked(getDoc);
 const mockedGetDocFromServer = vi.mocked(getDocFromServer);
 
-// Une erreur du SDK Firestore telle qu'elle arrive à l'adapter : c'est le `code` qui
-// porte la nature du problème, pas le message.
 function firestoreError(code: string): Error {
   return Object.assign(new Error(`firestore: ${code}`), { code, name: 'FirebaseError' });
 }
@@ -73,9 +71,6 @@ describe('FirestoreRecipeRepository', () => {
     await expect(repository.save(recipe)).rejects.toThrow('permission-denied');
   });
 
-  // Réseau coupé, `setDoc` NE REJETTE PAS : il met l'écriture en file locale et n'acquitte
-  // qu'au serveur — la promesse ne se règle jamais. Sans borne, l'écran resterait figé sur
-  // « enregistrement en cours », sans jamais rien dire.
   it(
     "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
     { timeout: 1000 },
@@ -90,8 +85,6 @@ describe('FirestoreRecipeRepository', () => {
     },
   );
 
-  // La borne d'attente ne doit pas survivre à l'écriture qu'elle surveille : sans nettoyage,
-  // chaque enregistrement réussi laisserait un timer de 5 s derrière lui.
   it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
     vi.useFakeTimers();
     try {
@@ -120,8 +113,6 @@ describe('FirestoreRecipeRepository', () => {
         { id: 'recipe-b', data: () => recipeToDocument(recipeB) },
       ],
     };
-    // Re-pointé de `getDocs` vers `getDocsFromServer` : la lecture ne passe plus par le
-    // cache. Assertions inchangées par ailleurs.
     mockedGetDocsFromServer.mockResolvedValue(snapshot as never);
     const repository = FirestoreRecipeRepository.create(db);
 
@@ -136,7 +127,6 @@ describe('FirestoreRecipeRepository', () => {
 
   it("findAll propage l'erreur Firestore sans l'avaler", async () => {
     mockedCollection.mockReturnValue({} as never);
-    // Re-pointé de `getDocs` vers `getDocsFromServer`. Assertion inchangée.
     mockedGetDocsFromServer.mockRejectedValue(new Error('permission-denied'));
     const repository = FirestoreRecipeRepository.create(db);
 
@@ -152,8 +142,6 @@ describe('FirestoreRecipeRepository', () => {
       id: 'recipe-42',
       data: () => recipeToDocument(recipe),
     };
-    // Re-pointé de `getDoc` vers `getDocFromServer` : la lecture ne passe plus par le
-    // cache. Assertions inchangées par ailleurs.
     mockedGetDocFromServer.mockResolvedValue(snapshot as never);
     const repository = FirestoreRecipeRepository.create(db);
 
@@ -167,9 +155,6 @@ describe('FirestoreRecipeRepository', () => {
 
   it("findById retourne undefined quand le document n'existe pas", async () => {
     mockedDoc.mockReturnValue({} as never);
-    // Re-pointé de `getDoc` vers `getDocFromServer`. Assertion inchangée. Le snapshot
-    // vient désormais du SERVEUR : `exists() === false` signifie vraiment « n'existe pas »,
-    // et non « absent du cache local ».
     mockedGetDocFromServer.mockResolvedValue({ exists: () => false } as never);
     const repository = FirestoreRecipeRepository.create(db);
 
@@ -178,19 +163,12 @@ describe('FirestoreRecipeRepository', () => {
 
   it("findById propage l'erreur Firestore sans l'avaler", async () => {
     mockedDoc.mockReturnValue({} as never);
-    // Re-pointé de `getDoc` vers `getDocFromServer`. Assertion inchangée.
     mockedGetDocFromServer.mockRejectedValue(new Error('permission-denied'));
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findById('recipe-42')).rejects.toThrow('permission-denied');
   });
 
-  // Réseau coupé, `getDocs` NE REJETTE PAS : il sert le cache et renvoie un snapshot vide.
-  // Le catalogue affichait donc « Aucune recette » — un catalogue inventé, sur l'écran
-  // d'accueil de l'app. Lire depuis le serveur est la seule façon de distinguer « rien »
-  // de « je ne sais pas ».
-  // Aucun repli cache n'est sacrifié au passage : mesuré sur la vraie base, `getDocs`
-  // interroge DÉJÀ le serveur à chaque appel (`fromCache=false`).
   it('findAll interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
@@ -211,9 +189,6 @@ describe('FirestoreRecipeRepository', () => {
     await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
   });
 
-  // Jeu DISCRIMINANT : sans cette contrainte, l'adapter pourrait traduire TOUT rejet en
-  // indisponibilité, et l'app dirait « aucune connexion » à quelqu'un qui a du réseau mais
-  // pas le droit de lire.
   it("findAll ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
     mockedCollection.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
@@ -223,9 +198,6 @@ describe('FirestoreRecipeRepository', () => {
     await expect(repository.findAll()).rejects.toBe(refus);
   });
 
-  // Même mensonge que pour la liste, en pire : hors ligne, `getDoc` sert le cache et rend un
-  // snapshot dont `exists()` est faux. L'écran affichait « Recette introuvable » — il
-  // affirmait l'inexistence d'une recette qu'il n'avait simplement pas pu lire.
   it('findById interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);

@@ -35,8 +35,6 @@ describe('LoginContainer', () => {
     expect(screen.getByRole('button', { name: /se connecter/i })).toBeDisabled();
   });
 
-  // [guard] vert à l'écriture (activation dérivée du calcul submitDisabled de #2).
-  // Verrouille la direction complémentaire + le câblage onChange→state qui pilote l'activation.
   it('active le bouton une fois email et mot de passe saisis', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -63,8 +61,6 @@ describe('LoginContainer', () => {
     expect(gateway.lastPassword).toBe('secret');
   });
 
-  // [guard] vert à l'écriture (le <form onSubmit> est déjà câblé).
-  // Verrouille la soumission au clavier (Enter) via le form, indépendamment du clic.
   it('soumet le formulaire quand on presse Entrée dans le champ mot de passe', async () => {
     const user = userEvent.setup();
     const account = AccountBuilder.anAccount().build();

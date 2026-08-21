@@ -2,7 +2,8 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-12 (`bbc9f0f`, mesure de la sheet), généralisé sur FR-3 le 2026-08-14
-- **Portée** : `src/ui/AccountSheet.tsx`, `convives-slice`, `menu-slice`, `recipe-slice`
+- **Portée** : `src/ui/AccountSheet.tsx`, `convives-slice`, `menu-slice`, `recipe-slice`,
+  `e2e/support/account-sheet.ts`
 
 ## Contexte
 
@@ -27,6 +28,37 @@ l'animation annule le démontage**.
 Mesuré : **fermer puis rouvrir en 80 ms → aucun remontage**, donc le thunk de chargement n'est
 jamais rejoué ; **en 700 ms → remontage**, thunk rejoué. Le déclencheur « l'écran se rouvre » n'est
 donc **pas** un déclencheur fiable.
+
+### La réouverture éclair n'est pas atteignable au doigt
+
+L'overlay couvre encore **tout l'écran** pendant les 200 ms de sa disparition, et Playwright attend
+qu'une cible soit actionnable avant de cliquer pour de bon. Mesuré sur ce dépôt : un `click()` réel
+sur « Compte » enchaîné juste après « Fermer » n'aboutit qu'à **540 ms** — largement **après** le
+démontage, et bien au-delà des 80 ms qui l'annulent.
+
+Conséquence pour la conception, pas seulement pour les scénarios : la fenêtre d'annulation existe
+dans la **machine à états** de la sheet, elle n'existe pas sous le doigt de l'utilisateur par ce
+bouton. Un scénario qui veut l'exercer envoie l'événement directement (`dispatchEvent('click')`) et
+**assume qu'il n'imite plus un geste** : ce qu'il éprouve est `isRendered = isOpen || isClosing`, pas
+un parcours.
+
+### Un nœud détaché ne rend AUCUNE transformation
+
+Pour distinguer « la sheet est à sa place » de « la sheet a disparu », un scénario lit
+`getComputedStyle(panneau).transform`. Deux valeurs mesurées, pas déduites, sous Chromium :
+
+- panneau en place (`translateY(0)`, transition terminée) → **`matrix(1, 0, 0, 1, 0, 0)`** ;
+- nœud **détaché du document** → **`''`**, chaîne vide.
+
+Les deux attentes du helper — « la sortie a commencé » et « la sheet est revenue en place » — se
+servent du littéral en sens contraire, et c'est ce troisième cas qui les départage : un panneau
+démonté ne peut **jamais** être confondu avec un panneau en place. Le littéral est réécrit dans
+chacune des deux attentes plutôt que partagé, une fonction évaluée dans la page n'ayant accès à
+aucune constante du fichier.
+
+La borne d'attente vaut **5 s**, soit **vingt-cinq fois** la transition de 200 ms et sous le délai du
+test : un dépassement se lit alors sur la ligne d'attente fautive, et non comme un scénario mort de
+vieillesse.
 
 ## Décision
 

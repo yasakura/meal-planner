@@ -35,9 +35,6 @@ describe('E2eMenuRepository', () => {
   });
 
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
-    // Comme `InMemoryMenuRepository` : inversion délibérée, déterministe, et garantie
-    // différente de l'insertion dès deux éléments. Un adapter plus aimable que son contrat
-    // ferait passer en vert un tri que personne n'a écrit.
     const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
 
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
@@ -52,8 +49,6 @@ describe('E2eMenuRepository', () => {
   });
 
   it('enregistre en UPSERT sur la période : même date de début, une seule entrée', async () => {
-    // La période est la CLÉ. Deux dates civiles construites séparément désignent le même
-    // jour : ranger les menus par objet ferait cohabiter deux menus sur la même période.
     const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
 
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-curry'));

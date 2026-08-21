@@ -58,9 +58,6 @@ describe('FirebaseAuthGateway', () => {
     );
   });
 
-  // [GUARD] Symétrie avec le test email null (green-on-arrival) : createAccount valide déjà
-  // l'id via sa branche id vide. Documente que l'adapter fait porter l'invariant des DEUX
-  // champs Firebase (uid + email) par la factory domaine, pas seulement l'email.
   it('uid vide côté Firebase → erreur domaine (frontière donnée incomplète)', async () => {
     mockedSignIn.mockResolvedValue({
       user: { uid: '', email: 'aurelie@foyer.test' },

@@ -46,9 +46,6 @@ describe('renameConviveUseCase', () => {
 
     await renameConvive({ id: 'c2', name: 'Aurélia' });
 
-    // Attendu DÉRIVÉ de ce que le repository rend, jamais de l'ordre d'insertion : le port
-    // ne garantit aucun ordre et le double l'exerce activement (il inverse). Le tri par id
-    // ne compare donc que le CONTENU du foyer, jamais son ordre.
     const foyer = await conviveRepository.findAll();
     expect(foyer.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
       { id: 'c1', name: 'Rory' },
@@ -62,8 +59,6 @@ describe('renameConviveUseCase', () => {
 
     await renameConvive({ id: 'c2', name: 'Rory' });
 
-    // Les deux convives coexistent sous le même prénom : aucune contrainte d'unicité,
-    // aucune déduplication, aucun suffixe inventé.
     expect(conviveRepository.byId('c1')?.name).toBe('Rory');
     expect(conviveRepository.byId('c2')?.name).toBe('Rory');
   });
@@ -115,8 +110,6 @@ describe('renameConviveUseCase', () => {
 
     await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow();
 
-    // `save` est un upsert : écrire sans vérifier l'existence recréerait le convive que
-    // l'autre compte du board vient de supprimer. Le foyer reste à un seul convive.
     expect(conviveRepository.saveCount).toBe(saveCountAvant);
     const foyer = await conviveRepository.findAll();
     expect(foyer.map((c) => c.id)).toEqual(['c1']);
@@ -130,8 +123,6 @@ describe('renameConviveUseCase', () => {
     await renameConvive({ id: 'c2', name: 'Aurélia' });
 
     expect(conviveRepository.updateCount).toBe(1);
-    // Et JAMAIS par `save` : ce chemin-là est un upsert, il ressusciterait un convive
-    // supprimé entre la lecture et l'écriture. Le renommage n'a plus le droit d'y toucher.
     expect(conviveRepository.saveCount).toBe(saveCountAvant);
   });
 
@@ -144,8 +135,6 @@ describe('renameConviveUseCase', () => {
     };
     const renameConvive = renameConviveUseCase({ conviveRepository });
 
-    // Une panne n'est pas une absence : elle ne doit surtout pas devenir « ce convive
-    // n'existe pas », sinon l'écran accuserait l'utilisateur d'une coupure réseau.
     await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow(
       "Le dépôt n'a pas répondu.",
     );

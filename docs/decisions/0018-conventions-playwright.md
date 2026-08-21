@@ -29,6 +29,17 @@ multiple est **légitime**, l'asserter par son **compte exact** plutôt que par 
 exemple deux occurrences de « Crème » (la ligne d'ingrédient et la préparation qui la nomme), dont
 le compte est justement ce que le défaut contredisait.
 
+### `press()` REFOCALISE, et Chromium replace le curseur en TÊTE
+
+`locator.press()` commence par un `focus()` sur sa cible. Chromium place alors le point d'insertion
+**au début** du champ, et non à la fin de la valeur déjà saisie. Un `press('Backspace')` seul
+n'efface donc **rien** : le scénario paraît frapper, la valeur ne bouge pas, et ce qu'il croyait
+éprouver — ici, qu'un constat survit à la frappe — n'est jamais éprouvé.
+
+**Règle** : faire précéder d'un `press('End')` toute frappe d'édition censée agir sur la fin de la
+valeur, et asserter la **valeur obtenue** (`toHaveValue('Zo')`) plutôt que l'effet visé. L'assertion
+de valeur est ce qui transforme le piège en échec visible s'il revient.
+
 ### `retries: 0`, CI comprise
 
 **Aucune tentative supplémentaire.** Un scénario instable doit se voir comme instable : un

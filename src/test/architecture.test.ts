@@ -14,8 +14,6 @@ const FORBIDDEN_IN_DOMAIN = [
   'react-redux',
   'styled-components',
   'firebase',
-  // `CalendarDate` est une date civile ancrée sur UTC : le domaine n'a aucune bibliothèque de
-  // date, et un `addDays` importé la rendrait inutile. Permis dans `ui/` pour le formatage.
   'date-fns',
 ];
 
@@ -57,8 +55,6 @@ function matchesForbidden(specifier: string, forbidden: string[]): boolean {
   return forbidden.some((f) => specifier === f || specifier.startsWith(`${f}/`));
 }
 
-// Contrairement à `collectSourceFiles`, les fichiers de test sont inclus : un cycle refermé
-// depuis un `.test.tsx` reste un cycle.
 function collectFeatureFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -77,7 +73,6 @@ function featureOf(file: string): string | undefined {
   return rel.startsWith('..') ? undefined : rel.split(sep)[0];
 }
 
-/** feature source -> feature cible -> fichiers qui portent l'arête. */
 function featureEdges(): Map<string, Map<string, string[]>> {
   const edges = new Map<string, Map<string, string[]>>();
   for (const file of collectFeatureFiles(FEATURES_DIR)) {
@@ -95,7 +90,6 @@ function featureEdges(): Map<string, Map<string, string[]>> {
   return edges;
 }
 
-/** Premier cycle rencontré, sous la forme `[a, b, ..., a]`. */
 function findCycle(edges: Map<string, Map<string, string[]>>): string[] | undefined {
   const visited = new Set<string>();
   const path: string[] = [];
@@ -166,10 +160,7 @@ describe('Architecture boundaries', () => {
     expect(cycle, cycle ? describeCycle(cycle, edges) : '').toBeUndefined();
   });
 
-  // Le garde ci-dessus est vert aujourd'hui, et sa seule assertion est une absence. Les deux
-  // tests suivants sont ses gages : sans eux, un détecteur qui ne détecte plus ou un walker
-  // qui ne voit plus rien le rendraient vert pour toujours, et silencieusement inutile.
-  it('findCycle nomme le cycle, et describeCycle imprime les fichiers qui portent chaque arête', () => {
+  it('gage du garde de cycles : findCycle NOMME un cycle construit exprès, et describeCycle imprime les fichiers qui portent chaque arête', () => {
     const edges = new Map([
       ['a', new Map([['b', ['ui/features/a/A.ts']]])],
       ['b', new Map([['a', ['ui/features/b/B.test.tsx']]])],
@@ -185,7 +176,7 @@ describe('Architecture boundaries', () => {
     );
   });
 
-  it('le graphe est construit sur les fichiers réels des features, .tsx compris', () => {
+  it('gage du garde de cycles : le graphe est construit sur les fichiers réels des features, .tsx compris', () => {
     expect(featureEdges().get('recipe')?.get('recipe-detail')).toContain(
       join('ui', 'features', 'recipe', 'RecipeEditContainer.tsx'),
     );

@@ -27,12 +27,8 @@ describe('listConvivesUseCase', () => {
     expect(convives).toEqual([]);
   });
 
-  // L'adapter Firestore lit la collection sans `orderBy` : l'ordre reçu est celui des
-  // identifiants de documents (cuid2, délibérément non-triable), donc arbitraire. Le foyer
-  // se lit désormais par prénom, et c'est le use-case qui en porte la responsabilité.
   it('trie les convives par prénom, alphabétique croissant, quel que soit l’ordre du repository', async () => {
     const conviveRepository = InMemoryConviveRepository.create();
-    // Seedé DANS LE DÉSORDRE : l'ordre du repository ne doit PAS être l'ordre de sortie.
     await conviveRepository.save(ConviveBuilder.aConvive().withId('c1').withName('Rory').build());
     await conviveRepository.save(
       ConviveBuilder.aConvive().withId('c2').withName('Aurélie').build(),
@@ -54,8 +50,6 @@ describe('listConvivesUseCase', () => {
 
     const convives = await listConvives();
 
-    // Jeu DISCRIMINANT (locale fr vs tri brut par code-point) : un tri brut donnerait
-    // ['Emma', 'Zoé', 'Élise'] (E=69 < Z=90 < É=201) et reléguerait Élise en fin de foyer.
     expect(convives.map((c) => c.name)).toEqual(['Élise', 'Emma', 'Zoé']);
   });
 
@@ -69,8 +63,6 @@ describe('listConvivesUseCase', () => {
 
     const convives = await listConvives();
 
-    // Jeu DISCRIMINANT : un tri brut par code-point donnerait ['Lionel', 'aurélie'] (L=76 < a=97).
-    // Une saisie non capitalisée ne doit pas exiler le convive en fin de liste.
     expect(convives.map((c) => c.name)).toEqual(['aurélie', 'Lionel']);
   });
 
@@ -85,11 +77,6 @@ describe('listConvivesUseCase', () => {
 
     const convives = await listConvives();
 
-    // Deux convives peuvent porter le même prénom (FR-3 ne déduplique pas) : les deux
-    // restent présents, et à prénom égal le tri n'invente aucun ordre — il préserve
-    // celui du repository.
-    // L'attendu est DÉRIVÉ de ce que le repository rend, jamais de l'ordre d'insertion :
-    // le port ne garantit aucun ordre, et le double l'exerce activement.
     const fournis = await conviveRepository.findAll();
     const homonymesDansLOrdreDuRepository = fournis
       .filter((c) => c.name === 'Rory')

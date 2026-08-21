@@ -15,8 +15,6 @@ function row(patch: Partial<IngredientRow>): IngredientRow {
 }
 
 describe('emptyRow', () => {
-  // La quantité est une CHAÎNE vide, pas « 0 » : un champ neuf ne propose aucune valeur, et
-  // « 0 » serait à la fois une quantité refusée par la ligne et un chiffre à effacer à la main.
   it('ouvre une ligne sans nom, sans quantité, en grammes', () => {
     expect(emptyRow()).toEqual({ name: '', quantity: '', unit: 'g' });
   });
@@ -27,14 +25,10 @@ describe('isValidRow', () => {
     expect(isValidRow(row({ name: 'Crème', quantity: '200', unit: 'ml' }))).toBe(true);
   });
 
-  // Sans ce refus, la ligne franchit le filtre et `createIngredient` LÈVE, en plein
-  // gestionnaire de clic : le bouton devient mort, sans le moindre constat à l'écran.
   it('refuse une ligne sans nom, même avec une quantité valide', () => {
     expect(isValidRow(row({ name: '', quantity: '200', unit: 'g' }))).toBe(false);
   });
 
-  // Distinct du cas ci-dessus : sans le `.trim()`, `'   ' !== ''` reste vrai. Le `trim()` de
-  // l'entité ne couvre pas ce cas — elle LÈVE là où la ligne doit être écartée en silence.
   it('refuse un nom composé uniquement d’espaces', () => {
     expect(isValidRow(row({ name: '   ', quantity: '200', unit: 'g' }))).toBe(false);
   });
@@ -66,11 +60,6 @@ describe('toIngredients', () => {
   });
 });
 
-/**
- * La DÉCISION de refuser l'enregistrement, ici et pas dans un container : une ligne amorcée mais
- * incomplète est une saisie en cours, pas une ligne à jeter. Écartée en silence, elle détruit un
- * ingrédient existant lors d'une modification, et l'écran annonce quand même un succès.
- */
 describe('hasIncompleteRow', () => {
   it('ne voit rien à signaler quand toutes les lignes sont valides', () => {
     expect(
@@ -81,16 +70,12 @@ describe('hasIncompleteRow', () => {
     ).toBe(false);
   });
 
-  // La ligne ENTIÈREMENT vide est celle qui sert à en ajouter une : elle reste ignorée.
   it('ne voit rien à signaler dans une ligne entièrement vide', () => {
     expect(
       hasIncompleteRow([row({ name: 'Crème', quantity: '500', unit: 'ml' }), emptyRow()]),
     ).toBe(false);
   });
 
-  // Le champ « Nom » est un texte libre : des espaces y sont ATTEIGNABLES. Une ligne où
-  // l'utilisateur n'a frappé qu'un espace reste une ligne vide — refuser d'enregistrer en
-  // désignant une ligne qui paraît vide serait incompréhensible.
   it('ne voit rien à signaler dans une ligne où seuls des espaces ont été frappés', () => {
     expect(hasIncompleteRow([row({ name: '   ', quantity: '' })])).toBe(false);
   });
@@ -118,8 +103,6 @@ describe('hasIncompleteRow', () => {
 });
 
 describe('INCOMPLETE_ROW_MESSAGE', () => {
-  // Le vocabulaire d'une saisie à reprendre, pas celui d'une panne : l'utilisateur peut agir,
-  // et les deux remèdes qu'il a sont nommés.
   it('dit à l’utilisateur ce qu’il peut faire', () => {
     expect(INCOMPLETE_ROW_MESSAGE).toBe('Complète ou retire les lignes d’ingrédient incomplètes.');
   });

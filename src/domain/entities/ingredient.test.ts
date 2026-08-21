@@ -51,9 +51,6 @@ describe('Ingredient', () => {
     );
   });
 
-  // Guard de mutation (non red-driven) : le comportement passe déjà (Number.isFinite + > 0
-  // acceptent les décimales). Protège contre l'ajout futur d'un check trop restrictif
-  // (ex. Number.isInteger) que le mutation testing ne couvrirait pas — vert-à-l'écriture assumé.
   it('accepte une quantity décimale', () => {
     const ingredient = IngredientBuilder.anIngredient().withQuantity(0.5).build();
 
@@ -86,8 +83,6 @@ describe('Ingredient', () => {
     ).toThrow('Unité invalide');
   });
 
-  // Guard de mutation (non red-driven) : protège l'intégrité du whitelist UNITS
-  // contre la suppression d'un élément — requis par le mandat mutation >= 80 %.
   it.each(UNITS)("accepte l'unité valide '%s'", (unit) => {
     const ingredient = IngredientBuilder.anIngredient().withUnit(unit).build();
 

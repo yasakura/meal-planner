@@ -14,8 +14,6 @@ import { loadRecipeDetail } from '../recipe-detail/recipe-detail-slice';
 import { createTestStore } from '../../store/create-test-store';
 import { RecipeEditContainer } from './RecipeEditContainer';
 
-// L'écran d'édition renavigue vers le DÉTAIL de la recette modifiée (useNavigate) et expose un
-// lien retour (Link) → montage sous <Router> requis ; on espionne la navigation.
 const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
@@ -43,8 +41,6 @@ const GRATIN: Recipe = RecipeBuilder.aRecipe()
   .withInstructions('Émincer, napper, cuire.')
   .build();
 
-// Monter sur une instance de store DONNÉE est la seule façon de reproduire la rémanence : le
-// store applicatif est un singleton de session, un store neuf par montage la masque.
 function renderOn(store: TestStore, id = 'r-1') {
   return render(
     <Provider store={store}>
@@ -68,10 +64,6 @@ function renderWithStore(
   return { store, ...renderOn(store, id) };
 }
 
-/**
- * Monte le container sur un CHEMIN complet, requête comprise : la provenance d'où l'on vient vit
- * dans l'URL, et c'est le seul moyen de la lui donner.
- */
 function renderAtPath(
   path: string,
   overrides?: { getRecipe?: GetRecipe; updateRecipe?: UpdateRecipe },
@@ -94,12 +86,6 @@ function renderAtPath(
   };
 }
 
-/**
- * Monte le container avec un lien de navigation CLIENTE vers un autre `/catalogue/:id/modifier`.
- * Cliquer ce lien change le paramètre de route sans démonter l'élément — React Router conserve
- * l'instance quand seul le paramètre change. C'est le seul montage capable d'observer un effet
- * dont les dépendances ignorent `id`.
- */
 function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
   return render(
     <Provider store={store}>
@@ -113,8 +99,6 @@ function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
   );
 }
 
-// Le MÊME libellé qu'à la création : les deux écrans nomment déjà la même opération
-// (« Impossible d'enregistrer la recette. »), et c'est bien le même geste — « Enregistrer ».
 const CONSTAT_NON_ACQUITTE =
   'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
 
@@ -154,7 +138,6 @@ describe('RecipeEditContainer', () => {
     );
   });
 
-  // Une recette sans préparation ouvre un champ VIDE, jamais « undefined » rendu en toutes lettres.
   it('ouvre un champ préparation vide quand la recette n’en a pas', async () => {
     const sansPreparation = RecipeBuilder.aRecipe().withId('r-1').withoutInstructions().build();
     renderWithStore({ getRecipe: async () => sansPreparation });
@@ -200,8 +183,6 @@ describe('RecipeEditContainer', () => {
     });
   });
 
-  // Règle 2 côté écran : ce que le formulaire n'affiche plus n'est PAS envoyé. Le remplacement
-  // est intégral, la ligne retirée disparaît de l'input du use-case.
   it('n’envoie pas l’ingrédient retiré du formulaire', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -221,12 +202,6 @@ describe('RecipeEditContainer', () => {
     ]);
   });
 
-  /**
-   * Le défaut le plus coûteux de cet écran : vider la quantité d'un ingrédient EXISTANT — le
-   * geste banal de qui va retaper une valeur. La ligne est toujours affichée, le bouton toujours
-   * actif ; l'enregistrement la faisait disparaître de la recette en annonçant un succès. Le clic
-   * est désormais REFUSÉ, et rien ne part vers le dépôt.
-   */
   it('refuse d’enregistrer une ligne d’ingrédient incomplète, sans rien envoyer', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -238,7 +213,6 @@ describe('RecipeEditContainer', () => {
     if (!creme) throw new Error('la ligne « Crème » est introuvable');
     await user.clear(creme);
 
-    // Le bouton RESTE actif : c'est le clic qui refuse, pas un verrou posé d'avance.
     const enregistrer = screen.getByRole('button', { name: /^enregistrer$/i });
     expect(enregistrer).toBeEnabled();
     await user.click(enregistrer);
@@ -246,17 +220,14 @@ describe('RecipeEditContainer', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Complète ou retire les lignes d’ingrédient incomplètes.',
     );
-    // Le vocabulaire d'une panne n'a rien à faire ici : la saisie est incomplète, pas le réseau.
     expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
 
-    // Aucune écriture n'est partie, et la ligne est toujours là.
     expect(spy.state.captured).toBeUndefined();
     expect(store.getState().recipeEdit.status).toBe('idle');
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(screen.getAllByLabelText(/nom/i)[1]).toHaveValue('Crème');
   });
 
-  /** La SORTIE du constat : la ligne complétée, il s'efface et l'enregistrement repart. */
   it('la quantité retapée efface le constat et l’ingrédient repart intact', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -267,7 +238,6 @@ describe('RecipeEditContainer', () => {
     if (!creme) throw new Error('la ligne « Crème » est introuvable');
     await user.clear(creme);
     await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    // Le localisateur de l'absence affirmée juste après, vu ici en train de trouver son texte.
     expect(
       await screen.findByText('Complète ou retire les lignes d’ingrédient incomplètes.'),
     ).toBeInTheDocument();
@@ -287,7 +257,6 @@ describe('RecipeEditContainer', () => {
     ]);
   });
 
-  /** L'autre remède que le constat nomme : retirer la ligne l'efface aussi. */
   it('retirer la ligne incomplète efface le constat et laisse enregistrer', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -356,8 +325,6 @@ describe('RecipeEditContainer', () => {
     expect(bouton).toBeDisabled();
   });
 
-  // Les invariants s'appliquent à la modification comme à la création : on ne peut pas rendre
-  // invalide par modification une recette qui était valide. Le formulaire refuse de soumettre.
   it('verrouille « Enregistrer » si le titre est vidé', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -377,9 +344,6 @@ describe('RecipeEditContainer', () => {
     await screen.findByLabelText(/titre/i);
     expect(screen.getAllByLabelText(/nom/i)).toHaveLength(2);
 
-    // RE-INTERROGER à chaque tour : la liste des lignes est recréée à chaque retrait, et un
-    // bouton capturé avant le premier clic est détaché — le cliquer est un no-op silencieux,
-    // même famille que le `user.type()` sur un champ `disabled` de FR-3.
     while (screen.queryAllByRole('button', { name: /retirer l'ingrédient/i }).length > 0) {
       const [premier] = screen.getAllByRole('button', { name: /retirer l'ingrédient/i });
       if (!premier) throw new Error('bouton « Retirer » introuvable');
@@ -411,22 +375,9 @@ describe('RecipeEditContainer', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Aucune connexion — la recette n’a pas pu être chargée.',
     );
-    // Même localisateur que le scénario « identifiant inconnu » ci-dessus, où il trouve bien
-    // son texte : c'est ce qui rend cette absence discriminante plutôt que décorative.
     expect(screen.queryByText('Recette introuvable')).not.toBeInTheDocument();
   });
 
-  /**
-   * L'écran SANS recette est le seul dont l'utilisateur ne peut rien faire d'autre que sortir :
-   * son unique lien renvoyait au catalogue, en dur, alors que l'URL porte encore la provenance.
-   * Venu du menu, la panne de lecture coupait donc le fil du parcours là où il n'y a même pas de
-   * formulaire pour se rattraper. Le retour est celui de la PROVENANCE, comme partout ailleurs.
-   *
-   * Un seul des trois états sans recette est exercé : ils sortent tous du même `if`, et le
-   * retour ne regarde pas le statut — le multiplier ne testerait que la même ligne trois fois.
-   * TÉMOIN de l'absence affirmée ici : le scénario juste en dessous, même état sur une URL nue,
-   * où « ← Recettes » est bel et bien là.
-   */
   it('venu du menu, l’écran sans recette ramène au MENU', async () => {
     const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
     renderAtPath('/catalogue/r-1/modifier?depuis=menu', { getRecipe: horsLigne });
@@ -438,12 +389,6 @@ describe('RecipeEditContainer', () => {
     expect(screen.queryByRole('link', { name: '← Recettes' })).not.toBeInTheDocument();
   });
 
-  /**
-   * Le témoin : sans provenance, on n'affirme pas venir d'un menu qu'on n'a pas vu. C'est aussi
-   * lui qui gage l'absence de « ← Menu », en montrant le même localisateur trouver son lien
-   * là-haut. Le retour ne désigne JAMAIS une fiche ici — il n'y a pas de recette — et les deux
-   * destinations possibles, elles, existent sans elle.
-   */
   it('sans provenance, l’écran sans recette ramène au CATALOGUE', async () => {
     const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
     renderAtPath('/catalogue/r-1/modifier', { getRecipe: horsLigne });
@@ -455,9 +400,6 @@ describe('RecipeEditContainer', () => {
     expect(screen.queryByRole('link', { name: '← Menu' })).not.toBeInTheDocument();
   });
 
-  // On arrive ici DEPUIS le détail : annuler doit rendre l'écran d'où l'on vient, pas la liste
-  // deux crans plus loin. Libellé au singulier — « Recettes » annoncerait le catalogue. Le titre
-  // de la recette ne figure pas dans le lien : un titre long y déborde de la mise en page.
   it('offre un lien retour « ← Recette » vers le détail de la recette modifiée', async () => {
     renderWithStore();
 
@@ -467,13 +409,6 @@ describe('RecipeEditContainer', () => {
     );
   });
 
-  /**
-   * Le formulaire est une ÉTAPE d'un parcours qui a commencé ailleurs. Ouvert depuis une fiche
-   * venue du menu, il rend une fiche qui doit encore le savoir — sinon annuler une modification
-   * fait perdre le fil, et l'écran d'arrivée renvoie au catalogue quelqu'un qui venait du menu.
-   * TÉMOIN de la provenance ABSENTE : le scénario juste au-dessus, monté sur une URL nue, où le
-   * même lien pointe la même fiche sans rien y ajouter.
-   */
   it('venu du menu, le lien « ← Recette » ramène à une fiche qui sait encore d’où l’on vient', async () => {
     renderAtPath('/catalogue/r-1/modifier?depuis=menu');
 
@@ -483,12 +418,6 @@ describe('RecipeEditContainer', () => {
     );
   });
 
-  /**
-   * L'autre sortie du formulaire, celle qu'on emprunte quand tout va bien. Le retour au détail
-   * après un enregistrement réussi est déjà couvert plus haut sur une URL nue — ici la fiche
-   * rendue doit en plus porter la provenance, faute de quoi la modification d'une recette
-   * ouverte depuis le menu se termine sur un écran qui dit « ← Recettes ».
-   */
   it('venu du menu, un enregistrement réussi rend une fiche qui sait encore d’où l’on vient', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -500,12 +429,6 @@ describe('RecipeEditContainer', () => {
     await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1?depuis=menu'));
   });
 
-  /**
-   * Rémanence du statut d'édition (même famille que l'issue #27). Revenir au détail puis
-   * recliquer « Modifier » est une navigation CLIENT : le store survit, le container se remonte
-   * sur un statut resté 'success'. Le store est délibérément RÉUTILISÉ d'un render à l'autre —
-   * un store recréé ferait de chaque montage un « premier de la session » et ne détecterait rien.
-   */
   it('remonté sur le MÊME store après une modification réussie, rouvre le formulaire sans renavigüer', async () => {
     const user = userEvent.setup();
     const spy = capturingSpy();
@@ -524,12 +447,6 @@ describe('RecipeEditContainer', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  /**
-   * Rémanence de la LECTURE : `recipeDetail` est partagé avec l'écran de détail et survit à la
-   * navigation. Ouvrir l'édition d'une recette alors que le store porte encore une AUTRE recette
-   * ne doit jamais préremplir le formulaire avec cette dernière — l'utilisateur enregistrerait
-   * le contenu d'une recette sous l'identifiant d'une autre.
-   */
   it('ne préremplit jamais avec la recette précédemment consultée', async () => {
     const autre = RecipeBuilder.aRecipe().withId('r-2').withTitle('Omelette aux herbes').build();
     let resoudre: ((recipe: Recipe) => void) | undefined;
@@ -548,19 +465,12 @@ describe('RecipeEditContainer', () => {
 
     expect(screen.queryByDisplayValue('Omelette aux herbes')).not.toBeInTheDocument();
 
-    // Gage : le même localisateur, vu trouver le titre de la recette RÉELLEMENT demandée dès
-    // qu'elle arrive. Sans lui, l'absence ci-dessus serait vraie sur un écran vide.
     if (!resoudre) throw new Error('la lecture de r-1 n’a pas été déclenchée');
     resoudre(GRATIN);
     expect(await screen.findByDisplayValue('Gratin dauphinois')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('Omelette aux herbes')).not.toBeInTheDocument();
   });
 
-  /**
-   * Le bouton « Enregistrer » est verrouillé pendant l'enregistrement, la tab bar ne l'est pas :
-   * l'utilisateur peut quitter le formulaire pendant que l'écriture est en vol. Elle aboutit
-   * (rien ne l'annule), mais son geste de navigation prime — on ne le ramène pas au détail.
-   */
   it('une modification qui aboutit après le départ de l’utilisateur ne le ramène pas au détail', async () => {
     const user = userEvent.setup();
     let resoudre: ((recipe: Recipe) => void) | undefined;
@@ -577,19 +487,10 @@ describe('RecipeEditContainer', () => {
     if (!resoudre) throw new Error('l’enregistrement n’a pas été déclenché');
     resoudre(RecipeBuilder.aRecipe().build());
 
-    // L'enregistrement aboutit bel et bien : c'est ce qui rend l'absence de navigation
-    // discriminante — la promesse s'est résolue, la suite du `then` a eu lieu.
     await vi.waitFor(() => expect(store.getState().recipeEdit.status).toBe('success'));
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  /**
-   * Amorce fermée avant qu'elle ne morde. React Router conserve l'élément quand SEUL le
-   * paramètre de route change : passer d'un `/catalogue/:id/modifier` à un autre ne démonte
-   * pas le container. La recette était bien rechargée (`[dispatch, id]`), mais l'ouverture du
-   * formulaire n'était pas signalée au slice (`[dispatch]`) — le nouveau formulaire s'ouvrait
-   * donc sur le constat d'échec HÉRITÉ de la recette précédente.
-   */
   it('changer d’identifiant sans démontage remet le statut d’édition à zéro', async () => {
     const user = userEvent.setup();
     const omelette = RecipeBuilder.aRecipe().withId('r-2').withTitle('Omelette aux herbes').build();
@@ -601,7 +502,6 @@ describe('RecipeEditContainer', () => {
 
     await screen.findByLabelText(/titre/i);
     await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    // Gage du localisateur de l'absence affirmée plus bas : vu ici en train de trouver son texte.
     expect(await screen.findByText('Impossible d’enregistrer la recette.')).toBeInTheDocument();
     expect(store.getState().recipeEdit.status).toBe('error');
 
@@ -611,11 +511,6 @@ describe('RecipeEditContainer', () => {
     expect(store.getState().recipeEdit.status).toBe('idle');
     expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
   });
-  /**
-   * Même troisième issue qu'à la création, même ton poli : l'écriture est en file locale et
-   * atterrira au retour du réseau, il n'y a rien à faire d'utile — donc `role="status"` et non
-   * `role="alert"`, qui est réservé à l'échec réessayable.
-   */
   it('hors ligne, la modification n’est pas confirmée : le constat est poli et n’accuse aucun échec', async () => {
     const user = userEvent.setup();
     renderWithStore({ updateRecipe: nonAcquitte });
@@ -629,11 +524,6 @@ describe('RecipeEditContainer', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  /**
-   * Contrairement à la création, « Enregistrer » n'est PAS verrouillé : la modification écrit sur
-   * le même identifiant, un second envoi ne peut rien dupliquer, et le verrouiller ferait de
-   * l'écran une impasse. Même arbitrage que l'enregistrement du menu, pour la même raison.
-   */
   it('une modification non acquittée n’est pas une impasse : le second envoi repart et le constat s’efface', async () => {
     const user = userEvent.setup();
     let horsLigne = true;
@@ -645,7 +535,6 @@ describe('RecipeEditContainer', () => {
 
     await screen.findByLabelText(/titre/i);
     await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    // Le localisateur de l'absence affirmée plus bas, vu ici en train de trouver son texte.
     expect(await screen.findByText(CONSTAT_NON_ACQUITTE)).toBeInTheDocument();
 
     horsLigne = false;

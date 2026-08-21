@@ -24,14 +24,6 @@ describe('menuDayLabel', () => {
     );
   });
 
-  /**
-   * Le français écrit « 1er », jamais « 1 » : le premier du mois est le SEUL quantième ordinal.
-   * Le token `do` de date-fns rendrait bien « 1er », mais aussi « 2ème » et « 21ème », qui sont
-   * fautifs — d'où une règle conditionnelle, et d'où les quantièmes voisins asserted ici : ils
-   * interdisent d'obtenir le « 1er » en suffixant tout le monde.
-   *
-   * Un menu de quinzaine sur deux franchit une fin de mois, donc en contient un.
-   */
   it('écrit « 1er » le premier du mois, et le quantième nu les autres jours', () => {
     const jeudi1erJanvier = createCalendarDate({ year: 2026, month: 1, day: 1 });
 
@@ -40,11 +32,6 @@ describe('menuDayLabel', () => {
     expect(menuDayLabel(jeudi1erJanvier, 20)).toBe('mercredi 21 janvier');
   });
 
-  /**
-   * L'année ne s'affiche PAS : le libellé d'un menu de deux semaines n'en a pas besoin. Une date
-   * prise dans une AUTRE année que la date de début voisine est le seul cas où un format qui
-   * l'ajouterait se verrait — un `EEEE d MMMM yyyy` rendrait ici « jeudi 31 décembre 2026 ».
-   */
   it('n’affiche jamais l’année, même en franchissant le 31 décembre', () => {
     const jeudi31Decembre = createCalendarDate({ year: 2026, month: 12, day: 31 });
 

@@ -37,8 +37,6 @@ describe('AuthGate', () => {
   it('rend le Splash tant que la session n’est pas déterminée (initializing)', () => {
     renderGate(StubAuthGateway.withPendingSession());
 
-    // role="status" est unique au Splash (le login ne l'a pas) → discrimine vraiment,
-    // contrairement au titre « Meal Planner » que login ET splash partagent.
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.queryByText('CONTENU APP')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /se connecter/i })).not.toBeInTheDocument();

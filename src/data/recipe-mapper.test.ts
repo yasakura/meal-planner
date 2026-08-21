@@ -25,10 +25,6 @@ describe('recipe-mapper', () => {
     expect(roundTripped).toEqual(recipe);
   });
 
-  // [GUARD] Test de caractérisation (green-on-arrival assumé) : le round-trip #1
-  // a déjà piloté la forme du document. Ce guard verrouille explicitement le
-  // contrat de sérialisation (objet plat sans id, ingrédients à 3 champs) contre
-  // toute régression future de recipeToDocument.
   it('recipeToDocument produit un objet plat sans id, avec des ingrédients {name, quantity, unit}', () => {
     const recipe = RecipeBuilder.aRecipe()
       .withId('recipe-99')

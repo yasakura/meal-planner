@@ -24,12 +24,6 @@ function anInput(): UpdateRecipeInput {
   };
 }
 
-/**
- * Slice DISTINCT de `recipe-slice`. La création et la modification sont deux opérations
- * atteignables depuis deux écrans différents ; partager un statut transitoire entre elles est
- * exactement le défaut que l'issue #27 a coûté — un `success` rémanent qui renavigue le
- * formulaire à peine rouvert. Un statut par opération, aucune cohabitation possible.
- */
 describe('recipe edit slice', () => {
   it('un store neuf est idle', () => {
     const store = createTestStore();
@@ -71,9 +65,6 @@ describe('recipe edit slice', () => {
     expect(selectRecipeEdition(store.getState())).toEqual({ status: 'saving' });
   });
 
-  // Rémanence : le store est un singleton de session. Resté à 'success', le statut ferait
-  // renavigüer vers le détail un formulaire d'édition à peine rouvert. C'est le REDUCER qui
-  // décide de la remise à zéro — il est muté par Stryker, le container ne l'est pas.
   it('l’ouverture d’un formulaire remet à idle une modification déjà réussie', () => {
     const succeeded: RecipeEditState = { status: 'success' };
 
@@ -86,17 +77,12 @@ describe('recipe edit slice', () => {
     expect(recipeEditReducer(errored, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 
-  // Un thunk RTK n'est pas annulé par un démontage : remettre à zéro pendant une modification
-  // en vol déverrouillerait le bouton d'une opération encore en cours.
   it('l’ouverture d’un formulaire ne touche pas à une modification encore en vol', () => {
     const saving: RecipeEditState = { status: 'saving' };
 
     expect(recipeEditReducer(saving, recipeEditFormOpened())).toEqual({ status: 'saving' });
   });
 
-  // La séparation des slices n'est pas décorative : une modification ne doit RIEN dire du cycle
-  // de création, sans quoi rouvrir « + » après une modification réussie renaviguerait — ni de
-  // son identifiant de brouillon, sans quoi elle ferait écrire la recette suivante ailleurs.
   it('une modification réussie ne touche pas au statut de création', async () => {
     const savedRecipe: Recipe = RecipeBuilder.aRecipe().build();
     const spy: UpdateRecipe = async () => savedRecipe;
@@ -107,15 +93,9 @@ describe('recipe edit slice', () => {
     expect(store.getState().recipe).toEqual({
       status: 'idle',
       draftId: 'generated-id-1',
-      // Aucun envoi de CRÉATION n'est parti : la modification n'en attend aucun verdict.
       latestCreateRequestId: null,
     });
   });
-  /**
-   * Même borne d'acquittement, même troisième issue qu'à la création : l'écriture est partie et
-   * atterrira au retour du réseau. Aucun doublon possible ici — la modification écrit sur le
-   * même identifiant — mais un écran qui annonce l'échec d'une écriture en file ment tout autant.
-   */
   it('le dépôt qui n’a pas répondu : la modification n’est pas confirmée, elle n’a pas échoué', async () => {
     const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({ updateRecipe: nonAcquitte });
@@ -152,7 +132,6 @@ describe('recipe edit slice', () => {
     expect(constat(store)).toEqual(ECHEC);
   });
 
-  // Pendant l'écriture, l'écran n'a rien à dire : le constat parle de l'ISSUE, pas de l'attente.
   it('pendant la modification, l’écran ne constate rien encore', () => {
     const pending: UpdateRecipe = () => new Promise<Recipe>(() => {});
     const store = createTestStore({ updateRecipe: pending });

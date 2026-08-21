@@ -12,8 +12,6 @@ describe('newConviveIdUseCase', () => {
     expect(newConviveId()).toBe('id-connu-42');
   });
 
-  // Un identifiant MÉMORISÉ ferait écrire deux saisies successives dans le même document : le
-  // second convive écraserait le premier. Chaque appel redemande donc au générateur.
   it('redemande un identifiant au générateur à CHAQUE appel', () => {
     const idGenerator = StubIdGenerator.returning('id-connu-42');
     const newConviveId = newConviveIdUseCase({ idGenerator });

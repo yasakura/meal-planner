@@ -32,8 +32,6 @@ const mockedRunTransaction = vi.mocked(runTransaction);
 const mockedGetDocs = vi.mocked(getDocs);
 const mockedGetDocsFromServer = vi.mocked(getDocsFromServer);
 
-// Une erreur du SDK Firestore telle qu'elle arrive à l'adapter : c'est le `code` qui
-// porte la nature du problème, pas le message.
 function firestoreError(code: string): Error {
   return Object.assign(new Error(`firestore: ${code}`), { code, name: 'FirebaseError' });
 }
@@ -84,8 +82,6 @@ describe('FirestoreConviveRepository', () => {
         { id: 'convive-b', data: () => conviveToDocument(conviveB) },
       ],
     };
-    // Re-pointé de `getDocs` vers `getDocsFromServer` : la lecture ne passe plus par le
-    // cache. Assertions inchangées par ailleurs.
     mockedGetDocsFromServer.mockResolvedValue(snapshot as never);
     const repository = FirestoreConviveRepository.create(db);
 
@@ -100,16 +96,12 @@ describe('FirestoreConviveRepository', () => {
 
   it("findAll propage l'erreur Firestore sans l'avaler", async () => {
     mockedCollection.mockReturnValue({} as never);
-    // Re-pointé de `getDocs` vers `getDocsFromServer`. Assertion inchangée.
     mockedGetDocsFromServer.mockRejectedValue(new Error('permission-denied'));
     const repository = FirestoreConviveRepository.create(db);
 
     await expect(repository.findAll()).rejects.toThrow('permission-denied');
   });
 
-  // Réseau coupé, `getDocs` NE REJETTE PAS : il sert le cache et renvoie un snapshot vide.
-  // L'app affichait donc « Personne dans le foyer pour le moment. » — un foyer inventé.
-  // Lire depuis le serveur est la seule façon de distinguer « rien » de « je ne sais pas ».
   it('findAll interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
@@ -130,9 +122,6 @@ describe('FirestoreConviveRepository', () => {
     await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
   });
 
-  // Jeu DISCRIMINANT : sans cette contrainte, l'adapter pourrait traduire TOUT rejet en
-  // indisponibilité, et l'app dirait « aucune connexion » à quelqu'un qui a du réseau mais
-  // pas le droit de lire.
   it("ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
     mockedCollection.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
@@ -142,9 +131,6 @@ describe('FirestoreConviveRepository', () => {
     await expect(repository.findAll()).rejects.toBe(refus);
   });
 
-  // Le canal de rejet n'est pas typé : le SDK, un intercepteur ou un mock peuvent rejeter
-  // autre chose qu'un objet. La traduction doit répondre « ce n'est pas une indisponibilité »
-  // et laisser passer, jamais transformer un rejet propre en TypeError obscur.
   it("laisse passer une valeur rejetée qui n'est pas un objet, sans crasher la traduction", async () => {
     mockedCollection.mockReturnValue({} as never);
     const repository = FirestoreConviveRepository.create(db);
@@ -156,10 +142,6 @@ describe('FirestoreConviveRepository', () => {
     await expect(repository.findAll()).rejects.toBeNull();
   });
 
-  // Symétrique de la lecture. Si `setDoc` rejette pour panne réseau AVANT l'expiration de la
-  // borne, laisser remonter la FirebaseError brute ferait passer l'ajout en `error` au lieu
-  // de `unconfirmed` — et le bouton se réarmerait, rouvrant la porte au doublon que tout le
-  // verrouillage cherche à fermer.
   it("traduit un refus d'écriture faute de réseau en indisponibilité de dépôt", async () => {
     mockedDoc.mockReturnValue({} as never);
     mockedSetDoc.mockRejectedValue(firestoreError('unavailable'));
@@ -170,8 +152,6 @@ describe('FirestoreConviveRepository', () => {
     );
   });
 
-  // La borne d'attente ne doit pas survivre à l'écriture qu'elle surveille : sans nettoyage,
-  // chaque ajout réussi laisserait un timer de 5 s derrière lui.
   it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
     vi.useFakeTimers();
     try {
@@ -188,10 +168,6 @@ describe('FirestoreConviveRepository', () => {
     }
   });
 
-  // Réseau coupé, `setDoc` ne rejette pas non plus : il met l'écriture en file locale et
-  // n'acquitte qu'au serveur. Mesuré en conditions réelles : la promesse reste pending
-  // indéfiniment, le bouton « Ajouter » reste désactivé, aucun message. L'adapter doit
-  // borner cette attente pour que l'app puisse dire quelque chose.
   it(
     "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
     { timeout: 1000 },
@@ -235,10 +211,6 @@ describe('FirestoreConviveRepository', () => {
     await expect(repository.remove('convive-42')).rejects.toBe(refus);
   });
 
-  // Même défaut que `setDoc`, mesuré identiquement : hors ligne `deleteDoc` ne rejette pas,
-  // il met l'effacement en file locale et n'acquitte qu'au serveur — la promesse ne se règle
-  // jamais. Sans borne, l'écran resterait figé sur « suppression en cours », bouton
-  // verrouillé, sans jamais rien dire.
   it(
     "signale un effacement que le serveur n'a pas acquitté dans la borne d'attente",
     { timeout: 1000 },
@@ -268,9 +240,6 @@ describe('FirestoreConviveRepository', () => {
     }
   });
 
-  // Un faux `Transaction` : on n'a pas d'émulateur (décision 2026-07-14), donc ce qui est
-  // vérifié ici est le CÂBLAGE — que la lecture et l'écriture passent bien par le même objet
-  // de transaction, et non par des appels libres qui ne seraient pas atomiques.
   function transactionLisant(snapshot: unknown) {
     const tx = { get: vi.fn().mockResolvedValue(snapshot), set: vi.fn() };
     mockedRunTransaction.mockImplementation((_db, updateFunction) =>
@@ -295,9 +264,6 @@ describe('FirestoreConviveRepository', () => {
     );
 
     expect(mockedDoc).toHaveBeenCalledWith(db, 'convives', 'convive-42');
-    // Lecture ET écriture par la transaction : `getDocFromServer` puis `setDoc` laisseraient
-    // un intervalle pendant lequel l'autre compte peut supprimer, et l'écriture — un upsert —
-    // ressusciterait le convive.
     expect(tx.get).toHaveBeenCalledWith(docRef);
     expect(tx.set).toHaveBeenCalledWith(docRef, conviveToDocument(renomme!));
     expect(renomme).toEqual({ id: 'convive-42', name: 'Alix' });
@@ -316,8 +282,6 @@ describe('FirestoreConviveRepository', () => {
     expect(tx.set).not.toHaveBeenCalled();
   });
 
-  // La transformation porte les invariants du domaine (`createConvive`) : quand elle refuse,
-  // l'erreur remonte telle quelle et la transaction n'écrit rien.
   it("updateExisting n'écrit rien et propage l'erreur quand la transformation refuse", async () => {
     mockedDoc.mockReturnValue({} as never);
     const convive = ConviveBuilder.aConvive().withId('convive-42').build();
@@ -357,10 +321,6 @@ describe('FirestoreConviveRepository', () => {
     );
   });
 
-  // Même borne que `save` et `remove`, et pour la même raison éprouvée deux fois sur cette
-  // feature : une promesse qui ne se règle jamais laisse l'écran figé, bouton verrouillé,
-  // sans un mot. Une transaction retente jusqu'à cinq fois ; sur un réseau qui rampe, cela
-  // peut dépasser la patience de l'utilisateur bien avant de rejeter.
   it(
     "signale une transaction que le serveur n'a pas acquittée dans la borne d'attente",
     { timeout: 1000 },

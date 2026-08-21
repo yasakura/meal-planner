@@ -138,7 +138,6 @@ describe('createE2eStore', () => {
     );
     await store.dispatch(loadCatalogue());
 
-    // La modification REMPLACE : l'ancien titre a disparu, aucune quatrième recette n'est née.
     expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
       'Curry de pois chiches',
       'Gratin de courgettes',
@@ -158,21 +157,6 @@ describe('createE2eStore', () => {
     expect(second).toEqual(premier);
   });
 
-  /**
-   * Deux propriétés tiennent ICI, et nulle part ailleurs — les autres leviers de déterminisme
-   * du mode e2e (identifiants séquentiels, tirage, fixtures, ordre du foyer) ont chacun le
-   * leur, l'horloge n'en avait aucun :
-   *
-   * 1. le CÂBLAGE : c'est bien l'horloge FIGÉE qui date le menu. Branchée sur `SystemClock`,
-   *    la date de départ serait celle du jour d'exécution et changerait chaque semaine ;
-   * 2. le jour figé n'est PAS un lundi. C'est la propriété discriminante de `E2E_TODAY` : si
-   *    « aujourd'hui » était déjà le prochain lundi, les deux se confondraient et un use-case
-   *    qui rendrait la date du jour au lieu du lundi suivant passerait inaperçu — dans les
-   *    scénarios Playwright comme ici.
-   *
-   * La seconde assertion est une absence, adossée à la présence exacte de la ligne au-dessus :
-   * la date de départ y est pinnée au littéral avant d'être opposée à `E2E_TODAY`.
-   */
   it('date le menu sur l’horloge FIGÉE, au prochain lundi — qui n’est pas le jour même', async () => {
     const store = createE2eStore(hostAt(''));
 
@@ -184,8 +168,6 @@ describe('createE2eStore', () => {
   });
 
   it('fait échouer les lectures à la demande, PUIS les rétablit sans trace', async () => {
-    // La séquence, pas l'instantané : « échouer, observer, rétablir, observer ». Sans
-    // pilotage en cours de scénario, la sortie d'un état non-nominal est invérifiable.
     const host = hostAt('');
     const store = createE2eStore(host);
 
@@ -199,11 +181,6 @@ describe('createE2eStore', () => {
     expect(selectConvives(store.getState()).convives).toHaveLength(4);
   });
 
-  /**
-   * Le dépôt de MENUS est câblé, et sur le même commutateur que les autres : sans lui, le mode
-   * e2e n'aurait aucune façon de jouer un enregistrement en panne. La séquence, pas
-   * l'instantané — « échouer, observer, rétablir, observer ».
-   */
   it('enregistre le menu sur son dépôt e2e, et fait échouer l’écriture à la demande', async () => {
     const host = hostAt('');
     const store = createE2eStore(host);
@@ -225,8 +202,6 @@ describe('createE2eStore', () => {
     controlsOf(host).failWrites();
     await store.dispatch(addConvive({ name: 'Zoé' }));
 
-    // Constat lu AVANT tout rechargement : `loadConvives.pending` remet le cycle d'ajout au
-    // repos, c'est sa fonction — l'asserter après ne prouverait plus rien.
     expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
 
     await store.dispatch(loadConvives());

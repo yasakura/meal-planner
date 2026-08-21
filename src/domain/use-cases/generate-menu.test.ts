@@ -5,7 +5,6 @@ import { InMemoryRecipeRepository } from '../test-doubles/in-memory-recipe-repos
 import { SequenceRandomPicker } from '../test-doubles/sequence-random-picker';
 import { RecipeBuilder } from '../test-builders/recipe.builder';
 
-// Lundi 24 août 2026. Le use-case ne DEVINE pas la date de début : elle lui est donnée.
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
 
 describe('generateMenuUseCase', () => {
@@ -39,15 +38,11 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r2').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 1 jour = 2 slots : le picker choisit l'index 2 puis l'index 0 du catalogue.
       randomPicker: SequenceRandomPicker.returning(2, 0),
     });
 
     const menu = await generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT });
 
-    // L'attendu est DÉRIVÉ du catalogue tel que le repository le rend : le port ne
-    // garantit aucun ordre. Coder 'r2' puis 'r0' supposerait l'ordre d'insertion, ce que
-    // Firestore ne respecte pas (il rend l'ordre des identifiants).
     const catalogue = await recipeRepository.findAll();
     const recipeIds = menu.repas.map((r) => r.slots[0]?.recipeId);
     expect(recipeIds).toEqual([catalogue[2]?.id, catalogue[0]?.id]);
@@ -59,14 +54,11 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 1 jour = 2 slots. Index 0 sur le POOL COURANT à chaque slot : le premier slot
-      // prend la 1ʳᵉ recette du catalogue et la retire, le second prend celle qui reste.
       randomPicker: SequenceRandomPicker.returning(0, 0),
     });
 
     const menu = await generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT });
 
-    // Attendu dérivé du catalogue rendu, pas de l'ordre d'insertion.
     const catalogue = await recipeRepository.findAll();
     expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual([
       catalogue[0]?.id,
@@ -80,15 +72,11 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r1').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 2 jours = 4 slots. Index 0 sur le pool courant à chaque slot : la tournée 1 vide
-      // le catalogue dans l'ordre rendu, puis recharge et la tournée 2 le rejoue à
-      // l'identique.
       randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 
     const menu = await generateMenu({ days: 2, dateDebut: LUNDI_24_AOUT });
 
-    // Attendu dérivé du catalogue rendu, pas de l'ordre d'insertion.
     const [premiere, seconde] = await recipeRepository.findAll();
     expect(menu.repas.map((r) => r.slots[0]?.recipeId)).toEqual([
       premiere?.id,
@@ -103,7 +91,6 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('only').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 1 jour = 2 slots, catalogue d'1 recette : pool vidé puis rechargé à chaque slot.
       randomPicker: SequenceRandomPicker.returning(0, 0),
     });
 
@@ -120,8 +107,6 @@ describe('generateMenuUseCase', () => {
     await recipeRepository.save(RecipeBuilder.aRecipe().withId('r3').build());
     const generateMenu = generateMenuUseCase({
       recipeRepository,
-      // 2 jours = 4 slots. Toujours idx0 du pool courant qui rétrécit :
-      // r0 (pool [r0,r1,r2,r3]), r1 (pool [r1,r2,r3]), r2 (pool [r2,r3]), r3 (pool [r3]).
       randomPicker: SequenceRandomPicker.returning(0, 0, 0, 0),
     });
 

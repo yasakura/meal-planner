@@ -21,8 +21,6 @@ function renderAt(id: string, getRecipe: GetRecipe) {
   return { store, ...renderAtWith(store, id) };
 }
 
-// Monte le container sur un CHEMIN complet, requête comprise : la provenance d'où l'on vient
-// vit dans l'URL, et c'est le seul moyen de la lui donner.
 function renderAtPath(path: string, getRecipe: GetRecipe) {
   const store = createTestStore({ getRecipe });
   return render(
@@ -36,9 +34,6 @@ function renderAtPath(path: string, getRecipe: GetRecipe) {
   );
 }
 
-// Monte le container sur un store DONNÉ. Indispensable pour rejouer un aller-retour sur la
-// route : en prod le store est un singleton de session (main.tsx), seul le container est
-// démonté. Un test qui recréerait le store ne reproduirait aucune rémanence.
 function renderAtWith(store: ReturnType<typeof createTestStore>, id: string) {
   return render(
     <Provider store={store}>
@@ -53,16 +48,6 @@ function renderAtWith(store: ReturnType<typeof createTestStore>, id: string) {
 
 type Frame = { texte: string; liensModifier: (string | null)[] };
 
-/**
- * Le DOM tel qu'il est PEINT, frame par frame. `useLayoutEffect` s'exécute une fois le DOM du
- * commit posé et AVANT tout `useEffect` passif du même commit : la sonde voit donc l'écran tel
- * qu'il est rendu au montage, avant que le chargement déclenché par le container n'ait remis la
- * recette du store à `null`. C'est la seule fenêtre où la frame périmée existe — la RTL, qui
- * n'inspecte le DOM qu'une fois les effets purgés, ne peut pas l'observer autrement.
- *
- * La sonde s'abonne au MÊME état que le container, pour être re-rendue dans les mêmes commits
- * que lui et ne manquer aucune frame.
- */
 function SondeDeFrames(props: { frames: Frame[] }) {
   useAppSelector(selectRecipeDetail);
   useLayoutEffect(() => {
@@ -220,9 +205,6 @@ describe('RecipeDetailContainer', () => {
     expect(await screen.findByText('Recette Deux')).toBeInTheDocument();
   });
 
-  // Caractérisation d'une branche défensive existante : `if (id !== undefined)`.
-  // Sous une route sans paramètre :id, useParams().id vaut undefined ; le container
-  // ne doit alors déclencher AUCUN chargement (et ne pas crasher).
   it('ne déclenche aucun chargement quand la route ne fournit pas d’id', () => {
     let calls = 0;
     const getRecipe: GetRecipe = async () => {
@@ -250,14 +232,10 @@ describe('RecipeDetailContainer', () => {
     renderAt('r-1', async () => recipe);
     await screen.findByText('Ratatouille');
 
-    // Libellé « ← Recettes » (renommage visible) ; la route de retour reste /catalogue.
     const link = screen.getByRole('link', { name: /recettes/i });
     expect(link).toHaveAttribute('href', '/catalogue');
   });
 
-  // Hors ligne, `getDoc` servait le cache et rendait un snapshot inexistant : l'écran
-  // affirmait « Recette introuvable ». Il affirmait l'inexistence d'une recette qu'il
-  // n'avait pas pu lire — le pire des trois constats possibles, parce qu'il est définitif.
   it('hors ligne, l’app dit qu’elle n’a pas pu charger la recette — jamais qu’elle est introuvable', async () => {
     renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
 
@@ -266,10 +244,6 @@ describe('RecipeDetailContainer', () => {
     expect(screen.queryByText('Impossible de charger la recette.')).not.toBeInTheDocument();
   });
 
-  // Filet sur la couche de RENDU : stryker ne mute pas les .tsx, `RecipeDetailScreen.tsx`
-  // n'a donc aucun mutant pour attraper une fusion de `unavailable` avec `error` ou
-  // `notFound`, qui s'annoncent tous deux en `alert`. Une absence de réseau est un constat,
-  // pas une alerte : rien n'est attendu de l'utilisateur dans l'immédiat.
   it('le constat hors-ligne est annoncé poliment, jamais comme une alerte', async () => {
     renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
     await screen.findByText(OFFLINE_NOTICE);
@@ -278,8 +252,6 @@ describe('RecipeDetailContainer', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  // Un écran qui ne peut rien afficher doit au minimum rester quittable : sans le lien
-  // retour, l'utilisateur hors ligne se retrouve coincé sur une page vide.
   it('hors ligne, le lien retour vers la liste reste accessible', async () => {
     renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
     await screen.findByText(OFFLINE_NOTICE);
@@ -287,10 +259,6 @@ describe('RecipeDetailContainer', () => {
     expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
   });
 
-  // Rémanence : le store est un singleton de session, seul le container est démonté quand on
-  // quitte la route. Le constat hors-ligne ne doit pas survivre à la consultation suivante,
-  // sinon l'écran afficherait la recette ET « aucune connexion » (le défaut vécu sur le
-  // foyer).
   it('un rechargement réussi au remontage efface le constat hors-ligne, sur le MÊME store', async () => {
     let offline = true;
     const flaky: GetRecipe = async () => {
@@ -308,13 +276,6 @@ describe('RecipeDetailContainer', () => {
     expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
     expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
   });
-  /**
-   * Point d'entrée de la modification (FR — « Modifier une recette »). C'est un LIEN et non un
-   * <button> : il ne fait que changer de route, et l'application ouvre déjà la création par un
-   * lien (« Ajouter une recette »). L'affordance visuelle est celle d'un bouton ; la sémantique
-   * reste celle d'une navigation, donc adressable, ouvrable dans un onglet, empilée dans
-   * l'historique.
-   */
   it('offre un accès « Modifier » vers le formulaire d’édition de CETTE recette', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
@@ -339,23 +300,12 @@ describe('RecipeDetailContainer', () => {
     );
   });
 
-  // Une recette qu'on n'a pas pu lire n'est pas modifiable : proposer « Modifier » ouvrirait un
-  // formulaire sur du vide. Le localisateur est vu trouver son lien dans les deux tests
-  // ci-dessus — c'est ce qui rend cette absence discriminante.
   it('n’offre pas « Modifier » quand la recette est introuvable', async () => {
     renderAt('r-inconnue', async () => undefined);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Recette introuvable');
     expect(screen.queryByRole('link', { name: 'Modifier' })).not.toBeInTheDocument();
   });
-  /**
-   * Catalogue → détail `r-1` → catalogue → détail `r-2`. Au montage du second écran, et AVANT
-   * que l'effet n'ait lancé le chargement, le store porte encore `success` et la recette `r-1` :
-   * l'écran peint une frame du détail de `r-1` sous l'URL de `r-2`, lien « Modifier » compris.
-   *
-   * La règle qui l'interdit — « c'est bien CELLE de la route » — vit dans `recipe-for-route.ts`,
-   * dans un `.ts` que Stryker mute. Ce test-ci ne juge que sa CONSOMMATION par le container.
-   */
   it('ne peint jamais, fût-ce une frame, la recette précédente sous l’URL de la suivante', async () => {
     const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
     const r2 = RecipeBuilder.aRecipe().withId('r-2').withTitle('Recette Deux').build();
@@ -369,9 +319,6 @@ describe('RecipeDetailContainer', () => {
     const { frames } = renderAvecSonde(store, 'r-2');
     await screen.findByText('Recette Deux');
 
-    // TÉMOIN des deux absences affirmées ensuite : la MÊME sonde, avec les MÊMES localisateurs,
-    // vue trouver un titre et un lien « Modifier » là où ils ont le droit d'être. Sans lui, une
-    // sonde aveugle rendrait les deux `toHaveLength(0)` verts sans rien garantir.
     expect(
       frames.filter(
         (frame) =>
@@ -386,18 +333,11 @@ describe('RecipeDetailContainer', () => {
     ).toHaveLength(0);
   });
 
-  /**
-   * Second volet de la branche `id === undefined` déjà caractérisée plus haut : sans identifiant
-   * aucun chargement n'est lancé, donc RIEN ne vient chasser du store la recette précédemment
-   * consultée. C'est le seul cas où la frame périmée est PERMANENTE — et le seul que la RTL
-   * observe sans sonde.
-   */
   it('sous une route sans identifiant, ne montre pas la dernière recette consultée', async () => {
     const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
     const store = createTestStore({ getRecipe: async () => r1 });
 
     const { unmount } = renderAtWith(store, 'r-1');
-    // Le localisateur de l'absence affirmée plus bas, vu ici trouver son texte.
     expect(await screen.findByText('Recette Une')).toBeInTheDocument();
     unmount();
 
@@ -415,33 +355,17 @@ describe('RecipeDetailContainer', () => {
     expect(screen.queryByText('Recette Une')).not.toBeInTheDocument();
   });
 
-  /**
-   * TRANCHE 3 — la fiche sait d'où l'on vient, et son retour y ramène. La provenance vit dans
-   * l'URL (`?depuis=menu`), pas dans un état de navigation : elle survit donc au rechargement,
-   * au partage et à la mise en favori. La DÉCISION « quel retour afficher » vit dans un module
-   * pur et muté (`recipe-detail-origin.ts`) ; ce scénario vérifie que le container la lit et la
-   * descend jusqu'à l'écran, ce qu'aucun mutant ne surveille.
-   */
   it('arrivé depuis le menu, le lien retour ramène au menu', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
     renderAtPath('/catalogue/r-1?depuis=menu', async () => recipe);
     await screen.findByText('Ratatouille');
 
-    // `name` exact : « ← Recettes » ne doit pas pouvoir répondre à la place de « ← Menu ».
     const retour = screen.getByRole('link', { name: '← Menu' });
     expect(retour).toHaveAttribute('href', '/menu');
     expect(screen.queryByRole('link', { name: '← Recettes' })).not.toBeInTheDocument();
   });
 
-  /**
-   * L'URL NUE — celle d'un rechargement direct, d'un favori ou d'un lien partagé — ne porte
-   * aucune provenance. Le retour ne doit alors ni disparaître, ni affirmer un menu que
-   * l'utilisateur n'a pas vu : il retombe sur le catalogue.
-   *
-   * TÉMOIN de l'absence affirmée ici : le scénario juste au-dessus, où « ← Menu » trouve bien
-   * son lien sur la même fiche, à la seule différence de la provenance dans l'URL.
-   */
   it('sans provenance dans l’URL, le lien retour ramène aux recettes et jamais au menu', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
@@ -452,13 +376,6 @@ describe('RecipeDetailContainer', () => {
     expect(screen.queryByRole('link', { name: '← Menu' })).not.toBeInTheDocument();
   });
 
-  /**
-   * La provenance ne s'arrête pas à la fiche : le formulaire de modification est une ÉTAPE du
-   * parcours, et « Modifier » doit l'y emporter. Sans elle, le retour du formulaire et la fiche
-   * rendue après un enregistrement retombent sur le catalogue au milieu d'un parcours venu du
-   * menu. TÉMOIN de la provenance ABSENTE : les deux scénarios « Modifier » plus haut, montés
-   * sur une URL nue, où le lien pointe la même route sans rien y ajouter.
-   */
   it('arrivé depuis le menu, le lien « Modifier » emporte la provenance', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 

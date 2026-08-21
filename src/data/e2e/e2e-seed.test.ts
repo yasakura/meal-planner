@@ -28,8 +28,6 @@ describe('readE2eSeed', () => {
   it.each(['abc', '-1', '1.5', ''])(
     'ignore la valeur « %s », qui n’est pas un entier positif, et recharge tout',
     (valeur) => {
-      // Surtout pas un `Number()` qui donnerait NaN puis un foyer vide : un état vide
-      // inventé par une faute de frappe est exactement le faux signal qu'on refuse.
       expect(noms(`?convives=${valeur}`)).toEqual([...E2E_CONVIVES].map((c) => c.name));
     },
   );

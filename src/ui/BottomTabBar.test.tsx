@@ -13,7 +13,6 @@ function renderAt(path: string) {
 }
 
 describe('BottomTabBar', () => {
-  // Libellé « Recettes » (renommage visible volontaire) ; la route reste /catalogue.
   it('rend un onglet Recettes vers /catalogue', () => {
     renderAt('/catalogue');
 

@@ -7,7 +7,6 @@ import { createSlot } from './slot';
 const aRepas = () =>
   createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] });
 
-// Lundi 24 août 2026. Les repas restent indexés par DÉCALAGE : le jour 0 est cette date-là.
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
 
 describe('Menu', () => {
