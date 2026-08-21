@@ -8,12 +8,6 @@ export type ConviveProps = {
   name: string;
 };
 
-/**
- * Ordre canonique du foyer : alphabétique par prénom, collation française — un prénom
- * accentué se range à sa lettre de base et une saisie en minuscules n'exile personne.
- * Source de vérité UNIQUE : consommée par `listConvivesUseCase` au chargement et par le
- * slice convives à l'ajout, pour que les deux chemins ne puissent pas diverger.
- */
 export function compareConvivesByName(a: Convive, b: Convive): number {
   return a.name.localeCompare(b.name, 'fr');
 }

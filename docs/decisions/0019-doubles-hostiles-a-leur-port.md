@@ -2,7 +2,9 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-14 (`3f20978`, FR-3) — origine du défaut : 2026-08-12
-- **Portée** : `src/domain/test-doubles/`, `src/data/e2e/`
+- **Portée** : `src/domain/test-doubles/`, `src/data/e2e/`,
+  `src/domain/ports/convive-repository.ts`, `src/domain/ports/recipe-repository.ts`,
+  `src/domain/ports/menu-repository.ts`
 
 ## Contexte
 
@@ -44,8 +46,9 @@ Symétriquement, ce que le port **promet** n'a pas à être mis en défaut : l'u
   pas les écritures effectives : sinon un test d'idempotence ne pourrait pas distinguer « appelé et
   sans effet » de « jamais appelé ».
 - Les méthodes d'inspection hors contrat (`all()`, `byId()`, `byStartDate()`) rendent l'ordre
-  d'insertion **honnêtement**, et sont marquées comme telles : elles servent l'assertion, pas la
-  production.
+  d'insertion **honnêtement** : elles servent l'assertion, pas la production. Rien ne les marque
+  dans le double depuis [#76](https://github.com/yasakura/meal-planner/issues/76) — leur seul
+  signe est d'être **absentes du port**, et c'est cette page qui les nomme.
 - La même hostilité s'applique aux adapters du **mode e2e**, qui ne sont pourtant pas des doubles
   ([ADR 0016](0016-mode-e2e-embarque.md)).
 - Le contrat de rejet fait partie du port : un double **muet** sur la distinction « pas de réponse »

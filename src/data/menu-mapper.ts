@@ -4,27 +4,10 @@ import { createMenu, type Menu } from '../domain/entities/menu';
 import { createRepas } from '../domain/entities/repas';
 import { createSlot } from '../domain/entities/slot';
 
-/**
- * Corps du document `menus/{date ISO de début}`.
- *
- * La date de début n'y figure PAS : elle est l'identifiant du document. C'est ce choix qui
- * réalise « une période, un menu » — deux enregistrements sur la même date écrivent le même
- * document, sans qu'aucun garde applicatif n'ait à comparer quoi que ce soit, et
- * `remove(dateDebut)` n'a rien à chercher. La répéter dans le corps ouvrirait la porte à deux
- * vérités contradictoires sur la période d'un même menu.
- *
- * Les repas restent indexés par DÉCALAGE (`jour`), comme l'entité : une date par repas serait
- * dérivable de la date de début, donc redondante, et pourrait la contredire.
- *
- * La forme épouse l'entité au lieu de l'aplatir davantage (`slots: ['recipe-1']` par exemple) :
- * un slot est un objet dans le domaine, et l'écraser en chaîne encoderait ici une décision de
- * modélisation que le domaine n'a pas prise.
- */
 export type MenuDocument = {
   repas: Array<{ jour: number; creneau: Creneau; slots: Array<{ recipeId: string }> }>;
 };
 
-/** L'identifiant du document EST la période, au format ISO : `2026-08-24`. */
 export function menuDocumentId(dateDebut: CalendarDate): string {
   return toIsoDate(dateDebut);
 }

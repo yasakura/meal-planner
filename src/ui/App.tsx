@@ -12,8 +12,6 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/catalogue" element={<CatalogueContainer />} />
-        {/* Segment statique déclaré avant la route dynamique :id (React Router v6 le classe
-            de toute façon en premier ; les ids réels sont des cuid2, jamais « nouvelle »). */}
         <Route path="/catalogue/nouvelle" element={<RecipeCreateContainer />} />
         <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
         <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />

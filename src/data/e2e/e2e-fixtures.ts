@@ -4,35 +4,16 @@ import { createConvive, type Convive } from '../../domain/entities/convive';
 import { createIngredient } from '../../domain/entities/ingredient';
 import { createRecipe, type Recipe } from '../../domain/entities/recipe';
 
-/**
- * Jeu de départ du mode e2e. Déclaré ICI et nulle part ailleurs : un scénario qui pilote
- * l'état par l'URL (`?convives=2`) prélève un préfixe de ces listes, donc leur ORDRE de
- * déclaration fait partie du contrat — le changer change ce que les scénarios chargent.
- *
- * Ids stables et lisibles (`convive-alice`, `recipe-gratin-dauphinois`) : ce sont des cibles
- * de navigation directe (`/catalogue/recipe-gratin-dauphinois`). Ils sont délibérément
- * DISJOINTS des ids produits par `SequentialIdGenerator` (`e2e-convive-1`…) — un chevauchement
- * ferait qu'ajouter un convive écraserait silencieusement une fixture, `save` étant un upsert.
- *
- * Passe par les factories du domaine : une fixture ne peut pas violer un invariant d'entité.
- */
-
 export const E2E_ACCOUNT: Account = createAccount({
   id: 'e2e-account',
   email: 'e2e@foyer.test',
 });
 
-/**
- * Jour où « se trouve » le mode e2e. Un JEUDI, délibérément : le menu part du prochain lundi,
- * donc une implémentation qui prendrait « aujourd'hui » au lieu du lundi suivant se verrait
- * aussitôt dans les libellés (jeudi 1er janvier au lieu de lundi 5 janvier).
- */
 export const E2E_TODAY: CalendarDate = createCalendarDate({ year: 2026, month: 1, day: 1 });
 
 export const E2E_CONVIVES: readonly Convive[] = Object.freeze([
   createConvive({ id: 'convive-alice', name: 'Alice' }),
   createConvive({ id: 'convive-bruno', name: 'Bruno' }),
-  // Prénom accentué : la collation française du tri du foyer reste exercée en scénario.
   createConvive({ id: 'convive-chloe', name: 'Chloé' }),
   createConvive({ id: 'convive-emile', name: 'Émile' }),
 ]);

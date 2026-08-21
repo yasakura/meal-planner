@@ -9,13 +9,7 @@ import { type RecipeFormNotice } from './recipe-slice';
 const { colors, radii, space, fonts } = tokens;
 
 export type RecipeCreateScreenProps = {
-  // Ce qui distingue la création de la modification : l'écran est partagé, il ne décide pas
-  // lequel des deux il sert. Le bouton de soumission, lui, dit « Enregistrer » dans les deux
-  // cas — c'est le même geste.
   heading: string;
-  // Le retour rend l'écran d'où l'on vient, que l'écran ne connaît pas : le catalogue à la
-  // création, le détail de la recette à la modification. Destination ET libellé viennent donc
-  // du container, comme le titre.
   backTo: string;
   backLabel: string;
   title: string;
@@ -31,18 +25,10 @@ export type RecipeCreateScreenProps = {
   onSubmit: () => void;
   submitDisabled: boolean;
   submitLabel: string;
-  // Un seul constat, porteur de son TON : au plus un à la fois, et « deux constats ensemble »
-  // devient irreprésentable. Le ton vient du slice, qui est muté — cet écran ne fait que le
-  // traduire en rôle ARIA et en teinte.
   notice: RecipeFormNotice | null;
 };
 
 const Page = styled.div`
-  /* PAS de flex:1 ici, contrairement à tous les autres Page — et c'est délibéré : ce formulaire
-     déborde toujours, rien n'a de hauteur à distribuer, aucun état centré n'y vit. Le jour où
-     on y met un état plein écran (constat de chargement, recette introuvable), il faudra
-     l'ajouter : sans lui, l'écran épouse son contenu et l'état se colle sous le lien de retour,
-     la moitié basse restant vide. C'est le défaut fermé par les issues #32/#37 ailleurs. */
   background: ${colors.creme};
   display: flex;
   flex-direction: column;
@@ -80,8 +66,6 @@ const Label = styled.label`
   display: block;
 `;
 
-// Intitulé de section (ex. « Ingrédients ») : même poids/teinte que les labels de champ,
-// pour une hiérarchie interne homogène. Non lié à un contrôle → simple <p>.
 const SectionLabel = styled.p`
   font-family: ${fonts.body};
   font-size: 13px;
@@ -171,19 +155,6 @@ const SubmitButton = styled.button`
   }
 `;
 
-// Barre d'action collante : le formulaire est plus haut que l'écran, la commande d'enregistrement
-// doit rester visible sans que l'utilisateur ait à deviner qu'il faut défiler. `bottom` vaut la
-// hauteur de la tab bar publiée par Layout (`--tabbar-h`) : le scrollport va jusqu'au bas du
-// viewport, donc `bottom: 0` collerait le bouton SOUS la tab bar.
-//
-// Elle porte AUSSI les constats d'enregistrement, et c'est sa raison d'être la plus importante :
-// laissés à leur position naturelle dans le flux, ils restaient sous le pli pendant que le bouton
-// remontait avec le collant. L'utilisateur cliquait une commande atteignable, l'écriture échouait,
-// et il ne voyait rien — puis recliquait.
-//
-// Le fond n'est pas un ornement : la barre ne réserve pas sa place, le formulaire défile DERRIÈRE
-// elle. Sans fond opaque, les champs se voient au travers de sa marge. Fond de la page, aucune
-// bordure : la barre disparaît en tant qu'objet, on ne voit que le bouton qui respire.
 const ActionBar = styled.div`
   position: sticky;
   bottom: var(--tabbar-h);
@@ -208,8 +179,6 @@ const ErrorMessage = styled.p`
   margin: 0;
 `;
 
-// Constat NEUTRE, ni vert de succès ni rouge d'alerte : une écriture non acquittée n'est ni
-// l'un ni l'autre. Même teinte secondaire que les constats hors-ligne du foyer et du menu.
 const Note = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
@@ -217,11 +186,6 @@ const Note = styled.p`
   margin: 0;
 `;
 
-/**
- * Le TON choisit le rôle ARIA : `alert` (assertif) est réservé à l'échec, qui appelle une action
- * de l'utilisateur ; le succès et le constat non acquitté sont annoncés poliment (`status`) —
- * le second ne demande rien, l'écriture est partie et atterrira au retour du réseau.
- */
 function NoticeView({ notice }: { notice: RecipeFormNotice | null }) {
   if (notice === null) return null;
   if (notice.tone === 'error') return <ErrorMessage role="alert">{notice.message}</ErrorMessage>;

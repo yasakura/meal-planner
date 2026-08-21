@@ -16,7 +16,6 @@ export type AccountSheetProps = {
 const Overlay = styled.div<{ $closing: boolean }>`
   position: fixed;
   inset: 0;
-  /* Au-dessus du chrome sticky (TopBar & tab bar en z-index 10) : la sheet couvre tout l'écran. */
   z-index: 100;
   background: rgba(31, 27, 22, 0.5);
   display: flex;
@@ -94,16 +93,11 @@ function prefersReducedMotion(): boolean {
 }
 
 export function AccountSheet({ isOpen, onClose, env, children }: AccountSheetProps) {
-  // La sheet reste montée pendant l'animation de sortie : on réagit au changement de `isOpen`
-  // en pleine passe de rendu (pattern React « mémoriser la prop précédente ») pour armer
-  // `isClosing`. Le démontage effectif (isRendered devient faux) attend le `transitionEnd` du
-  // panneau — sauf en prefers-reduced-motion, où la fermeture est immédiate.
   const [prevOpen, setPrevOpen] = useState(isOpen);
   const [isClosing, setClosing] = useState(false);
 
   if (isOpen !== prevOpen) {
     setPrevOpen(isOpen);
-    // À l'ouverture (ou fermeture réduite-motion) : pas d'animation de sortie ; sinon on l'arme.
     setClosing(!isOpen && !prefersReducedMotion());
   }
 
@@ -114,9 +108,6 @@ export function AccountSheet({ isOpen, onClose, env, children }: AccountSheetPro
     if (isClosing) setClosing(false);
   };
 
-  // Rendu via portail sur document.body : la sheet devient enfant direct du body, donc au-dessus
-  // de tout le chrome sticky (TopBar, tab bar), qui vivent dans des contextes d'empilement séparés
-  // où le z-index de l'overlay ne se comparerait pas.
   return createPortal(
     <Overlay $closing={isClosing} data-testid="account-sheet-overlay" onClick={onClose}>
       <Panel

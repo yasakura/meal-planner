@@ -11,8 +11,6 @@ export type RecipeDetailIngredient = { name: string; quantity: string };
 export type RecipeDetailScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  // Hors ligne : un constat, distinct de `notFound` qui affirmerait l'inexistence de la
-  // recette, et de `error` qui désigne un serveur ayant répondu non.
   | { status: 'unavailable'; message: string }
   | { status: 'notFound' }
   | {
@@ -21,15 +19,10 @@ export type RecipeDetailScreenProps =
       convivesLabel: string;
       ingredients: RecipeDetailIngredient[];
       instructions: string | null;
-      // Route du formulaire de modification de CETTE recette. L'écran est dumb : il ne sait pas
-      // fabriquer une URL, le container la lui donne.
       editHref: string;
     };
 
 const Page = styled.div`
-  /* Prend la hauteur offerte par Content : c'est elle que CenteredState distribue pour centrer
-     ses constats. Sans elle, l'écran épouse son contenu et le flex:1 de l'état ne répartit plus
-     rien — le constat se colle sous l'en-tête, la moitié basse de l'écran reste vide. */
   flex: 1;
   background: ${colors.creme};
   display: flex;
@@ -59,13 +52,6 @@ const Convives = styled.p`
   margin: 0 0 ${space.md}px;
 `;
 
-// « Modifier » est un LIEN et non un <button> : il ne fait que changer de route. L'application
-// ouvre déjà la création par un lien, et la sémantique de navigation garde l'adresse partageable,
-// l'ouverture dans un onglet et l'empilement dans l'historique. L'affordance, elle, est celle
-// d'un bouton — c'est ce que l'utilisateur voit.
-//
-// Placé HAUT dans l'écran, sous le nombre de personnes : la commande est ainsi au-dessus du pli
-// sans aucune barre collante, quelle que soit la longueur de la recette en dessous.
 const EditLink = styled(Link)`
   align-self: flex-start;
   background: none;
@@ -189,9 +175,6 @@ function Body(props: RecipeDetailScreenProps) {
           <ErrorText role="alert">{props.message}</ErrorText>
         </CenteredState>
       );
-    // `role="status"` (poli) et non `role="alert"` (assertif, utilisé par `error` et
-    // `notFound`) : une absence de réseau est un constat, pas une alerte, et rien n'est
-    // attendu de l'utilisateur dans l'immédiat.
     case 'unavailable':
       return (
         <CenteredState>
@@ -234,10 +217,6 @@ function Body(props: RecipeDetailScreenProps) {
   }
 }
 
-/**
- * Le lien retour n'est plus câblé en dur : il DÉPEND d'où l'on vient, et l'écran est dumb — il ne
- * décide pas, il rend. La décision vit dans `recipe-detail-origin.ts`, qui est muté.
- */
 export function RecipeDetailScreen(props: RecipeDetailScreenProps & { back: BackLink }) {
   return (
     <Page>

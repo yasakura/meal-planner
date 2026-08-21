@@ -6,8 +6,6 @@ export function listConvivesUseCase(deps: {
 }): () => Promise<Convive[]> {
   return async () => {
     const convives = await deps.conviveRepository.findAll();
-    // Tri EN PLACE, licite ici : le port garantit un tableau frais (propriété exclusive
-    // de l'appelant). Une copie défensive serait du code non couvert par un test.
     return convives.sort(compareConvivesByName);
   };
 }
