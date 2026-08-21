@@ -1,11 +1,4 @@
-import {
-  type Firestore,
-  collection,
-  deleteDoc,
-  doc,
-  getDocsFromServer,
-  setDoc,
-} from 'firebase/firestore';
+import { type Firestore, collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
 
 import { type CalendarDate } from '../domain/entities/calendar-date';
 import { type Menu } from '../domain/entities/menu';
@@ -46,7 +39,7 @@ export class FirestoreMenuRepository implements MenuRepository {
 
   async findAll(): Promise<Menu[]> {
     const snapshot = await withServerDeadline(
-      getDocsFromServer(collection(this.db, 'menus')),
+      getDocs(collection(this.db, 'menus')),
       this.readTimeoutMs,
     );
     return snapshot.docs.map((snapshotDoc) => documentToMenu(snapshotDoc.id, snapshotDoc.data()));

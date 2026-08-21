@@ -132,7 +132,7 @@ describe('FirestoreMenuRepository', () => {
   it("findAll lit la collection 'menus' et rend le menu porté par chaque document", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
-    mockedGetDocsFromServer.mockResolvedValue({
+    mockedGetDocs.mockResolvedValue({
       docs: [documentDe(menuCommencantLe24Aout()), documentDe(menuCommencantLe(LUNDI_5_JANVIER))],
     } as never);
     const repository = FirestoreMenuRepository.create(db);
@@ -140,14 +140,14 @@ describe('FirestoreMenuRepository', () => {
     const menus = await repository.findAll();
 
     expect(mockedCollection).toHaveBeenCalledWith(db, 'menus');
-    expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
+    expect(mockedGetDocs).toHaveBeenCalledWith(collectionRef);
     expect(menus).toEqual([menuCommencantLe24Aout(), menuCommencantLe(LUNDI_5_JANVIER)]);
   });
 
   it('findAll rend TOUS les menus, même très anciens : aucun filtre de rétention', async () => {
     const menuDe2019 = menuCommencantLe(createCalendarDate({ year: 2019, month: 3, day: 4 }));
     mockedCollection.mockReturnValue({} as never);
-    mockedGetDocsFromServer.mockResolvedValue({
+    mockedGetDocs.mockResolvedValue({
       docs: [documentDe(menuDe2019), documentDe(menuCommencantLe24Aout())],
     } as never);
     const repository = FirestoreMenuRepository.create(db);
@@ -158,21 +158,22 @@ describe('FirestoreMenuRepository', () => {
     expect(menus).toContainEqual(menuDe2019);
   });
 
-  it('findAll interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
+  it("findAll accepte le repli sur le cache Firestore, et n'exige jamais le serveur", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
+    mockedGetDocs.mockResolvedValue({ docs: [] } as never);
     mockedGetDocsFromServer.mockResolvedValue({ docs: [] } as never);
     const repository = FirestoreMenuRepository.create(db);
 
     await repository.findAll();
 
-    expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
-    expect(mockedGetDocs).not.toHaveBeenCalled();
+    expect(mockedGetDocs).toHaveBeenCalledWith(collectionRef);
+    expect(mockedGetDocsFromServer).not.toHaveBeenCalled();
   });
 
   it('findAll traduit une lecture impossible faute de réseau en indisponibilité de dépôt', async () => {
     mockedCollection.mockReturnValue({} as never);
-    mockedGetDocsFromServer.mockRejectedValue(firestoreError('unavailable'));
+    mockedGetDocs.mockRejectedValue(firestoreError('unavailable'));
     const repository = FirestoreMenuRepository.create(db);
 
     await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
@@ -181,7 +182,7 @@ describe('FirestoreMenuRepository', () => {
   it("findAll ne traduit pas un refus de permission : l'erreur remonte telle quelle", async () => {
     mockedCollection.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
-    mockedGetDocsFromServer.mockRejectedValue(refus);
+    mockedGetDocs.mockRejectedValue(refus);
     const repository = FirestoreMenuRepository.create(db);
 
     await expect(repository.findAll()).rejects.toBe(refus);
@@ -250,7 +251,7 @@ describe('FirestoreMenuRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedCollection.mockReturnValue({} as never);
-      mockedGetDocsFromServer.mockReturnValue(new Promise(() => {}) as never);
+      mockedGetDocs.mockReturnValue(new Promise(() => {}) as never);
       const repository = FirestoreMenuRepository.create(db, { readTimeoutMs: 10 });
 
       await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
@@ -261,7 +262,7 @@ describe('FirestoreMenuRepository', () => {
     vi.useFakeTimers();
     try {
       mockedCollection.mockReturnValue({} as never);
-      mockedGetDocsFromServer.mockReturnValue(new Promise(() => {}) as never);
+      mockedGetDocs.mockReturnValue(new Promise(() => {}) as never);
       const repository = FirestoreMenuRepository.create(db);
       const constats: unknown[] = [];
       void repository.findAll().catch((error: unknown) => {

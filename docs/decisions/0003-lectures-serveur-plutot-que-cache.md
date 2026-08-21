@@ -1,6 +1,6 @@
 # ADR 0003 — Lire depuis le serveur, ou avouer qu'on n'a pas lu
 
-- **Statut** : en vigueur
+- **Statut** : remplacée par [ADR 0027](0027-le-cache-plutot-qu-un-faux-hors-ligne.md)
 - **Date** : 2026-08-12 (`bbc9f0f`, convives) puis 2026-08-13 (`8e79f41`, catalogue et fiche)
 - **Portée** : `src/data/firestore-*-repository.ts`, `src/domain/ports/recipe-repository.ts`,
   `src/domain/ports/convive-repository.ts`, `src/domain/ports/menu-repository.ts`

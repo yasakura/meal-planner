@@ -3,7 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocsFromServer,
+  getDocs,
   runTransaction,
   setDoc,
 } from 'firebase/firestore';
@@ -49,7 +49,7 @@ export class FirestoreConviveRepository implements ConviveRepository {
 
   async findAll(): Promise<Convive[]> {
     const snapshot = await withServerDeadline(
-      getDocsFromServer(collection(this.db, 'convives')),
+      getDocs(collection(this.db, 'convives')),
       this.readTimeoutMs,
     );
     return snapshot.docs.map((snapshotDoc) =>

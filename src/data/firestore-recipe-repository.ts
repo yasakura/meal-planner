@@ -1,11 +1,4 @@
-import {
-  type Firestore,
-  collection,
-  doc,
-  getDocFromServer,
-  getDocsFromServer,
-  setDoc,
-} from 'firebase/firestore';
+import { type Firestore, collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 
 import { type RecipeRepository } from '../domain/ports/recipe-repository';
 import { type Recipe } from '../domain/entities/recipe';
@@ -48,7 +41,7 @@ export class FirestoreRecipeRepository implements RecipeRepository {
 
   async findAll(): Promise<Recipe[]> {
     const snapshot = await withServerDeadline(
-      getDocsFromServer(collection(this.db, 'recipes')),
+      getDocs(collection(this.db, 'recipes')),
       this.readTimeoutMs,
     );
     return snapshot.docs.map((snapshotDoc) => documentToRecipe(snapshotDoc.id, snapshotDoc.data()));
@@ -56,7 +49,7 @@ export class FirestoreRecipeRepository implements RecipeRepository {
 
   async findById(id: string): Promise<Recipe | undefined> {
     const snapshot = await withServerDeadline(
-      getDocFromServer(doc(this.db, 'recipes', id)),
+      getDoc(doc(this.db, 'recipes', id)),
       this.readTimeoutMs,
     );
     return snapshot.exists() ? documentToRecipe(snapshot.id, snapshot.data()) : undefined;
