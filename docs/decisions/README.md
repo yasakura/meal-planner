@@ -1,0 +1,69 @@
+# Décisions d'architecture (ADR)
+
+Ce dossier garde le **savoir qui n'existe nulle part ailleurs** : un comportement mesuré sur un
+système externe (Firestore, Stryker, Playwright, React, React Router), une décision prise contre
+une alternative précise, un piège où l'on est déjà tombé.
+
+Il ne garde rien d'autre. Ce que le code dit déjà, le code le dit mieux — il a des tests et des
+mutants pour le tenir à jour, ce qu'aucune prose n'a. Ce que [`CLAUDE.md`](../../CLAUDE.md) déclare
+comme règle du projet reste dans `CLAUDE.md` : deux documents qui disent la même chose finissent
+par diverger.
+
+## Origine
+
+Issue [#76](https://github.com/yasakura/meal-planner/issues/76) : les commentaires du code
+productif sont supprimés, parce que **rien ne garde leur vérité** — sur la seule session du
+19-20 août 2026, six commentaires devenus faux ont été trouvés, chacun par une revue de code,
+aucun par un test. Le savoir mesuré, lui, déménage ici avant que la suppression n'ait lieu.
+
+## Ce qu'une ADR porte
+
+Le **titre**, la **date** de la décision, le **contexte** (quel problème réel), la **décision**, la
+**mesure qui l'a produite** — sans elle une ADR n'est qu'une opinion — et les **conséquences**, y
+compris ce qui a été écarté.
+
+Une ADR n'est pas un commentaire déplacé : le commentaire dit « pourquoi cette ligne », l'ADR dit
+« pourquoi ce choix ». Elle se lit sans avoir le fichier sous les yeux.
+
+Quand un fait n'a pas pu être re-vérifié au moment de la rédaction, l'ADR le dit à l'endroit où il
+est cité. Un chiffre repris d'un commentaire est attribué à sa source.
+
+## Convention de nommage
+
+`NNNN-titre-en-kebab.md`, numéro sur 4 chiffres, **attribué dans l'ordre de création** et jamais
+réutilisé ni renuméroté. Le tri alphabétique du dossier est donc l'ordre d'arrivée, et une
+référence `ADR 0009` reste valable pour toujours — y compris si la décision est plus tard
+remplacée. Une décision révoquée n'est pas effacée : son statut passe à « remplacée par ADR NNNN »,
+parce que savoir qu'on a essayé et abandonné vaut autant que la décision courante.
+
+Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou `caduque`.
+
+## Index
+
+| ADR                                                          | Décision                                                             | Date       |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- | ---------- |
+| [0001](0001-trois-issues-pour-une-ecriture.md)               | Une écriture a trois issues : faite, refusée, non acquittée          | 2026-08-12 |
+| [0002](0002-borne-d-acquittement-des-ecritures.md)           | Borner l'acquittement des écritures Firestore                        | 2026-08-20 |
+| [0003](0003-lectures-serveur-plutot-que-cache.md)            | Lire depuis le serveur, ou avouer qu'on n'a pas lu                   | 2026-08-12 |
+| [0004](0004-reconnaissance-nominale-des-erreurs.md)          | Reconnaître l'erreur de dépôt par son nom, jamais par `instanceof`   | 2026-08-12 |
+| [0005](0005-identifiant-pose-a-l-ouverture-du-formulaire.md) | L'identifiant du document est posé à l'ouverture du formulaire       | 2026-08-20 |
+| [0006](0006-la-periode-identifie-le-menu.md)                 | La période est l'identifiant du menu, et la rétention passe après    | 2026-08-20 |
+| [0007](0007-date-civile-ancree-sur-utc.md)                   | Une date civile ancrée sur UTC, sans bibliothèque de date au domaine | 2026-08-19 |
+| [0008](0008-l-horloge-ne-promet-rien-entre-deux-lectures.md) | Le port `Clock` ne promet rien entre deux lectures                   | 2026-08-19 |
+| [0009](0009-garde-de-fraicheur-par-requestid.md)             | Discriminer les réponses de thunks par `requestId`                   | 2026-08-13 |
+| [0010](0010-le-non-garde-de-generate-menu-fulfilled.md)      | Le non-garde de `generateMenu.fulfilled` tient à une seule ligne     | 2026-08-18 |
+| [0011](0011-les-decisions-vivent-dans-des-fichiers-mutes.md) | Une décision vit dans un `.ts` muté, pas dans un `.tsx`              | 2026-08-19 |
+| [0012](0012-configurations-stryker-ecartees.md)              | Configurations Stryker mesurées et écartées                          | 2026-08-13 |
+| [0013](0013-fuseau-du-runner-fige-a-utc.md)                  | Fuseau du runner figé à UTC, au niveau du processus                  | 2026-08-19 |
+| [0014](0014-pas-d-emulateur-firestore.md)                    | Pas d'émulateur Firestore : humble object et garde statique          | 2026-07-14 |
+| [0015](0015-frontieres-de-couches-inertes.md)                | Les frontières de couches étaient déclarées et inertes               | 2026-08-17 |
+| [0016](0016-mode-e2e-embarque.md)                            | Un mode e2e embarqué dans l'application                              | 2026-08-17 |
+| [0017](0017-surface-de-pilotage-des-scenarios.md)            | La surface de pilotage des scénarios, et ce qu'elle refuse d'offrir  | 2026-08-17 |
+| [0018](0018-conventions-playwright.md)                       | Conventions Playwright : sous-chaîne, zéro réessai, viewport à plat  | 2026-08-17 |
+| [0019](0019-doubles-hostiles-a-leur-port.md)                 | Un double n'offre jamais plus que son port : inversion, pas shuffle  | 2026-08-14 |
+| [0020](0020-un-remontage-n-est-jamais-garanti.md)            | Un remontage n'est jamais garanti                                    | 2026-08-12 |
+| [0021](0021-naviguer-sur-l-issue-pas-sur-le-statut.md)       | Naviguer sur l'issue d'une écriture, pas sur l'observation du statut | 2026-08-18 |
+| [0022](0022-la-provenance-vit-dans-l-url.md)                 | La provenance d'un parcours vit dans l'URL                           | 2026-08-19 |
+| [0023](0023-elision-francaise-compromis-assume.md)           | L'élision française : se tromper sur les h aspirés, sciemment        | 2026-08-12 |
+| [0024](0024-geometrie-mobile-et-hauteurs-declarees.md)       | Géométrie mobile : des hauteurs déclarées, jamais émergentes         | 2026-08-18 |
+| [0025](0025-un-lien-quand-on-change-de-route.md)             | Un lien quand on change de route, un ton par rôle ARIA               | 2026-08-18 |
