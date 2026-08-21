@@ -3,7 +3,7 @@
 - **Statut** : en vigueur
 - **Date** : 2026-08-20 (`aa305fb`, `feat(menu): enregistrer le menu généré`)
 - **Portée** : `src/data/menu-mapper.ts`, `firestore-menu-repository.ts`,
-  `src/domain/use-cases/save-menu.ts`
+  `src/domain/use-cases/save-menu.ts`, `src/domain/ports/menu-repository.ts`
 
 ## Contexte
 

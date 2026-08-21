@@ -10,17 +10,11 @@ export type RecipeListItem = { id: string; title: string; meta: string };
 export type RecipeListScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  // Hors ligne : un constat, sans « Réessayer » — le bouton ne ferait que rejouer le même
-  // échec tant que le réseau manque. C'est ce qui distingue cet état de `error`, où le
-  // réessai a du sens.
   | { status: 'unavailable'; message: string }
   | { status: 'empty' }
   | { status: 'loaded'; recipes: RecipeListItem[] };
 
 const Page = styled.div`
-  /* Prend la hauteur offerte par Content : c'est elle que CenteredState distribue pour centrer
-     ses constats. Sans elle, l'écran épouse son contenu et le flex:1 de l'état ne répartit plus
-     rien — le constat se colle sous l'en-tête, la moitié basse de l'écran reste vide. */
   flex: 1;
   background: ${colors.creme};
   display: flex;
@@ -78,8 +72,6 @@ const Spinner = styled.svg`
   animation: ${spin} 0.8s linear infinite;
 `;
 
-// Constat neutre (chargement, absence de réseau) : teinte secondaire, aucun rouge d'alerte —
-// un état n'est pas un jugement. Le rouge reste réservé à `ErrorMessage`.
 const StateText = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
@@ -88,11 +80,6 @@ const StateText = styled.p`
 `;
 
 const ErrorBox = styled.div`
-  /* Aligné sur CenteredState : loading, unavailable, empty et notFound se centrent tous dans la
-     hauteur offerte, error était le seul à rester collé sous l'en-tête. L'écart n'a jamais été
-     décidé — il est né le jour où Page a pris flex:1 et où il y a enfin eu une hauteur à
-     distribuer. L'alignement horizontal, lui, ne bouge pas : « Réessayer » est une commande,
-     elle reste au fil du texte. */
   flex: 1;
   justify-content: center;
   display: flex;
@@ -199,9 +186,6 @@ function Body(props: RecipeListScreenProps) {
           </RetryButton>
         </ErrorBox>
       );
-    // `role="status"` (poli) et non `role="alert"` (assertif) : une absence de réseau est un
-    // constat, pas une alerte, et rien n'est attendu de l'utilisateur dans l'immédiat.
-    // Pas de « Réessayer » non plus — voir le commentaire sur le type.
     case 'unavailable':
       return (
         <CenteredState>

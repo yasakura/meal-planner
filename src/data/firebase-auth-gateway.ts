@@ -34,7 +34,7 @@ export class FirebaseAuthGateway implements AuthGateway {
     try {
       return createAccount({ id: user.uid, email: user.email ?? '' });
     } catch {
-      return null; // user Firebase incomplet (email/uid manquant) → pas de session valide
+      return null;
     }
   }
 }

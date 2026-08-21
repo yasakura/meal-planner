@@ -74,7 +74,6 @@ export class StubAuthGateway implements AuthGateway {
   signOut(): Promise<void> {
     this.signOutCalled = true;
     if (this.signOutFailureMessage !== null) {
-      // Comme Firebase en cas d'échec : le rejet remonte et onAuthStateChanged ne fire pas.
       return Promise.reject(new Error(this.signOutFailureMessage));
     }
     this.listener?.(null);

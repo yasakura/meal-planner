@@ -7,8 +7,6 @@ import { elementAt } from '../lib/element-at';
 import { type RandomPicker } from '../ports/random-picker';
 import { type RecipeRepository } from '../ports/recipe-repository';
 
-// `dateDebut` est une ENTRÉE, jamais une déduction : ce n'est pas au use-case de deviner
-// quand commence le menu qu'on lui demande.
 export function generateMenuUseCase(deps: {
   recipeRepository: RecipeRepository;
   randomPicker: RandomPicker;

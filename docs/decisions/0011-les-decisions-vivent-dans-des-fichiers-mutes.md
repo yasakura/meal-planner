@@ -3,7 +3,7 @@
 - **Statut** : en vigueur
 - **Date** : 2026-08-19 (`37240ee`, `refactor(ui): remettre deux décisions dans des fichiers que
 Stryker mute`)
-- **Portée** : `src/ui/features/**`, `stryker.conf.mjs`
+- **Portée** : `src/ui/features/**`, `stryker.conf.mjs`, `src/domain/ports/random-picker.ts`
 
 ## Contexte
 

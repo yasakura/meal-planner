@@ -23,12 +23,6 @@ import { saveMenuUseCase } from '../../domain/use-cases/save-menu';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
 import { type AppStore, createStore } from './store';
 
-/**
- * Ce dont le mode e2e a besoin de la fenêtre : lire l'état de départ demandé, et recevoir le
- * hook de pilotage. Type structurel, et non `Window` : les scénarios de test fournissent un
- * objet nu, et surtout `__e2e` n'entre JAMAIS dans le type global — du code de production qui
- * le lirait ne compilerait pas.
- */
 export type E2eHost = { location: { search: string } };
 
 export function createE2eStore(host: E2eHost): AppStore {
@@ -36,14 +30,10 @@ export function createE2eStore(host: E2eHost): AppStore {
   const failures = E2eFailureSwitch.create();
   const recipeRepository = E2eRecipeRepository.seededWith(seed.recipes, failures);
   const conviveRepository = E2eConviveRepository.seededWith(seed.convives, failures);
-  // VIDE au départ, et sans fixture : un menu enregistré est le résultat d'un parcours, jamais
-  // un état de départ. Même commutateur de pannes que les autres dépôts.
   const menuRepository = E2eMenuRepository.startingEmpty(failures);
 
   (host as E2eHost & { __e2e?: E2eControls }).__e2e = failures;
 
-  // Horloge FIGÉE, comme les identifiants séquentiels et le tirage déterministe : sans elle,
-  // les dates affichées au menu changeraient chaque jour et les scénarios seraient périssables.
   const clock = E2eClock.on(E2E_TODAY);
 
   return createStore({
@@ -61,8 +51,6 @@ export function createE2eStore(host: E2eHost): AppStore {
       randomPicker: MathRandomPicker.create(() => 0),
     }),
     nextMonday: nextMondayUseCase({ clock }),
-    // La MÊME horloge FIGÉE : la fenêtre de rétention est ancrée sur aujourd'hui, et une horloge
-    // système ici ferait purger — ou conserver — selon le jour d'exécution.
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({ conviveRepository }),

@@ -2,7 +2,8 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-20 (`16026a8`, `feat(ui): plus de verrou après un échec d'écriture`)
-- **Portée** : `src/domain/use-cases/new-*-id.ts`, `recipe-slice`, `convives-slice`
+- **Portée** : `src/domain/use-cases/new-*-id.ts`, `src/domain/ports/id-generator.ts`,
+  `recipe-slice`, `convives-slice`
 
 ## Contexte
 

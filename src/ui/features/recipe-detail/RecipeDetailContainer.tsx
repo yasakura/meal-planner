@@ -30,9 +30,6 @@ function toLoadedProps(recipe: Recipe, origin: Origin): RecipeDetailScreenProps 
     convivesLabel: `Pour ${convives} personne${convives > 1 ? 's' : ''}`,
     ingredients,
     instructions: recipe.instructions ?? null,
-    // Le formulaire est une ÉTAPE du parcours : il emporte la provenance, sinon tout ce qu'il
-    // rend ensuite retombe sur le catalogue. L'adresse se demande à la provenance, qui est le
-    // seul objet capable d'en produire une — ce container n'a aucun moyen de l'oublier.
     editHref: origin.recipeEditHref(recipe.id),
   };
 }
@@ -47,16 +44,8 @@ export function RecipeDetailContainer() {
     if (id !== undefined) dispatch(loadRecipeDetail(id));
   }, [dispatch, id]);
 
-  // La règle « quelle recette a le droit d'alimenter cet écran » vit dans un module pur et muté,
-  // pas ici : voir `recipe-for-route.ts`. Sans elle, le premier rendu repeint la recette
-  // PRÉCÉDEMMENT consultée — le store la porte encore, avec un statut qui dit déjà « succès » —
-  // sous l'URL de la nouvelle, lien « Modifier » compris.
   const aMontrer = recipeForRoute(status, recipe, id);
 
-  // La provenance vit dans l'URL, donc elle traverse un rechargement, un favori, un lien
-  // partagé. Lue UNE fois ici, elle produit ensuite toutes les adresses de l'écran ; ce qu'elle
-  // vaut — « ← Menu » ou « ← Recettes », avec ou sans paramètre — se décide dans un module pur
-  // et muté, ce container ne fait que lui tendre les paramètres.
   const origin = originOf(searchParams);
 
   const props: RecipeDetailScreenProps =

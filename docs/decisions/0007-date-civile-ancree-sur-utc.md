@@ -35,6 +35,15 @@ Détails que le code ne raconte pas :
 - **reculer de N mois clampe** sur le dernier jour du mois d'arrivée. Le 30 avril moins deux mois
   est le 28 février, pas le 2 mars : un `setUTCMonth` appliqué à une fin de mois déborde
   silencieusement sur le mois suivant, et ce débordement décalerait la borne de rétention ;
+- **le clamp s'obtient par deux appuis, qu'aucune lecture du calcul ne restitue.** Le premier : on
+  vise le **1er** du mois d'arrivée avant de poser le quantième. Un mois dont on ne demande que le
+  premier jour ne peut pas déborder, quelle que soit la longueur réelle du mois ; l'ancrage rend
+  donc le calcul insensible à l'ordre des opérations. Le second : la longueur du mois d'arrivée se
+  lit en demandant le **jour 0 du mois suivant** (`Date.UTC(annee, mois + 1, 0)`), parce que le
+  « jour 0 » d'un mois désigne, par convention de l'API `Date` de JavaScript, le **dernier jour du
+  mois précédent**. C'est du savoir sur une API externe, non déductible du code : sans lui,
+  l'expression passe pour une incantation. Le quantième retenu est le plus petit du quantième de
+  départ et de cette longueur ;
 - **la comparaison `isBefore` est stricte** — un jour ne se précède pas lui-même. C'est cette
   strictesse qui rend inclusive une borne exprimée par « purger ce qui est avant », et qui laisse
   passer un menu démarrant aujourd'hui ;
@@ -64,3 +73,10 @@ token `do` de `date-fns` rendrait bien « 1er » mais suffixerait aussi « 2ème
 - `parseIsoDate` contrôle **deux** choses : la forme (expression rationnelle) puis l'existence du
   jour. « 2026-02-30 » passe la première et échoue à la seconde — un motif ne connaît pas la
   longueur des mois.
+- `parseIsoDate` ne contrôle en revanche **pas ses captures**, et c'est délibéré : une capture
+  absente vaut `undefined`, `Number(undefined)` rend `NaN`, et le triplet part au rejet par
+  `createCalendarDate` — l'aller-retour UTC ci-dessus ne relit jamais un `NaN` comme le composant
+  demandé. Le chemin `undefined → NaN → rejet` couvre déjà le cas ; un garde explicite sur les
+  captures serait du code qu'aucun test ne peut rendre rouge. Ce `NaN`-là n'est pas celui du
+  contrôle d'existence : l'un naît d'une **capture manquante** au parsing, l'autre d'un
+  **composant fractionnaire** passé à `Date.UTC`.

@@ -1,18 +1,5 @@
 rules_version = '2';
 
-// Meal Planner — Security Rules Firestore (projet dev meal-planner-dev-c9e0d).
-// FR-6 : les recettes vivent dans une collection plate `recipes/{id}`.
-// FR-3 : les convives du foyer vivent dans une collection plate `convives/{id}`.
-// FR-16 : les menus enregistrés vivent dans une collection plate `menus/{id}`, dont
-// l'identifiant EST la date de début au format ISO — une période, un document.
-// Décision (roadmap iter 1) : accès réservé à tout utilisateur authentifié, sans
-// scoping par propriétaire pour l'instant (app foyer, differé). À resserrer en
-// `request.auth.uid == resource.data.ownerId` quand le multi-compte l'exigera.
-//
-// Rappel : Firestore refuse par défaut toute collection non déclarée ici. Ajouter
-// un adapter `data/` sans ajouter son bloc `match` donne une feature verte en test
-// unitaire et morte dans le navigateur — les Security Rules ne sont pas couvertes
-// par la suite automatisée (décision 2026-07-14, pas d'émulateur Java).
 service cloud.firestore {
   match /databases/{database}/documents {
     match /recipes/{recipeId} {

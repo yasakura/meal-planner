@@ -21,14 +21,10 @@ import { saveMenuUseCase } from '../../domain/use-cases/save-menu';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
 import { createStore } from './store';
 
-// Composition root : la couche ui/ est la seule autorisée à câbler les adapters
-// data/ dans le store (les autres couches restent découplées via les ports).
 export function createAppStore() {
   const recipeRepository = FirestoreRecipeRepository.create(db);
   const conviveRepository = FirestoreConviveRepository.create(db);
   const menuRepository = FirestoreMenuRepository.create(db);
-  // UNE horloge, partagée : le prochain lundi et le plancher de la date de début lisent le
-  // même jour, comme un seul repository sert tous les use-cases d'un même agrégat.
   const clock = SystemClock.create();
   return createStore({
     authGateway: FirebaseAuthGateway.create(auth),
@@ -43,8 +39,6 @@ export function createAppStore() {
       randomPicker: MathRandomPicker.create(),
     }),
     nextMonday: nextMondayUseCase({ clock }),
-    // La MÊME horloge que le prochain lundi et le plancher : la fenêtre de rétention est ancrée
-    // sur aujourd'hui, et deux horloges pourraient purger un menu que l'écran vient d'accepter.
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({ conviveRepository }),

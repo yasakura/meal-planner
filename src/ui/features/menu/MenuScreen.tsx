@@ -6,14 +6,6 @@ import { type MenuSaveNotice } from './menu-slice';
 
 const { colors, space, fonts } = tokens;
 
-/**
- * Une ligne de créneau MÈNE à une fiche, ou ne mène nulle part — et le type ne laisse pas de
- * troisième possibilité. La variante `unknown` n'a pas de champ `href` : il n'existe donc aucune
- * façon de rendre cliquable la ligne de repli « Recette inconnue », ni d'oublier l'adresse d'une
- * ligne qui doit en avoir une. L'erreur est impossible, pas seulement improbable.
- *
- * C'est `menu-days.ts`, muté, qui décide laquelle des deux variantes chaque créneau reçoit.
- */
 export type MenuSlotLine =
   | { key: string; creneauLabel: string; title: string; recipe: 'known'; href: string }
   | { key: string; creneauLabel: string; title: string; recipe: 'unknown' };
@@ -32,9 +24,6 @@ export type MenuScreenProps =
     }
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  // Hors ligne : un constat, et RIEN d'autre — ni « Régénérer », ni « Réessayer ». Aucun des
-  // deux ne peut aboutir sans réseau, et le menu revient tout seul dès que la lecture aboutit.
-  // C'est ce qui distingue cet état de `error`, où le réessai a du sens.
   | { status: 'unavailable'; message: string }
   | {
       status: 'success';
@@ -47,15 +36,11 @@ export type MenuScreenProps =
       onSelect: (days: number) => void;
       onRegenerate: () => void;
       onSave: () => void;
-      /** Décidé par le slice, muté : le bouton se verrouille pendant l'écriture, et là seulement. */
       saveDisabled: boolean;
       saveNotice: MenuSaveNotice | null;
     };
 
 const Page = styled.div`
-  /* Prend la hauteur offerte par Content : c'est elle que CenteredState distribue pour centrer
-     ses constats. Sans elle, l'écran épouse son contenu et le flex:1 de l'état ne répartit plus
-     rien — le constat se colle sous l'en-tête, la moitié basse de l'écran reste vide. */
   flex: 1;
   background: ${colors.creme};
   display: flex;
@@ -122,16 +107,6 @@ const FieldNotice = styled.p`
 
 const START_DATE_FIELD_ID = 'menu-start-date';
 
-/**
- * Champ natif : sur mobile, le système ouvre son propre sélecteur — localisé, accessible, et
- * gratuit. Il n'échange que des chaînes `AAAA-MM-JJ`, que l'écran transmet telles quelles :
- * la traduction vers une date civile appartient au domaine, pas à un composant.
- *
- * `min` est une AFFORDANCE et rien de plus : le sélecteur n'offre pas ce qui sera refusé. Il se
- * contourne au clavier, et selon le navigateur il se contente de marquer le champ invalide —
- * c'est le slice, muté, qui refuse pour de bon. D'où le constat, qui dit pourquoi la date
- * affichée n'est pas celle qu'on vient de saisir.
- */
 function StartDatePicker(props: {
   value: string;
   min: string;
@@ -193,16 +168,12 @@ const PrimaryButton = styled.button`
   }
 `;
 
-// Les deux gestes du menu affiché, côte à côte : `PrimaryButton` s'aligne seul en tête de
-// colonne, deux d'affilée s'empileraient.
 const Actions = styled.div`
   align-self: flex-start;
   display: flex;
   gap: ${space.sm}px;
 `;
 
-// Même sobriété que les constats du foyer : un seul style, deux rôles ARIA. C'est le TON, décidé
-// par le slice, qui choisit — et non ce fichier, que la mutation ignore.
 const Note = styled.p`
   font-family: ${fonts.body};
   font-size: 13px;
@@ -210,10 +181,6 @@ const Note = styled.p`
   margin: ${space.sm}px 0 0;
 `;
 
-/**
- * `alert` (assertif) pour ce qui appelle une action, `status` (poli) pour ce qui n'en demande
- * aucune : un succès, ou une absence de réponse du dépôt.
- */
 function SaveNoticeView({ notice }: { notice: MenuSaveNotice | null }) {
   if (notice === null) return null;
   return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
@@ -260,8 +227,6 @@ const Spinner = styled.svg`
   animation: ${spin} 0.8s linear infinite;
 `;
 
-// Constat neutre (chargement, absence de réseau) : teinte secondaire, aucun rouge d'alerte —
-// un état n'est pas un jugement. Le rouge reste réservé à `ErrorMessage`.
 const StateText = styled.p`
   font-family: ${fonts.body};
   font-size: 14px;
@@ -270,11 +235,6 @@ const StateText = styled.p`
 `;
 
 const ErrorBox = styled.div`
-  /* Aligné sur CenteredState : loading, unavailable, empty et notFound se centrent tous dans la
-     hauteur offerte, error était le seul à rester collé sous l'en-tête. L'écart n'a jamais été
-     décidé — il est né le jour où Page a pris flex:1 et où il y a enfin eu une hauteur à
-     distribuer. L'alignement horizontal, lui, ne bouge pas : « Réessayer » est une commande,
-     elle reste au fil du texte. */
   flex: 1;
   justify-content: center;
   display: flex;
@@ -332,9 +292,6 @@ const SlotTitle = styled.span`
   color: ${colors.ink};
 `;
 
-// Même typographie que `SlotTitle` : la ligne d'un menu n'a pas à s'annoncer comme un lien pour
-// l'être, et souligner vingt-huit titres saturerait l'écran. C'est un LIEN et non un bouton,
-// comme les lignes du catalogue : il ne fait que changer de route.
 const SlotLink = styled(Link)`
   font-family: ${fonts.body};
   font-size: 15px;
@@ -384,9 +341,6 @@ function Body(props: MenuScreenProps) {
           </RetryButton>
         </ErrorBox>
       );
-    // `role="status"` (poli) et non `role="alert"` (assertif) : une absence de réseau est un
-    // constat, pas une alerte, et rien n'est attendu de l'utilisateur dans l'immédiat.
-    // Pas de bouton non plus — voir le commentaire sur le type.
     case 'unavailable':
       return (
         <CenteredState>

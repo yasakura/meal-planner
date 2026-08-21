@@ -2,7 +2,8 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-12 (`bbc9f0f`, convives) puis 2026-08-13 (`8e79f41`, catalogue et fiche)
-- **Portée** : `src/data/firestore-*-repository.ts`
+- **Portée** : `src/data/firestore-*-repository.ts`, `src/domain/ports/recipe-repository.ts`,
+  `src/domain/ports/convive-repository.ts`, `src/domain/ports/menu-repository.ts`
 
 ## Contexte
 
@@ -25,9 +26,12 @@ Toute lecture des adapters Firestore impose la **source serveur** : `getDocsFrom
 `RepositoryUnavailableError` ([ADR 0004](0004-reconnaissance-nominale-des-erreurs.md)), ce qui
 donne à l'écran le constat « aucune connexion » au lieu d'un faux vide.
 
-La règle est inscrite dans le **contrat du port** `RecipeRepository`, pas seulement dans les
-adapters : un double qui serait muet sur cette distinction rendrait vert un chemin que le vrai
-adapter n'a jamais eu.
+Le port `RecipeRepository` ne porte plus que des **signatures** : depuis
+[#76](https://github.com/yasakura/meal-planner/issues/76), aucun commentaire n'y inscrit la règle.
+Elle vit **ici**, et la `Portée` ci-dessus nomme les ports pour qu'on puisse y remonter depuis le
+fichier. Ce qui l'**exerce** reste du code, pas de la prose : un double muet sur cette distinction
+rendrait vert un chemin que le vrai adapter n'a jamais eu
+([ADR 0019](0019-doubles-hostiles-a-leur-port.md)).
 
 ## La mesure
 
