@@ -8,6 +8,7 @@ import { loadRecipeDetail, selectRecipeDetail } from '../recipe-detail/recipe-de
 import { originOf, type BackLink } from '../recipe-detail/recipe-detail-origin';
 import { toPropsWithoutRecipe } from '../recipe-detail/recipe-detail-states';
 import { RecipeDetailScreen } from '../recipe-detail/RecipeDetailScreen';
+import { recipeForRoute } from '../recipe-detail/recipe-for-route';
 import { RecipeCreateScreen } from './RecipeCreateScreen';
 import {
   INCOMPLETE_ROW_MESSAGE,
@@ -24,7 +25,6 @@ import {
   updateRecipe,
 } from './recipe-edit-slice';
 import { type RecipeFormNotice } from './recipe-slice';
-import { recipeForRoute } from './recipe-for-route';
 
 type FormState = {
   title: string;

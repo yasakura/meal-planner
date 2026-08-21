@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type Unit } from '../../../domain/entities/ingredient';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { recipeForRoute } from '../recipe/recipe-for-route';
+import { recipeForRoute } from './recipe-for-route';
 import { loadRecipeDetail, selectRecipeDetail } from './recipe-detail-slice';
 import { originOf, type Origin } from './recipe-detail-origin';
 import { toPropsWithoutRecipe } from './recipe-detail-states';

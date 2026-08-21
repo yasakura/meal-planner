@@ -1,5 +1,5 @@
 import { type Recipe } from '../../../domain/entities/recipe';
-import { type RecipeDetailStatus } from '../recipe-detail/recipe-detail-slice';
+import { type RecipeDetailStatus } from './recipe-detail-slice';
 
 /**
  * La recette du store qui a le droit d'alimenter l'écran — le DÉTAIL comme le formulaire de
