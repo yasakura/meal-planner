@@ -17,10 +17,10 @@ describe('Menu', () => {
     expect(menu.repas).toEqual([repas]);
   });
 
-  it('accepte un menu sans repas (0 jour) sans lever', () => {
-    const menu = createMenu({ repas: [], dateDebut: LUNDI_24_AOUT });
-
-    expect(menu.repas).toEqual([]);
+  it('refuse un menu sans aucun repas', () => {
+    expect(() => createMenu({ repas: [], dateDebut: LUNDI_24_AOUT })).toThrow(
+      'Un menu doit contenir au moins un repas',
+    );
   });
 
   it('retourne un Menu gelé (immuable au runtime)', () => {

@@ -12,7 +12,7 @@ import { type Menu } from '../domain/entities/menu';
 import { type MenuRepository } from '../domain/ports/menu-repository';
 import { DEFAULT_ACK_TIMEOUT_MS, withAckDeadline } from './firestore-ack-deadline';
 import { asDomainFailure } from './firestore-failure';
-import { menuDocumentId, menuToDocument, startDateFromDocumentId } from './menu-mapper';
+import { documentToMenu, menuDocumentId, menuToDocument } from './menu-mapper';
 
 export type FirestoreMenuRepositoryOptions = {
   ackTimeoutMs?: number;
@@ -35,14 +35,14 @@ export class FirestoreMenuRepository implements MenuRepository {
     );
   }
 
-  async findAllStartDates(): Promise<CalendarDate[]> {
+  async findAll(): Promise<Menu[]> {
     let snapshot;
     try {
       snapshot = await getDocsFromServer(collection(this.db, 'menus'));
     } catch (error) {
       throw asDomainFailure(error);
     }
-    return snapshot.docs.map((snapshotDoc) => startDateFromDocumentId(snapshotDoc.id));
+    return snapshot.docs.map((snapshotDoc) => documentToMenu(snapshotDoc.id, snapshotDoc.data()));
   }
 
   async remove(dateDebut: CalendarDate): Promise<void> {

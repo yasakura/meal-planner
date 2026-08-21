@@ -19,12 +19,8 @@ export class InMemoryMenuRepository implements MenuRepository {
     return Promise.resolve();
   }
 
-  findAllStartDates(): Promise<CalendarDate[]> {
-    return Promise.resolve(
-      this.all()
-        .map((menu) => menu.dateDebut)
-        .reverse(),
-    );
+  findAll(): Promise<Menu[]> {
+    return Promise.resolve(this.all().reverse());
   }
 
   remove(dateDebut: CalendarDate): Promise<void> {

@@ -8,6 +8,7 @@ import {
 import { type AuthGateway } from '../../domain/ports/auth-gateway';
 import { type Clock } from '../../domain/ports/clock';
 import { type AddConvive } from '../../domain/use-cases/add-convive';
+import { type BrowseMenus } from '../../domain/use-cases/browse-menus';
 import { type CreateRecipe } from '../../domain/use-cases/create-recipe';
 import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
 import { type GetRecipe } from '../../domain/use-cases/get-recipe';
@@ -37,6 +38,7 @@ export type AppDependencies = {
   listRecipes: ListRecipes;
   getRecipe: GetRecipe;
   generateMenu: GenerateMenu;
+  browseMenus: BrowseMenus;
   nextMonday: NextMonday;
   saveMenu: SaveMenu;
   listConvives: ListConvives;
@@ -74,6 +76,8 @@ export type RootState = ReturnType<typeof rootReducer>;
 export type AppDispatch = AppStore['dispatch'];
 
 export type AppThunk = ThunkAction<void, RootState, AppDependencies, UnknownAction>;
+
+export type AppThunkAsync = ThunkAction<Promise<void>, RootState, AppDependencies, UnknownAction>;
 
 export type AppThunkApiConfig = {
   state: RootState;

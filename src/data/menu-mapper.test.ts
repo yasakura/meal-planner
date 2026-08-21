@@ -84,12 +84,6 @@ describe('menu-mapper', () => {
     ]);
   });
 
-  it('menuToDocument accepte un menu sans aucun repas', () => {
-    const menu = createMenu({ dateDebut: LUNDI_24_AOUT, repas: [] });
-
-    expect(menuToDocument(menu).repas).toEqual([]);
-  });
-
   describe('documentToMenu re-valide structure ET valeurs des données non fiables', () => {
     it('data non-objet (null) → throw structurel', () => {
       const data: unknown = null;
@@ -188,7 +182,9 @@ describe('menu-mapper', () => {
     });
 
     it('identifiant de document hors format ISO → throw de la factory domaine (parseIsoDate)', () => {
-      const doc: MenuDocument = { repas: [] };
+      const doc: MenuDocument = {
+        repas: [{ jour: 0, creneau: 'midi', slots: [{ recipeId: 'r-1' }] }],
+      };
 
       expect(() => documentToMenu('24-08-2026', doc)).toThrow('La date civile est invalide');
     });

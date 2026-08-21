@@ -1,5 +1,6 @@
 import { MathRandomPicker } from '../../data/math-random-picker';
 import { addConviveUseCase } from '../../domain/use-cases/add-convive';
+import { browseMenusUseCase } from '../../domain/use-cases/browse-menus';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
 import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { getRecipeUseCase } from '../../domain/use-cases/get-recipe';
@@ -38,6 +39,7 @@ export function createTestStore(overrides?: Partial<AppDependencies>) {
       recipeRepository,
       randomPicker: MathRandomPicker.create(() => 0),
     }),
+    browseMenus: browseMenusUseCase({ menuRepository, clock }),
     nextMonday: nextMondayUseCase({ clock }),
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     listConvives: listConvivesUseCase({ conviveRepository }),

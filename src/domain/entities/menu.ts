@@ -12,6 +12,9 @@ export type MenuProps = {
 };
 
 export function createMenu(props: MenuProps): Menu {
+  if (props.repas.length === 0) {
+    throw new Error('Un menu doit contenir au moins un repas');
+  }
   return Object.freeze({
     dateDebut: props.dateDebut,
     repas: Object.freeze([...props.repas]),

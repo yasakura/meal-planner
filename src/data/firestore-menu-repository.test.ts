@@ -8,13 +8,13 @@ import {
   getDocsFromServer,
   setDoc,
 } from 'firebase/firestore';
-import { createCalendarDate } from '../domain/entities/calendar-date';
+import { createCalendarDate, type CalendarDate } from '../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../domain/entities/menu';
 import { createRepas } from '../domain/entities/repas';
 import { createSlot } from '../domain/entities/slot';
 import { isRepositoryUnavailable } from '../domain/errors/repository-unavailable-error';
 import { FirestoreMenuRepository } from './firestore-menu-repository';
-import { menuToDocument } from './menu-mapper';
+import { menuDocumentId, menuToDocument } from './menu-mapper';
 
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn(),
@@ -37,12 +37,21 @@ function firestoreError(code: string): Error {
 }
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+const LUNDI_5_JANVIER = createCalendarDate({ year: 2026, month: 1, day: 5 });
 
-function menuCommencantLe24Aout(): Menu {
+function menuCommencantLe(dateDebut: CalendarDate): Menu {
   return createMenu({
-    dateDebut: LUNDI_24_AOUT,
+    dateDebut,
     repas: [createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r-1' })] })],
   });
+}
+
+function menuCommencantLe24Aout(): Menu {
+  return menuCommencantLe(LUNDI_24_AOUT);
+}
+
+function documentDe(menu: Menu): { id: string; data: () => unknown } {
+  return { id: menuDocumentId(menu.dateDebut), data: () => menuToDocument(menu) };
 }
 
 describe('FirestoreMenuRepository', () => {
@@ -120,64 +129,62 @@ describe('FirestoreMenuRepository', () => {
     }
   });
 
-  it("findAllStartDates lit la collection 'menus' et rend la date de début de chaque document", async () => {
+  it("findAll lit la collection 'menus' et rend le menu porté par chaque document", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
     mockedGetDocsFromServer.mockResolvedValue({
-      docs: [{ id: '2026-08-24' }, { id: '2026-01-05' }],
+      docs: [documentDe(menuCommencantLe24Aout()), documentDe(menuCommencantLe(LUNDI_5_JANVIER))],
     } as never);
     const repository = FirestoreMenuRepository.create(db);
 
-    const dates = await repository.findAllStartDates();
+    const menus = await repository.findAll();
 
     expect(mockedCollection).toHaveBeenCalledWith(db, 'menus');
     expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
-    expect(dates).toEqual([
-      createCalendarDate({ year: 2026, month: 8, day: 24 }),
-      createCalendarDate({ year: 2026, month: 1, day: 5 }),
-    ]);
+    expect(menus).toEqual([menuCommencantLe24Aout(), menuCommencantLe(LUNDI_5_JANVIER)]);
   });
 
-  it('findAllStartDates rend TOUTES les périodes, même très anciennes : aucun filtre de rétention', async () => {
+  it('findAll rend TOUS les menus, même très anciens : aucun filtre de rétention', async () => {
+    const menuDe2019 = menuCommencantLe(createCalendarDate({ year: 2019, month: 3, day: 4 }));
     mockedCollection.mockReturnValue({} as never);
     mockedGetDocsFromServer.mockResolvedValue({
-      docs: [{ id: '2019-03-04' }, { id: '2026-08-24' }],
+      docs: [documentDe(menuDe2019), documentDe(menuCommencantLe24Aout())],
     } as never);
     const repository = FirestoreMenuRepository.create(db);
 
-    const dates = await repository.findAllStartDates();
+    const menus = await repository.findAll();
 
-    expect(dates).toHaveLength(2);
-    expect(dates).toContainEqual(createCalendarDate({ year: 2019, month: 3, day: 4 }));
+    expect(menus).toHaveLength(2);
+    expect(menus).toContainEqual(menuDe2019);
   });
 
-  it('findAllStartDates interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
+  it('findAll interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
     mockedGetDocsFromServer.mockResolvedValue({ docs: [] } as never);
     const repository = FirestoreMenuRepository.create(db);
 
-    await repository.findAllStartDates();
+    await repository.findAll();
 
     expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
     expect(mockedGetDocs).not.toHaveBeenCalled();
   });
 
-  it('findAllStartDates traduit une lecture impossible faute de réseau en indisponibilité de dépôt', async () => {
+  it('findAll traduit une lecture impossible faute de réseau en indisponibilité de dépôt', async () => {
     mockedCollection.mockReturnValue({} as never);
     mockedGetDocsFromServer.mockRejectedValue(firestoreError('unavailable'));
     const repository = FirestoreMenuRepository.create(db);
 
-    await expect(repository.findAllStartDates()).rejects.toSatisfy(isRepositoryUnavailable);
+    await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
   });
 
-  it("findAllStartDates ne traduit pas un refus de permission : l'erreur remonte telle quelle", async () => {
+  it("findAll ne traduit pas un refus de permission : l'erreur remonte telle quelle", async () => {
     mockedCollection.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
     mockedGetDocsFromServer.mockRejectedValue(refus);
     const repository = FirestoreMenuRepository.create(db);
 
-    await expect(repository.findAllStartDates()).rejects.toBe(refus);
+    await expect(repository.findAll()).rejects.toBe(refus);
   });
 
   it('remove efface le document menus/{date ISO de début}', async () => {

@@ -17,16 +17,15 @@ function menuCommencantLe(dateDebut: CalendarDate): Menu {
 }
 
 describe('InMemoryMenuRepository', () => {
-  it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
+  it('rend les MENUS dans un ordre différent de l’ordre d’insertion : le port n’en garantit aucun', async () => {
     const repository = InMemoryMenuRepository.create();
-    await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
-    await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
-    await repository.save(menuCommencantLe(LUNDI_2_FEVRIER));
+    const menuDu5Janvier = menuCommencantLe(LUNDI_5_JANVIER);
+    const menuDu19Janvier = menuCommencantLe(LUNDI_19_JANVIER);
+    const menuDu2Fevrier = menuCommencantLe(LUNDI_2_FEVRIER);
+    await repository.save(menuDu5Janvier);
+    await repository.save(menuDu19Janvier);
+    await repository.save(menuDu2Fevrier);
 
-    expect(await repository.findAllStartDates()).toEqual([
-      LUNDI_2_FEVRIER,
-      LUNDI_19_JANVIER,
-      LUNDI_5_JANVIER,
-    ]);
+    expect(await repository.findAll()).toEqual([menuDu2Fevrier, menuDu19Janvier, menuDu5Janvier]);
   });
 });

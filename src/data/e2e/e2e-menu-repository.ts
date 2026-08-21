@@ -17,9 +17,9 @@ export class E2eMenuRepository implements MenuRepository {
     this.menus.set(toIsoDate(menu.dateDebut), menu);
   }
 
-  async findAllStartDates(): Promise<CalendarDate[]> {
+  async findAll(): Promise<Menu[]> {
     this.failures.guardRead();
-    return [...this.menus.values()].map((menu) => menu.dateDebut).reverse();
+    return [...this.menus.values()].reverse();
   }
 
   async remove(dateDebut: CalendarDate): Promise<void> {
