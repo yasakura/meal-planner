@@ -244,4 +244,37 @@ describe('FirestoreMenuRepository', () => {
       vi.useRealTimers();
     }
   });
+
+  it(
+    "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedCollection.mockReturnValue({} as never);
+      mockedGetDocsFromServer.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreMenuRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it("laisse dix secondes \u00e0 une lecture, l\u00e0 o\u00f9 une \u00e9criture n'en a que cinq", async () => {
+    vi.useFakeTimers();
+    try {
+      mockedCollection.mockReturnValue({} as never);
+      mockedGetDocsFromServer.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreMenuRepository.create(db);
+      const constats: unknown[] = [];
+      void repository.findAll().catch((error: unknown) => {
+        constats.push(error);
+      });
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(constats).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(constats.filter(isRepositoryUnavailable)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -226,4 +226,28 @@ describe('FirestoreRecipeRepository', () => {
 
     await expect(repository.findById('recipe-42')).rejects.toBe(refus);
   });
+
+  it(
+    "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedCollection.mockReturnValue({} as never);
+      mockedGetDocsFromServer.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreRecipeRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it(
+    "findById signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedGetDocFromServer.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreRecipeRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findById('recipe-42')).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
 });

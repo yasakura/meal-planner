@@ -351,4 +351,16 @@ describe('FirestoreConviveRepository', () => {
       vi.useRealTimers();
     }
   });
+
+  it(
+    "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedCollection.mockReturnValue({} as never);
+      mockedGetDocsFromServer.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreConviveRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
 });

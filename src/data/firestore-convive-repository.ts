@@ -11,40 +11,47 @@ import {
 import { type ConviveRepository } from '../domain/ports/convive-repository';
 import { type Convive } from '../domain/entities/convive';
 import { conviveToDocument, documentToConvive } from './convive-mapper';
-import { DEFAULT_ACK_TIMEOUT_MS, withAckDeadline } from './firestore-ack-deadline';
-import { asDomainFailure } from './firestore-failure';
+import {
+  DEFAULT_ACK_TIMEOUT_MS,
+  DEFAULT_READ_TIMEOUT_MS,
+  withServerDeadline,
+} from './firestore-server-deadline';
 
 export type FirestoreConviveRepositoryOptions = {
   ackTimeoutMs?: number;
+  readTimeoutMs?: number;
 };
 
 export class FirestoreConviveRepository implements ConviveRepository {
   private constructor(
     private readonly db: Firestore,
     private readonly ackTimeoutMs: number,
+    private readonly readTimeoutMs: number,
   ) {}
 
   static create(
     db: Firestore,
     options?: FirestoreConviveRepositoryOptions,
   ): FirestoreConviveRepository {
-    return new FirestoreConviveRepository(db, options?.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS);
+    return new FirestoreConviveRepository(
+      db,
+      options?.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS,
+      options?.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS,
+    );
   }
 
   async save(convive: Convive): Promise<void> {
-    await withAckDeadline(
+    await withServerDeadline(
       setDoc(doc(this.db, 'convives', convive.id), conviveToDocument(convive)),
       this.ackTimeoutMs,
     );
   }
 
   async findAll(): Promise<Convive[]> {
-    let snapshot;
-    try {
-      snapshot = await getDocsFromServer(collection(this.db, 'convives'));
-    } catch (error) {
-      throw asDomainFailure(error);
-    }
+    const snapshot = await withServerDeadline(
+      getDocsFromServer(collection(this.db, 'convives')),
+      this.readTimeoutMs,
+    );
     return snapshot.docs.map((snapshotDoc) =>
       documentToConvive(snapshotDoc.id, snapshotDoc.data()),
     );
@@ -55,7 +62,7 @@ export class FirestoreConviveRepository implements ConviveRepository {
     transform: (existing: Convive) => Convive,
   ): Promise<Convive | undefined> {
     const ref = doc(this.db, 'convives', id);
-    return await withAckDeadline(
+    return await withServerDeadline(
       runTransaction(this.db, async (transaction) => {
         const snapshot = await transaction.get(ref);
         if (!snapshot.exists()) return undefined;
@@ -68,6 +75,6 @@ export class FirestoreConviveRepository implements ConviveRepository {
   }
 
   async remove(id: string): Promise<void> {
-    await withAckDeadline(deleteDoc(doc(this.db, 'convives', id)), this.ackTimeoutMs);
+    await withServerDeadline(deleteDoc(doc(this.db, 'convives', id)), this.ackTimeoutMs);
   }
 }
