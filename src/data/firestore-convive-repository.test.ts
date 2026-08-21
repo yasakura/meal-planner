@@ -52,7 +52,7 @@ describe('FirestoreConviveRepository', () => {
   it('save écrit le convive à convives/{id} avec le document mappé', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
-    mockedSetDoc.mockResolvedValue(undefined as never);
+    mockedSetDoc.mockResolvedValue(undefined);
     const convive = ConviveBuilder.aConvive().withId('convive-42').build();
     const repository = FirestoreConviveRepository.create(db);
 
@@ -156,7 +156,7 @@ describe('FirestoreConviveRepository', () => {
     vi.useFakeTimers();
     try {
       mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockResolvedValue(undefined as never);
+      mockedSetDoc.mockResolvedValue(undefined);
       const repository = FirestoreConviveRepository.create(db);
 
       await repository.save(ConviveBuilder.aConvive().build());
@@ -173,7 +173,7 @@ describe('FirestoreConviveRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
       const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
 
       await expect(repository.save(ConviveBuilder.aConvive().build())).rejects.toSatisfy(
@@ -185,7 +185,7 @@ describe('FirestoreConviveRepository', () => {
   it('remove efface le document convives/{id}', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
-    mockedDeleteDoc.mockResolvedValue(undefined as never);
+    mockedDeleteDoc.mockResolvedValue(undefined);
     const repository = FirestoreConviveRepository.create(db);
 
     await repository.remove('convive-42');
@@ -216,7 +216,7 @@ describe('FirestoreConviveRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}) as never);
+      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}));
       const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
 
       await expect(repository.remove('convive-42')).rejects.toSatisfy(isRepositoryUnavailable);
@@ -227,7 +227,7 @@ describe('FirestoreConviveRepository', () => {
     vi.useFakeTimers();
     try {
       mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockResolvedValue(undefined as never);
+      mockedDeleteDoc.mockResolvedValue(undefined);
       const repository = FirestoreConviveRepository.create(db);
 
       await repository.remove('convive-42');
@@ -326,7 +326,7 @@ describe('FirestoreConviveRepository', () => {
     { timeout: 1000 },
     async () => {
       mockedDoc.mockReturnValue({} as never);
-      mockedRunTransaction.mockReturnValue(new Promise(() => {}) as never);
+      mockedRunTransaction.mockReturnValue(new Promise(() => {}));
       const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
 
       await expect(

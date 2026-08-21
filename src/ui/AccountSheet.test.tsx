@@ -119,7 +119,7 @@ describe('AccountSheet', () => {
   });
 
   it('se démonte immédiatement à la fermeture quand prefers-reduced-motion', () => {
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true } as MediaQueryList));
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
 
     const { rerender } = render(sheet(true));
     expect(screen.getByText('Compte')).toBeInTheDocument();

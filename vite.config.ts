@@ -25,7 +25,7 @@ function qrCodePlugin(): PluginOption {
           console.log('\n[QR] Aucune IP LAN détectée.\n');
           return;
         }
-        const url = lanUrls[0]!;
+        const url = lanUrls[0];
         console.log(`\n📱 Scanne sur ton téléphone : ${url}\n`);
         qrcode.generate(url, { small: true });
       });

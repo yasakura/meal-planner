@@ -5,6 +5,40 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import boundaries from 'eslint-plugin-boundaries';
 
+const DIRECTIVES_TOLEREES = [
+  /^Stryker (disable|restore)\b/,
+  /^eslint-disable\b/,
+  /^@ts-expect-error\b/,
+  /^\/ <reference\b/,
+  /^prettier-ignore\b/,
+];
+
+export const mealPlanner = {
+  rules: {
+    'no-comments': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: {
+          interdit:
+            "Commentaire interdit dans src/ et e2e/ : supprime-le. Si la décision mérite d'être gardée, écris un ADR dans docs/decisions/ ; si c'est le code qui est obscur, renomme-le. Seules les directives d'outillage sont tolérées (Stryker disable/restore, eslint-disable, @ts-expect-error, /// <reference>, prettier-ignore).",
+        },
+      },
+      create(context) {
+        return {
+          Program() {
+            for (const commentaire of context.sourceCode.getAllComments()) {
+              const contenu = commentaire.value.trim();
+              if (DIRECTIVES_TOLEREES.some((directive) => directive.test(contenu))) continue;
+              context.report({ loc: commentaire.loc, messageId: 'interdit' });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -26,6 +60,7 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
     plugins: {
       'react-hooks': reactHooks,
@@ -49,6 +84,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'boundaries/dependencies': [
         'error',
@@ -120,5 +158,10 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}', 'e2e/**/*.{ts,tsx}'],
+    plugins: { 'meal-planner': mealPlanner },
+    rules: { 'meal-planner/no-comments': 'error' },
   },
 );

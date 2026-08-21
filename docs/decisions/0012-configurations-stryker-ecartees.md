@@ -56,6 +56,13 @@ non-reproductibilité reste entière.
 
 ## Conséquences
 
+- **La mutation est aveugle à un garde défensif qu'un test justifie.** Elle mesure les tests, jamais
+  la spec : dès qu'un test atteint un garde impossible, tous les mutants de ce garde meurent et le
+  score le **récompense**. `createMenu` portait un `if (props.dateDebut === undefined)` sur un champ
+  **non optionnel**, avec ses 5 mutants `Killed`, sur les 8 du fichier, parce qu'un test
+  l'atteignait via `undefined as unknown as CalendarDate` ; le garde supprimé, `menu.ts` passe de 8
+  à 3 mutants, 100 %, 0 timeout. Aucun réglage de Stryker ne corrige cela : c'est le rôle des règles
+  type-aware d'ESLint — [ADR 0026](0026-regles-type-aware-et-runtime.md).
 - `incremental: true` mémorise le statut de chaque mutant, **`Timeout` compris** : un mutant expiré
   une fois reste crédité tant que son fichier ne bouge pas. Le rejeu à froid est ce qui lui rend sa
   chance.

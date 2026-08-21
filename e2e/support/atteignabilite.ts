@@ -15,7 +15,7 @@ async function atteignabilite(cible: Locator): Promise<Atteignabilite> {
     const auCentre = document.elementFromPoint(x, y);
     const atteinte = auCentre !== null && (auCentre === element || element.contains(auCentre));
     const decrire = (noeud: Element) =>
-      `<${noeud.tagName.toLowerCase()}> « ${(noeud.textContent ?? '').trim().slice(0, 40)} »`;
+      `<${noeud.tagName.toLowerCase()}> « ${noeud.textContent.trim().slice(0, 40)} »`;
 
     return {
       largeur: boite.width,
