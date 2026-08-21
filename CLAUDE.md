@@ -71,7 +71,7 @@ Pour un value object trivial (non-vide, borne, type, immuabilité), le cycle com
 ## Stack & tests
 
 - **TypeScript** strict + **Vite** + `vite-plugin-pwa` (mode `prompt`).
-- **React 18** + **React Router** + **Redux Toolkit** + **styled-components** dans `src/ui/`.
+- **React 19** + **React Router** + **Redux Toolkit** + **styled-components** dans `src/ui/`.
 - **Firebase** Auth email/password + **Firestore**, 2 projets (dev / prod) sélectionnés via `VITE_ENV`.
 - **Vitest** + **React Testing Library** ; **Stryker Mutator** pour mutation testing.
 - **cuid2** (IDs générés dans `domain/` via port `IdGenerator`), **date-fns** (timezone `Europe/Paris`) via port `Clock`. Pas de `new Date()` direct dans `domain/`.
