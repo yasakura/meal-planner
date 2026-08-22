@@ -9,7 +9,7 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import { CatalogueContainer } from './CatalogueContainer';
 import { selectCatalogue } from './catalogue-slice';

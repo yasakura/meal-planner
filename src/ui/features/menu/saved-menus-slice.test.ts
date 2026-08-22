@@ -9,7 +9,7 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { type BrowseMenus, type MenuNavigation } from '../../../domain/use-cases/browse-menus';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import { generateMenu, isSaveInFlight, saveMenu, selectMenu } from './menu-slice';
 import {

@@ -2,12 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-function requireEnv(value: string | undefined, name: string): string {
-  if (value === undefined || value === '') {
-    throw new Error(`Variable d'environnement Firebase manquante : ${name}`);
-  }
-  return value;
-}
+import { requireEnv } from './require-env';
 
 const firebaseConfig = {
   apiKey: requireEnv(import.meta.env.VITE_FIREBASE_API_KEY, 'VITE_FIREBASE_API_KEY'),

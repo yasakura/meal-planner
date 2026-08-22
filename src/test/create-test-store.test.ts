@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
 
-import { createCalendarDate } from '../../domain/entities/calendar-date';
-import { createMenu } from '../../domain/entities/menu';
-import { createRepas } from '../../domain/entities/repas';
-import { createSlot } from '../../domain/entities/slot';
-import { IngredientBuilder } from '../../domain/test-builders/ingredient.builder';
-import { RecipeBuilder } from '../../domain/test-builders/recipe.builder';
-import { loadCatalogue, selectCatalogue } from '../features/catalogue/catalogue-slice';
-import { addConvive, loadConvives, selectConvives } from '../features/convives/convives-slice';
+import { createCalendarDate } from '../domain/entities/calendar-date';
+import { createMenu } from '../domain/entities/menu';
+import { createRepas } from '../domain/entities/repas';
+import { createSlot } from '../domain/entities/slot';
+import { IngredientBuilder } from '../domain/test-builders/ingredient.builder';
+import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
+import { loadCatalogue, selectCatalogue } from '../ui/features/catalogue/catalogue-slice';
+import { addConvive, loadConvives, selectConvives } from '../ui/features/convives/convives-slice';
 import {
   loadRecipeDetail,
   selectRecipeDetail,
-} from '../features/recipe-detail/recipe-detail-slice';
-import { generateMenu, saveMenu } from '../features/menu/menu-slice';
-import { loadSavedMenus, selectSavedMenus } from '../features/menu/saved-menus-slice';
-import { createRecipe } from '../features/recipe/recipe-slice';
-import { updateRecipe } from '../features/recipe/recipe-edit-slice';
+} from '../ui/features/recipe-detail/recipe-detail-slice';
+import { generateMenu, saveMenu } from '../ui/features/menu/menu-slice';
+import { loadSavedMenus, selectSavedMenus } from '../ui/features/menu/saved-menus-slice';
+import { createRecipe } from '../ui/features/recipe/recipe-slice';
+import { updateRecipe } from '../ui/features/recipe/recipe-edit-slice';
 import { createTestStore } from './create-test-store';
 
 describe('createTestStore', () => {

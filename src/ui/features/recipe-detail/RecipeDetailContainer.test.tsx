@@ -10,7 +10,7 @@ import { type GetRecipe } from '../../../domain/use-cases/get-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { useAppSelector } from '../../store/hooks';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { RecipeDetailContainer } from './RecipeDetailContainer';
 import { selectRecipeDetail } from './recipe-detail-slice';
 

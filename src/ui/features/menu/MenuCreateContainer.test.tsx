@@ -18,7 +18,7 @@ import { nextMondayUseCase, type NextMonday } from '../../../domain/use-cases/ne
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { DriftingClock } from '../../../domain/test-doubles/drifting-clock';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import { MenuCreateContainer } from './MenuCreateContainer';
 

@@ -6,7 +6,7 @@ import { type NewConviveId } from '../../../domain/use-cases/new-convive-id';
 import { type ListConvives } from '../../../domain/use-cases/list-convives';
 import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import {
   type RemoveConvive,

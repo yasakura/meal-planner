@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { Layout } from './Layout';
-import { createTestStore } from './store/create-test-store';
+import { createTestStore } from '../test/create-test-store';
 
 function renderLayout() {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });

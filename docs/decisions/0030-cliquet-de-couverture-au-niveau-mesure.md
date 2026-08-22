@@ -67,7 +67,7 @@ coverage: {
    range pas les trois fichiers non couverts du dépôt dans la même famille.
 5. **Aucun seuil sur `src/config/**`.** Un plancher à `functions: 0` est infalsifiable : il ne peut
    jamais échouer. Un seuil qui ne peut pas mordre est pire que pas de seuil, parce qu'il a l'air
-   d'un garde-fou.
+   d'un garde-fou. — _Levé par l'[amendement du 2026-08-22](#amendement-du-2026-08-22--le-seuil-de-srcconfig-et-la-sortie-de-linfra-de-test)._
 
 ## La mesure
 
@@ -215,7 +215,7 @@ prouve d'ailleurs que le projet sait tester ce genre de module — `env.test.ts`
 L'exclure aurait été le maquillage exact que l'exclusion des deux autres pourrait laisser croire.
 `firebase.ts` reste donc visible à 0 %, sans plancher sur `src/config/**` faute d'un plancher
 falsifiable, et le chantier part en issue : extraire `requireEnv` en module pur, le tester, puis
-poser le seuil.
+poser le seuil. — _Chantier fait, voir l'amendement en fin de page._
 
 ### Ce que l'exclusion ne masque pas
 
@@ -266,4 +266,126 @@ l'objet du choix `--coverage` dans le script plutôt que `enabled: true` dans la
   extrait et testé. Un seuil y serait aujourd'hui infalsifiable.
 - Le dénominateur de `src/ui/**` contient encore de l'infra de test — `src/ui/store/create-test-store.ts`,
   85,71 % de statements, 50 % de fonctions, ligne 40 non couverte. Elle tire le plancher vers le bas pour une
-  raison qui n'est pas de la discipline de test. Constat ouvert, non pris ici.
+  raison qui n'est pas de la discipline de test. Constat ouvert, non pris ici. — _Fermé par l'amendement
+  ci-dessous._
+
+## Amendement du 2026-08-22 — le seuil de `src/config/**`, et la sortie de l'infra de test
+
+Branche `iter-43-couverture-config`, issues
+[#113](https://github.com/yasakura/meal-planner/issues/113) et
+[#114](https://github.com/yasakura/meal-planner/issues/114). Les deux chantiers laissés ouverts
+ci-dessus sont fermés ; **la doctrine, elle, ne bouge pas** — c'est elle qui dicte les deux gestes.
+
+### `requireEnv` extrait, `firebase.ts` exclu, `src/config/**` planché à 100
+
+`requireEnv` vit désormais dans `src/config/require-env.ts`, module pur sans import, couvert par
+trois tests qui exercent les quatre branches : valeur renseignée, variable absente, variable
+présente mais vide.
+
+Ce qui reste dans `src/config/firebase.ts` est **exclu**, et c'est le même critère qui l'ordonne
+qu'il l'interdisait avant l'extraction : _son pourcentage porte-t-il une information sur la
+discipline de test ?_ Avant, oui — le fichier portait un garde à 4 branches. Après, non : il ne
+reste qu'un objet de configuration et trois appels de câblage, **0 branche et 0 fonction**, et
+vitest le confirme quand on le réintègre.
+
+```
+ config            |      50 |      100 |     100 |      50 |
+  firebase.ts      |       0 |      100 |     100 |       0 | 7-18
+```
+
+Le couvrir demanderait d'importer le module, donc d'exécuter `initializeApp` sur de vraies poignées
+Firebase : c'est mot pour mot la raison dynamique qui a fait exclure `create-app-store.ts`. Et le
+fichier **grossit d'une ligne par variable Firebase ajoutée**, donc il ferait dériver le plancher
+vers le bas sur du bon travail — le mode de défaillance de
+l'[ADR 0028](0028-cliquet-de-complexite-au-maximum-atteint.md).
+
+Le laisser dedans coûterait par ailleurs un plancher décoratif : `src/config/**` serait à **50 %**
+de statements, soit exactement le « 80 sur une couche mesurée à 99 » que cette ADR refuse.
+Exclu, le glob mesure `env.ts` et `require-env.ts`, **100 % sur les quatre métriques**, et le
+plancher est posé là.
+
+### `create-test-store.ts` déplacé, pas excepté
+
+Des deux voies ouvertes par [#114](https://github.com/yasakura/meal-planner/issues/114) — exclure
+ou déplacer — c'est le **déplacement** qui est retenu : `src/ui/store/create-test-store.ts` devient
+`src/test/create-test-store.ts`, son test le suit, et ses vingt importateurs sont tous des fichiers
+de test.
+
+Le motif n'est pas l'esthétique. Une exclusion aurait rendu le fichier invisible à la couverture
+**en le laissant utilisable depuis du code de production** ; le déplacement, lui, ajoute un
+garde-fou qui n'existait pas. `eslint-plugin-boundaries` classe `src/test/**` en élément `test`, et
+aucune policy n'autorise `ui` → `test`. Confronté en ajoutant l'import dans `src/ui/store/store.ts`
+(fichier de production, donc hors du `boundaries/ignore` sur `**/*.test.{ts,tsx}`) :
+
+```
+  89:33  error  There is no policy allowing dependencies from elements of type "ui" to elements of type "test"  boundaries/dependencies
+```
+
+Tant que le fichier vivait dans `src/ui/store/`, cet import-là était **légal**.
+
+### Ce que la mesure devient
+
+| glob            | avant (fichiers / stmts / branch / funcs / lines) | après                              |
+| --------------- | ------------------------------------------------- | ---------------------------------- |
+| `src/ui/**`     | 50 / 99.17 / 97.39 / 98.16 / 99.29                | 49 / 99.26 / 97.39 / 98.46 / 99.38 |
+| `src/config/**` | 2 / 12.50 / 50.00 / 0.00 / 12.50                  | 2 / 100 / 100 / 100 / 100          |
+
+Valeurs confirmées verbatim par vitest lui-même dans les messages de confrontation ci-dessous.
+`domain/` et `data/` sont inchangés, au fichier près.
+
+**Le cliquet de `src/ui/**` reste à 99 / 98 / 97 / 99, et ce n'est pas un oubli** : les quatre
+valeurs mesurées montent, mais aucune ne franchit l'entier suivant. La doctrine « niveau mesuré,
+arrondi vers le bas à l'entier » rend donc les mêmes chiffres. Ce qui change réellement, c'est la
+tolérance absolue, et il faut le dire :
+
+| métrique   |             tolérance avant | tolérance après |
+| ---------- | --------------------------: | --------------: |
+| statements |                           1 |               2 |
+| lines      |                           2 |               3 |
+| branches   |                           1 |               1 |
+| functions  | 0 — la première fait rougir |               1 |
+
+C'est le prix d'un plancher entier, et le seul moyen de le supprimer serait un plancher décimal
+(`99.26`, `98.46`…). Le sujet n'est pas tranché ici : il change la doctrine de l'ADR, pas
+l'application qu'on en fait.
+
+### Chaque glob touché, vu échouer par `npm run test`
+
+`src/config/**` est un **nouveau** glob : sans cette confrontation il serait indiscernable d'un glob
+mort. Il est à 100 %, donc confronté à `100.01`, comme `domain/` et `data/`.
+
+```
+> vitest run --coverage
+ Test Files  93 passed (93)
+      Tests  1129 passed (1129)
+ERROR: Coverage for lines (100%) does not meet "src/config/**" threshold (100.01%)
+ERROR: Coverage for functions (100%) does not meet "src/config/**" threshold (100.01%)
+ERROR: Coverage for statements (100%) does not meet "src/config/**" threshold (100.01%)
+ERROR: Coverage for branches (100%) does not meet "src/config/**" threshold (100.01%)
+EXIT=1
+```
+
+`src/ui/**` a changé de dénominateur ; son cliquet est reconfronté d'un cran au-dessus du réel.
+
+```
+ERROR: Coverage for lines (99.38%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for functions (98.46%) does not meet "src/ui/**" threshold (99%)
+ERROR: Coverage for statements (99.26%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for branches (97.39%) does not meet "src/ui/**" threshold (98%)
+EXIT=1
+```
+
+Contre-épreuve de l'exclusion, qui vaut confrontation de l'exclusion elle-même : `firebase.ts`
+réintégré, seuil `src/config/**` laissé à 100.
+
+```
+ERROR: Coverage for lines (50%) does not meet "src/config/**" threshold (100%)
+ERROR: Coverage for statements (50%) does not meet "src/config/**" threshold (100%)
+EXIT=1
+```
+
+Deux métriques seulement, et c'est le fait à retenir : `branches` et `functions` **restent vertes**,
+parce qu'après extraction `firebase.ts` n'en porte plus aucune. Une exclusion n'est jamais neutre
+sur les quatre métriques à la fois.
+
+Aux valeurs retenues : `npm run test` **exit 0**, **0 ligne `ERROR`**, 93 fichiers, 1129 tests.

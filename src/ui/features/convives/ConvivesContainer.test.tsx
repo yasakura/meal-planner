@@ -17,7 +17,7 @@ import {
 import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type AppDependencies } from '../../store/store';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { ConvivesContainer } from './ConvivesContainer';
 
 function renderWithStore(overrides?: Partial<AppDependencies>) {
