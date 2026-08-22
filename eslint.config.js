@@ -164,4 +164,8 @@ export default tseslint.config(
     plugins: { 'meal-planner': mealPlanner },
     rules: { 'meal-planner/no-comments': 'error' },
   },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: { complexity: ['error', 10] },
+  },
 );

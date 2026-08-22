@@ -69,3 +69,4 @@ Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou
 | [0025](0025-un-lien-quand-on-change-de-route.md)             | Un lien quand on change de route, un ton par rôle ARIA               | 2026-08-18 |
 | [0026](0026-regles-type-aware-et-runtime.md)                 | Trois règles type-aware, et ce qu'elles ignorent du runtime          | 2026-08-21 |
 | [0027](0027-le-cache-plutot-qu-un-faux-hors-ligne.md)        | `getDocsFromServer` n'attend pas : lire avec repli sur le cache      | 2026-08-21 |
+| [0028](0028-cliquet-de-complexite-au-maximum-atteint.md)     | Un cliquet de complexité, posé au maximum déjà atteint               | 2026-08-22 |
