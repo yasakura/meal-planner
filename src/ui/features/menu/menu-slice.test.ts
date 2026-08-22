@@ -1336,6 +1336,46 @@ describe('menu slice — consultation des menus enregistrés', () => {
     expect(consultation(store)).toBeNull();
   });
 
+  it('une relecture des titres qui échoue ne retire pas de l’écran le menu consulté', async () => {
+    let enPanne = false;
+    const store = createTestStore({
+      browseMenus: browsing(TROIS_SEMAINES, 1),
+      listRecipes: async () => {
+        if (enPanne) throw new Error('Boom firestore');
+        return twoRecipes();
+      },
+    });
+    await store.dispatch(menuScreenOpened());
+    expect(consultation(store)).not.toBeNull();
+
+    enPanne = true;
+    await store.dispatch(menuScreenOpened());
+
+    expect(selectMenu(store.getState()).status).toBe('error');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+    expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
+  });
+
+  it('un dépôt injoignable pendant la relecture des titres ne retire pas de l’écran le menu consulté', async () => {
+    let enPanne = false;
+    const store = createTestStore({
+      browseMenus: browsing(TROIS_SEMAINES, 1),
+      listRecipes: async () => {
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
+    });
+    await store.dispatch(menuScreenOpened());
+    expect(consultation(store)).not.toBeNull();
+
+    enPanne = true;
+    await store.dispatch(menuScreenOpened());
+
+    expect(selectMenu(store.getState()).status).toBe('unavailable');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+    expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
+  });
+
   it('le curseur déplacé revient au menu désigné par le domaine à chaque arrivée sur l’écran', async () => {
     const store = await storeEnConsultation(TROIS_SEMAINES, 1);
     store.dispatch(previousMenuSelected());

@@ -1116,6 +1116,27 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('une relecture des titres qui échoue au remontage laisse le menu consulté à l’écran, sur le MÊME store', async () => {
+    let enPanne = false;
+    const { store, unmount } = renderWithStore({
+      browseMenus: browsing(TROIS_SEMAINES, 1),
+      listRecipes: async () => {
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
+    });
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+
+    unmount();
+    enPanne = true;
+    renderOn(store);
+    await arriveeAchevee();
+
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ratatouille' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('les menus enregistrés illisibles : l’écran accuse les menus, et « Réessayer » les relit', async () => {
     const user = userEvent.setup();
     let enPanne = true;

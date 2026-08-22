@@ -87,7 +87,7 @@ function consultedMenuOf(state: MenuState): Menu {
 }
 
 function isConsulting(state: MenuState): boolean {
-  return state.mode === 'consultation' && state.index !== null && state.status === 'success';
+  return state.mode === 'consultation' && state.index !== null && state.recipes !== null;
 }
 
 function hasMenuToShow(state: MenuState): boolean {
