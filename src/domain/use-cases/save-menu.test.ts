@@ -26,8 +26,8 @@ function horlogeSurAujourdHui(): DriftingClock {
 }
 
 async function periodesConservees(menuRepository: MenuRepository): Promise<string[]> {
-  const dates = await menuRepository.findAllStartDates();
-  return dates.map(toIsoDate).sort();
+  const menus = await menuRepository.findAll();
+  return menus.map((menu) => toIsoDate(menu.dateDebut)).sort();
 }
 
 async function depotSeedeAvec(...menus: Menu[]): Promise<InMemoryMenuRepository> {
@@ -178,7 +178,7 @@ describe('saveMenuUseCase', () => {
     const depot = await depotSeedeAvec(menuCommencantLe(VEILLE_DE_LA_LIMITE_18_JUIN));
     const menuRepository: MenuRepository = {
       save: (menu) => depot.save(menu),
-      findAllStartDates: () => depot.findAllStartDates(),
+      findAll: () => depot.findAll(),
       remove: () => Promise.reject(new Error('purge indisponible')),
     };
     const saveMenu = saveMenuUseCase({ menuRepository, clock: horlogeSurAujourdHui() });
@@ -191,7 +191,7 @@ describe('saveMenuUseCase', () => {
     const depot = InMemoryMenuRepository.create();
     const menuRepository: MenuRepository = {
       save: (menu) => depot.save(menu),
-      findAllStartDates: () => Promise.reject(new Error('lecture indisponible')),
+      findAll: () => Promise.reject(new Error('lecture indisponible')),
       remove: (dateDebut) => depot.remove(dateDebut),
     };
     const saveMenu = saveMenuUseCase({ menuRepository, clock: horlogeSurAujourdHui() });
@@ -203,7 +203,7 @@ describe('saveMenuUseCase', () => {
   it('propage la panne du dépôt quand c’est l’ENREGISTREMENT lui-même qui échoue', async () => {
     const menuRepository: MenuRepository = {
       save: () => Promise.reject(new Error('boom')),
-      findAllStartDates: () => Promise.resolve([]),
+      findAll: () => Promise.resolve([]),
       remove: () => Promise.resolve(),
     };
     const saveMenu = saveMenuUseCase({ menuRepository, clock: horlogeSurAujourdHui() });

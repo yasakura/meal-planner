@@ -121,10 +121,10 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
   });
 
-  it('rend l’écran Menu sur la route /menu', () => {
+  it('rend l’écran Menu sur la route /menu', async () => {
     renderAppAt('/menu');
 
-    expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
   });
 
   it('affiche la navigation Recettes / Menu dans le chrome partagé', () => {

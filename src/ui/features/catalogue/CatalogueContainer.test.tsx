@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
@@ -10,7 +10,9 @@ import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../store/create-test-store';
+import { deferred } from '../../test-utils/deferred';
 import { CatalogueContainer } from './CatalogueContainer';
+import { selectCatalogue } from './catalogue-slice';
 
 const OFFLINE_NOTICE = 'Aucune connexion — le catalogue n’a pas pu être chargé.';
 
@@ -206,5 +208,90 @@ describe('CatalogueContainer', () => {
 
     expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
     expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
+  });
+  it('une relecture en vol au remontage garde les recettes à l’écran, sur le MÊME store', async () => {
+    const first = deferred<Recipe[]>();
+    const second = deferred<Recipe[]>();
+    let call = 0;
+    const listRecipes: ListRecipes = () => {
+      call += 1;
+      return call === 1 ? first.promise : second.promise;
+    };
+    const store = createTestStore({ listRecipes });
+    const { unmount } = renderWith(store);
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    first.resolve([RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()]);
+    expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
+
+    unmount();
+    renderWith(store);
+
+    expect(screen.getByText('Ratatouille')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('une relecture en échec au remontage garde les recettes à l’écran, sur le MÊME store', async () => {
+    const recipes = [RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()];
+    let call = 0;
+    const listRecipes: ListRecipes = async () => {
+      call += 1;
+      if (call === 1) return recipes;
+      throw new Error('Firestore down');
+    };
+    const store = createTestStore({ listRecipes });
+    const { unmount } = renderWith(store);
+    await screen.findByText('Ratatouille');
+
+    unmount();
+    renderWith(store);
+    await waitFor(() => expect(selectCatalogue(store.getState()).status).toBe('error'));
+
+    expect(screen.getByText('Ratatouille')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('une relecture sur dépôt injoignable garde les recettes à l’écran, sur le MÊME store', async () => {
+    const recipes = [RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()];
+    let call = 0;
+    const listRecipes: ListRecipes = async () => {
+      call += 1;
+      if (call === 1) return recipes;
+      throw RepositoryUnavailableError.create();
+    };
+    const store = createTestStore({ listRecipes });
+    const { unmount } = renderWith(store);
+    await screen.findByText('Ratatouille');
+
+    unmount();
+    renderWith(store);
+    await waitFor(() => expect(selectCatalogue(store.getState()).status).toBe('unavailable'));
+
+    expect(screen.getByText('Ratatouille')).toBeInTheDocument();
+    expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
+  });
+
+  it('un catalogue lu et vide reste l’écran vide pendant sa relecture, sur le MÊME store', async () => {
+    const first = deferred<Recipe[]>();
+    const second = deferred<Recipe[]>();
+    let call = 0;
+    const listRecipes: ListRecipes = () => {
+      call += 1;
+      return call === 1 ? first.promise : second.promise;
+    };
+    const store = createTestStore({ listRecipes });
+    const { unmount } = renderWith(store);
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    first.resolve([]);
+    expect(await screen.findByText(/aucune recette/i)).toBeInTheDocument();
+
+    unmount();
+    renderWith(store);
+
+    expect(screen.getByText(/aucune recette/i)).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

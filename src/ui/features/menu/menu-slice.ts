@@ -9,11 +9,22 @@ import {
 import { type Menu } from '../../../domain/entities/menu';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type Recipe } from '../../../domain/entities/recipe';
-import { type AppThunk, type AppThunkApiConfig, type RootState } from '../../store/store';
+import { type MenuNavigation } from '../../../domain/use-cases/browse-menus';
+import {
+  type AppThunk,
+  type AppThunkApiConfig,
+  type AppThunkAsync,
+  type RootState,
+} from '../../store/store';
+import { menuDays } from './menu-days';
+import { menuPeriodLabel } from './menu-period-label';
+import { type MenuDay } from './MenuScreen';
 
 export type MenuStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
 
 export type MenuSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'unconfirmed';
+
+export type MenuMode = 'consultation' | 'generation';
 
 export type MenuState = {
   status: MenuStatus;
@@ -27,6 +38,9 @@ export type MenuState = {
   latestRecipesRequestId: string | null;
   saveStatus: MenuSaveStatus;
   latestSaveRequestId: string | null;
+  mode: MenuMode;
+  menus: Menu[];
+  index: number | null;
 };
 
 const DEFAULT_DAYS = 14;
@@ -43,6 +57,9 @@ const initialState: MenuState = {
   latestRecipesRequestId: null,
   saveStatus: 'idle',
   latestSaveRequestId: null,
+  mode: 'consultation',
+  menus: [],
+  index: null,
 };
 
 export function menuInitialState(startDate: CalendarDate, today: CalendarDate): MenuState {
@@ -55,6 +72,26 @@ function startDateOf(state: MenuState): CalendarDate {
 
 function displayedMenuOf(state: MenuState): Menu {
   return state.menu as Menu;
+}
+
+function recipesOf(state: MenuState): Recipe[] {
+  return state.recipes as Recipe[];
+}
+
+function cursorOf(state: MenuState): number {
+  return state.index as number;
+}
+
+function consultedMenuOf(state: MenuState): Menu {
+  return state.menus[cursorOf(state)] as Menu;
+}
+
+function isConsulting(state: MenuState): boolean {
+  return state.mode === 'consultation' && state.index !== null && state.recipes !== null;
+}
+
+function hasMenuToShow(state: MenuState): boolean {
+  return state.menu !== null || state.menus.length > 0;
 }
 
 function startDateFloorOf(state: MenuState): CalendarDate {
@@ -70,6 +107,16 @@ function choisiOuRien(iso: string): CalendarDate | null {
 }
 
 export const NO_RECIPES = 'no-recipes';
+
+export const SAVED_MENUS_UNREADABLE = 'saved-menus-unreadable';
+
+const MENU_ABSENT = -1;
+
+export const loadSavedMenus = createAsyncThunk<MenuNavigation, void, AppThunkApiConfig>(
+  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
+  'menu/loadSavedMenus',
+  async (_arg, thunkApi) => thunkApi.extra.browseMenus(),
+);
 
 export const generateMenu = createAsyncThunk<
   { menu: Menu; recipes: Recipe[] },
@@ -94,7 +141,7 @@ export const refreshMenuRecipes = createAsyncThunk<Recipe[], void, AppThunkApiCo
   'menu/refreshMenuRecipes',
   async (_arg, thunkApi) => thunkApi.extra.listRecipes(),
   {
-    condition: (_arg, { getState }) => getState().menu.menu !== null,
+    condition: (_arg, { getState }) => hasMenuToShow(getState().menu),
   },
 );
 
@@ -103,6 +150,7 @@ export const saveMenu = createAsyncThunk<void, void, AppThunkApiConfig>(
   'menu/saveMenu',
   async (_arg, thunkApi) => {
     await thunkApi.extra.saveMenu({ menu: displayedMenuOf(thunkApi.getState().menu) });
+    await thunkApi.dispatch(loadSavedMenus());
   },
   {
     condition: (_arg, { getState }) => getState().menu.menu !== null,
@@ -112,6 +160,11 @@ export const saveMenu = createAsyncThunk<void, void, AppThunkApiConfig>(
 function restSaveLifecycle(state: MenuState): void {
   state.saveStatus = 'idle';
   state.latestSaveRequestId = null;
+}
+
+function forgetSettledSave(state: MenuState): void {
+  if (state.saveStatus === 'saving') return;
+  restSaveLifecycle(state);
 }
 
 // Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
@@ -133,11 +186,26 @@ const menuSlice = createSlice({
       state.startDate = choisi;
       state.startDateRefused = false;
     },
+    previousMenuSelected(state) {
+      state.index = cursorOf(state) - 1;
+      forgetSettledSave(state);
+    },
+    nextMenuSelected(state) {
+      state.index = cursorOf(state) + 1;
+      forgetSettledSave(state);
+    },
+    newMenuRequested(state) {
+      state.mode = 'generation';
+      state.status = 'idle';
+      state.menu = null;
+      state.error = null;
+      restSaveLifecycle(state);
+    },
     menuOpened(state, action: PayloadAction<CalendarDate>) {
       state.startDateFloor = action.payload;
       state.startDateRefused = false;
       if (state.status === 'unavailable' && state.menu === null) state.status = 'idle';
-      if (state.saveStatus !== 'saving') restSaveLifecycle(state);
+      forgetSettledSave(state);
     },
   },
   extraReducers: (builder) => {
@@ -184,15 +252,39 @@ const menuSlice = createSlice({
       .addCase(saveMenu.fulfilled, (state, action) => {
         if (action.meta.requestId !== state.latestSaveRequestId) return;
         state.saveStatus = 'saved';
+        const position = state.menus.findIndex(
+          (menu) => toIsoDate(menu.dateDebut) === toIsoDate(displayedMenuOf(state).dateDebut),
+        );
+        if (position === MENU_ABSENT) return;
+        state.mode = 'consultation';
+        state.index = position;
       })
       .addCase(saveMenu.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestSaveRequestId) return;
         state.saveStatus = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
+      })
+      .addCase(loadSavedMenus.pending, (state) => {
+        if (state.status !== 'idle') return;
+        state.status = 'loading';
+      })
+      .addCase(loadSavedMenus.fulfilled, (state, action) => {
+        state.menus = action.payload.menus as typeof state.menus;
+        state.index = action.payload.indexInitial;
+        if (state.status === 'loading' && !hasMenuToShow(state)) state.status = 'idle';
+      })
+      .addCase(loadSavedMenus.rejected, (state, action) => {
+        if (isRepositoryUnavailable(action.error)) {
+          state.status = 'unavailable';
+          return;
+        }
+        state.status = 'error';
+        state.error = SAVED_MENUS_UNREADABLE;
       });
   },
 });
 
-export const { menuWindowSelected } = menuSlice.actions;
+export const { menuWindowSelected, previousMenuSelected, nextMenuSelected, newMenuRequested } =
+  menuSlice.actions;
 
 const { menuOpened, startDateChosen } = menuSlice.actions;
 
@@ -202,9 +294,27 @@ export function menuStartDateSelected(iso: string): AppThunk {
   };
 }
 
-export function menuScreenOpened(): AppThunk {
-  return (dispatch, _getState, extra) => {
+function consultationLoaded(): AppThunkAsync {
+  return async (dispatch) => {
+    await dispatch(loadSavedMenus());
+    await dispatch(refreshMenuRecipes());
+  };
+}
+
+export function menuScreenOpened(): AppThunkAsync {
+  return async (dispatch, _getState, extra) => {
     dispatch(menuOpened(extra.clock.today()));
+    await dispatch(consultationLoaded());
+  };
+}
+
+export function menuRetried(): AppThunkAsync {
+  return async (dispatch, getState) => {
+    if (getState().menu.error === SAVED_MENUS_UNREADABLE) {
+      await dispatch(consultationLoaded());
+      return;
+    }
+    await dispatch(generateMenu(getState().menu.selectedDays));
   };
 }
 
@@ -235,3 +345,29 @@ export function menuSaveNoticeOf(state: MenuState): MenuSaveNotice | null {
 
 export const selectIsSaveInFlight = (state: RootState): boolean =>
   state.menu.saveStatus === 'saving';
+
+export type MenuConsultation = {
+  days: MenuDay[];
+  periodLabel: string;
+  previousDisabled: boolean;
+  nextDisabled: boolean;
+  saveNotice: MenuSaveNotice | null;
+};
+
+export function menuConsultationOf(state: MenuState): MenuConsultation | null {
+  if (!isConsulting(state)) return null;
+  const consulte = consultedMenuOf(state);
+  return {
+    days: menuDays(consulte, recipesOf(state)),
+    periodLabel: menuPeriodLabel(consulte),
+    previousDisabled: cursorOf(state) === 0,
+    nextDisabled: cursorOf(state) === state.menus.length - 1,
+    saveNotice: menuSaveNoticeOf(state),
+  };
+}
+
+export function menuErrorMessage(state: MenuState): string {
+  if (state.error === NO_RECIPES) return "Ajoute d'abord des recettes pour générer un menu.";
+  if (state.error === SAVED_MENUS_UNREADABLE) return 'Impossible de charger tes menus enregistrés.';
+  return 'Impossible de générer le menu.';
+}

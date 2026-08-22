@@ -23,6 +23,17 @@ export type MenuScreenProps =
       onGenerate: () => void;
     }
   | { status: 'loading' }
+  | {
+      status: 'consultation';
+      days: MenuDay[];
+      periodLabel: string;
+      previousDisabled: boolean;
+      nextDisabled: boolean;
+      saveNotice: MenuSaveNotice | null;
+      onPrevious: () => void;
+      onNext: () => void;
+      onNewMenu: () => void;
+    }
   | { status: 'error'; message: string; onRetry: () => void }
   | { status: 'unavailable'; message: string }
   | {
@@ -250,6 +261,36 @@ const ErrorMessage = styled.p`
   margin: 0;
 `;
 
+const PeriodBar = styled.header`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: ${space.md}px;
+  margin-bottom: ${space.lg}px;
+`;
+
+const PeriodLabel = styled.p`
+  font-family: ${fonts.serif};
+  font-size: 20px;
+  color: ${colors.ink};
+  margin: 0;
+`;
+
+const ArrowButton = styled.button`
+  background: none;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${tokens.radii.sm};
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 20px;
+  line-height: 1;
+  padding: ${space.xs}px ${space.md}px;
+
+  &:disabled {
+    opacity: 0.35;
+  }
+`;
+
 const DayList = styled.div`
   display: flex;
   flex-direction: column;
@@ -299,6 +340,30 @@ const SlotLink = styled(Link)`
   text-decoration: none;
 `;
 
+function Days({ days }: { days: MenuDay[] }) {
+  return (
+    <DayList>
+      {days.map((day) => (
+        <DaySection key={day.key}>
+          <DayLabel>{day.label}</DayLabel>
+          <SlotList>
+            {day.slots.map((slot) => (
+              <SlotItem key={slot.key}>
+                <CreneauLabel>{slot.creneauLabel}</CreneauLabel>
+                {slot.recipe === 'known' ? (
+                  <SlotLink to={slot.href}>{slot.title}</SlotLink>
+                ) : (
+                  <SlotTitle>{slot.title}</SlotTitle>
+                )}
+              </SlotItem>
+            ))}
+          </SlotList>
+        </DaySection>
+      ))}
+    </DayList>
+  );
+}
+
 function Body(props: MenuScreenProps) {
   switch (props.status) {
     case 'idle':
@@ -329,7 +394,7 @@ function Body(props: MenuScreenProps) {
               strokeLinecap="round"
             />
           </Spinner>
-          <StateText>Génération…</StateText>
+          <StateText>Chargement…</StateText>
         </CenteredState>
       );
     case 'error':
@@ -347,28 +412,39 @@ function Body(props: MenuScreenProps) {
           <StateText role="status">{props.message}</StateText>
         </CenteredState>
       );
+    case 'consultation':
+      return (
+        <>
+          <PeriodBar>
+            <ArrowButton
+              type="button"
+              aria-label="Menu précédent"
+              disabled={props.previousDisabled}
+              onClick={props.onPrevious}
+            >
+              ‹
+            </ArrowButton>
+            <PeriodLabel>{props.periodLabel}</PeriodLabel>
+            <ArrowButton
+              type="button"
+              aria-label="Menu suivant"
+              disabled={props.nextDisabled}
+              onClick={props.onNext}
+            >
+              ›
+            </ArrowButton>
+          </PeriodBar>
+          <SaveNoticeView notice={props.saveNotice} />
+          <Days days={props.days} />
+          <PrimaryButton type="button" onClick={props.onNewMenu}>
+            + Nouveau menu
+          </PrimaryButton>
+        </>
+      );
     case 'success':
       return (
         <>
-          <DayList>
-            {props.days.map((day) => (
-              <DaySection key={day.key}>
-                <DayLabel>{day.label}</DayLabel>
-                <SlotList>
-                  {day.slots.map((slot) => (
-                    <SlotItem key={slot.key}>
-                      <CreneauLabel>{slot.creneauLabel}</CreneauLabel>
-                      {slot.recipe === 'known' ? (
-                        <SlotLink to={slot.href}>{slot.title}</SlotLink>
-                      ) : (
-                        <SlotTitle>{slot.title}</SlotTitle>
-                      )}
-                    </SlotItem>
-                  ))}
-                </SlotList>
-              </DaySection>
-            ))}
-          </DayList>
+          <Days days={props.days} />
           <StartDatePicker
             value={props.startDateIso}
             min={props.startDateFloorIso}

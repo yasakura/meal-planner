@@ -113,13 +113,13 @@ describe('FirestoreRecipeRepository', () => {
         { id: 'recipe-b', data: () => recipeToDocument(recipeB) },
       ],
     };
-    mockedGetDocsFromServer.mockResolvedValue(snapshot as never);
+    mockedGetDocs.mockResolvedValue(snapshot as never);
     const repository = FirestoreRecipeRepository.create(db);
 
     const recipes = await repository.findAll();
 
     expect(mockedCollection).toHaveBeenCalledWith(db, 'recipes');
-    expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
+    expect(mockedGetDocs).toHaveBeenCalledWith(collectionRef);
     expect(recipes).toHaveLength(2);
     expect(recipes.map((r) => r.id)).toEqual(['recipe-a', 'recipe-b']);
     expect(recipes.map((r) => r.title)).toEqual(['Tarte', 'Soupe']);
@@ -127,7 +127,7 @@ describe('FirestoreRecipeRepository', () => {
 
   it("findAll propage l'erreur Firestore sans l'avaler", async () => {
     mockedCollection.mockReturnValue({} as never);
-    mockedGetDocsFromServer.mockRejectedValue(new Error('permission-denied'));
+    mockedGetDocs.mockRejectedValue(new Error('permission-denied'));
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findAll()).rejects.toThrow('permission-denied');
@@ -142,20 +142,20 @@ describe('FirestoreRecipeRepository', () => {
       id: 'recipe-42',
       data: () => recipeToDocument(recipe),
     };
-    mockedGetDocFromServer.mockResolvedValue(snapshot as never);
+    mockedGetDoc.mockResolvedValue(snapshot as never);
     const repository = FirestoreRecipeRepository.create(db);
 
     const found = await repository.findById('recipe-42');
 
     expect(mockedDoc).toHaveBeenCalledWith(db, 'recipes', 'recipe-42');
-    expect(mockedGetDocFromServer).toHaveBeenCalledWith(docRef);
+    expect(mockedGetDoc).toHaveBeenCalledWith(docRef);
     expect(found?.id).toBe('recipe-42');
     expect(found?.title).toBe('Tarte');
   });
 
   it("findById retourne undefined quand le document n'existe pas", async () => {
     mockedDoc.mockReturnValue({} as never);
-    mockedGetDocFromServer.mockResolvedValue({ exists: () => false } as never);
+    mockedGetDoc.mockResolvedValue({ exists: () => false } as never);
     const repository = FirestoreRecipeRepository.create(db);
 
     expect(await repository.findById('inexistant')).toBeUndefined();
@@ -163,27 +163,28 @@ describe('FirestoreRecipeRepository', () => {
 
   it("findById propage l'erreur Firestore sans l'avaler", async () => {
     mockedDoc.mockReturnValue({} as never);
-    mockedGetDocFromServer.mockRejectedValue(new Error('permission-denied'));
+    mockedGetDoc.mockRejectedValue(new Error('permission-denied'));
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findById('recipe-42')).rejects.toThrow('permission-denied');
   });
 
-  it('findAll interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
+  it("findAll accepte le repli sur le cache Firestore, et n'exige jamais le serveur", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
+    mockedGetDocs.mockResolvedValue({ docs: [] } as never);
     mockedGetDocsFromServer.mockResolvedValue({ docs: [] } as never);
     const repository = FirestoreRecipeRepository.create(db);
 
     await repository.findAll();
 
-    expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
-    expect(mockedGetDocs).not.toHaveBeenCalled();
+    expect(mockedGetDocs).toHaveBeenCalledWith(collectionRef);
+    expect(mockedGetDocsFromServer).not.toHaveBeenCalled();
   });
 
   it('findAll traduit une lecture impossible faute de réseau en indisponibilité de dépôt', async () => {
     mockedCollection.mockReturnValue({} as never);
-    mockedGetDocsFromServer.mockRejectedValue(firestoreError('unavailable'));
+    mockedGetDocs.mockRejectedValue(firestoreError('unavailable'));
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
@@ -192,27 +193,28 @@ describe('FirestoreRecipeRepository', () => {
   it("findAll ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
     mockedCollection.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
-    mockedGetDocsFromServer.mockRejectedValue(refus);
+    mockedGetDocs.mockRejectedValue(refus);
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findAll()).rejects.toBe(refus);
   });
 
-  it('findById interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
+  it("findById accepte le repli sur le cache Firestore, et n'exige jamais le serveur", async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
+    mockedGetDoc.mockResolvedValue({ exists: () => false } as never);
     mockedGetDocFromServer.mockResolvedValue({ exists: () => false } as never);
     const repository = FirestoreRecipeRepository.create(db);
 
     await repository.findById('recipe-42');
 
-    expect(mockedGetDocFromServer).toHaveBeenCalledWith(docRef);
-    expect(mockedGetDoc).not.toHaveBeenCalled();
+    expect(mockedGetDoc).toHaveBeenCalledWith(docRef);
+    expect(mockedGetDocFromServer).not.toHaveBeenCalled();
   });
 
   it('findById traduit une lecture impossible faute de réseau en indisponibilité de dépôt', async () => {
     mockedDoc.mockReturnValue({} as never);
-    mockedGetDocFromServer.mockRejectedValue(firestoreError('unavailable'));
+    mockedGetDoc.mockRejectedValue(firestoreError('unavailable'));
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findById('recipe-42')).rejects.toSatisfy(isRepositoryUnavailable);
@@ -221,9 +223,33 @@ describe('FirestoreRecipeRepository', () => {
   it("findById ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
     mockedDoc.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
-    mockedGetDocFromServer.mockRejectedValue(refus);
+    mockedGetDoc.mockRejectedValue(refus);
     const repository = FirestoreRecipeRepository.create(db);
 
     await expect(repository.findById('recipe-42')).rejects.toBe(refus);
   });
+
+  it(
+    "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedCollection.mockReturnValue({} as never);
+      mockedGetDocs.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreRecipeRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it(
+    "findById signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedGetDoc.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreRecipeRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findById('recipe-42')).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
 });

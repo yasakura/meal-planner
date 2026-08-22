@@ -82,13 +82,13 @@ describe('FirestoreConviveRepository', () => {
         { id: 'convive-b', data: () => conviveToDocument(conviveB) },
       ],
     };
-    mockedGetDocsFromServer.mockResolvedValue(snapshot as never);
+    mockedGetDocs.mockResolvedValue(snapshot as never);
     const repository = FirestoreConviveRepository.create(db);
 
     const convives = await repository.findAll();
 
     expect(mockedCollection).toHaveBeenCalledWith(db, 'convives');
-    expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
+    expect(mockedGetDocs).toHaveBeenCalledWith(collectionRef);
     expect(convives).toHaveLength(2);
     expect(convives.map((c) => c.id)).toEqual(['convive-a', 'convive-b']);
     expect(convives.map((c) => c.name)).toEqual(['Aurélie', 'Benoît']);
@@ -96,27 +96,28 @@ describe('FirestoreConviveRepository', () => {
 
   it("findAll propage l'erreur Firestore sans l'avaler", async () => {
     mockedCollection.mockReturnValue({} as never);
-    mockedGetDocsFromServer.mockRejectedValue(new Error('permission-denied'));
+    mockedGetDocs.mockRejectedValue(new Error('permission-denied'));
     const repository = FirestoreConviveRepository.create(db);
 
     await expect(repository.findAll()).rejects.toThrow('permission-denied');
   });
 
-  it('findAll interroge le serveur et ne se rabat jamais sur le cache Firestore', async () => {
+  it("findAll accepte le repli sur le cache Firestore, et n'exige jamais le serveur", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
+    mockedGetDocs.mockResolvedValue({ docs: [] } as never);
     mockedGetDocsFromServer.mockResolvedValue({ docs: [] } as never);
     const repository = FirestoreConviveRepository.create(db);
 
     await repository.findAll();
 
-    expect(mockedGetDocsFromServer).toHaveBeenCalledWith(collectionRef);
-    expect(mockedGetDocs).not.toHaveBeenCalled();
+    expect(mockedGetDocs).toHaveBeenCalledWith(collectionRef);
+    expect(mockedGetDocsFromServer).not.toHaveBeenCalled();
   });
 
   it('traduit une lecture impossible faute de réseau en indisponibilité de dépôt', async () => {
     mockedCollection.mockReturnValue({} as never);
-    mockedGetDocsFromServer.mockRejectedValue(firestoreError('unavailable'));
+    mockedGetDocs.mockRejectedValue(firestoreError('unavailable'));
     const repository = FirestoreConviveRepository.create(db);
 
     await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
@@ -125,7 +126,7 @@ describe('FirestoreConviveRepository', () => {
   it("ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
     mockedCollection.mockReturnValue({} as never);
     const refus = firestoreError('permission-denied');
-    mockedGetDocsFromServer.mockRejectedValue(refus);
+    mockedGetDocs.mockRejectedValue(refus);
     const repository = FirestoreConviveRepository.create(db);
 
     await expect(repository.findAll()).rejects.toBe(refus);
@@ -135,10 +136,10 @@ describe('FirestoreConviveRepository', () => {
     mockedCollection.mockReturnValue({} as never);
     const repository = FirestoreConviveRepository.create(db);
 
-    mockedGetDocsFromServer.mockRejectedValue('boom');
+    mockedGetDocs.mockRejectedValue('boom');
     await expect(repository.findAll()).rejects.toBe('boom');
 
-    mockedGetDocsFromServer.mockRejectedValue(null);
+    mockedGetDocs.mockRejectedValue(null);
     await expect(repository.findAll()).rejects.toBeNull();
   });
 
@@ -351,4 +352,16 @@ describe('FirestoreConviveRepository', () => {
       vi.useRealTimers();
     }
   });
+
+  it(
+    "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
+    { timeout: 1000 },
+    async () => {
+      mockedCollection.mockReturnValue({} as never);
+      mockedGetDocs.mockReturnValue(new Promise(() => {}) as never);
+      const repository = FirestoreConviveRepository.create(db, { readTimeoutMs: 10 });
+
+      await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
 });

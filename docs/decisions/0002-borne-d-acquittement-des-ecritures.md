@@ -18,8 +18,8 @@ comportement : `await setDoc(...)` a exactement l'air d'un appel réseau ordinai
 
 ## Décision
 
-Toute **écriture** passe par `withAckDeadline(promesse, ackTimeoutMs)`
-(`src/data/firestore-ack-deadline.ts`) : au-delà de la borne, la promesse est rejetée avec un
+Toute **écriture** passe par `withServerDeadline(promesse, ackTimeoutMs)`
+(`src/data/firestore-server-deadline.ts`) : au-delà de la borne, la promesse est rejetée avec un
 `RepositoryUnavailableError`, que l'UI traduit en « non acquittée »
 ([ADR 0001](0001-trois-issues-pour-une-ecriture.md)).
 
@@ -28,8 +28,9 @@ Toute **écriture** passe par `withAckDeadline(promesse, ackTimeoutMs)`
 - Le module vit **au-dessus des adapters**, pas dans l'un d'eux : le défaut est celui du **SDK**,
   pas celui d'une collection. Avec un point de passage par adapter, un écran finirait par avouer
   son ignorance là où un autre se tairait indéfiniment.
-- Les **lectures** ne passent pas par là : `getDocsFromServer` et `getDocFromServer` rejettent
-  correctement hors ligne ([ADR 0003](0003-lectures-serveur-plutot-que-cache.md)).
+- Les **lectures** passent par le même module, avec une borne propre — 10 000 ms contre 5 000 ms
+  pour les écritures : une lecture qui rampe doit avoir plus de patience qu'une écriture en file
+  locale ([ADR 0027](0027-le-cache-plutot-qu-un-faux-hors-ligne.md)).
 
 ## La mesure
 

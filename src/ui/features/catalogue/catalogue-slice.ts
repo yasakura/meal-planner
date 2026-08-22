@@ -11,6 +11,7 @@ export type CatalogueState = {
   recipes: Recipe[];
   error: string | null;
   latestRequestId: string | null;
+  hasLoadedOnce: boolean;
 };
 
 const initialState: CatalogueState = {
@@ -18,6 +19,7 @@ const initialState: CatalogueState = {
   recipes: [],
   error: null,
   latestRequestId: null,
+  hasLoadedOnce: false,
 };
 
 export const loadCatalogue = createAsyncThunk<Recipe[], void, AppThunkApiConfig>(
@@ -46,6 +48,7 @@ const catalogueSlice = createSlice({
         state.status = 'success';
         state.recipes = action.payload as typeof state.recipes;
         state.error = null;
+        state.hasLoadedOnce = true;
       })
       .addCase(loadCatalogue.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestRequestId) return;
@@ -63,3 +66,21 @@ const catalogueSlice = createSlice({
 export const catalogueReducer = catalogueSlice.reducer;
 
 export const selectCatalogue = (state: RootState): CatalogueState => state.catalogue;
+
+export type CatalogueView =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'unavailable' }
+  | { status: 'empty' }
+  | { status: 'loaded'; recipes: Recipe[] };
+
+export function catalogueViewOf(state: CatalogueState): CatalogueView {
+  if (state.hasLoadedOnce) {
+    return state.recipes.length === 0
+      ? { status: 'empty' }
+      : { status: 'loaded', recipes: state.recipes };
+  }
+  if (state.status === 'unavailable') return { status: 'unavailable' };
+  if (state.status === 'error') return { status: 'error' };
+  return { status: 'loading' };
+}

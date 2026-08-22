@@ -2,11 +2,12 @@ import { RepositoryUnavailableError } from '../domain/errors/repository-unavaila
 import { asDomainFailure } from './firestore-failure';
 
 export const DEFAULT_ACK_TIMEOUT_MS = 5000;
+export const DEFAULT_READ_TIMEOUT_MS = 10000;
 
-export function withAckDeadline<T>(write: Promise<T>, ackTimeoutMs: number): Promise<T> {
+export function withServerDeadline<T>(roundTrip: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const deadline = setTimeout(() => reject(RepositoryUnavailableError.create()), ackTimeoutMs);
-    write
+    const deadline = setTimeout(() => reject(RepositoryUnavailableError.create()), timeoutMs);
+    roundTrip
       .then(resolve, (error: unknown) => reject(asDomainFailure(error)))
       .finally(() => clearTimeout(deadline));
   });

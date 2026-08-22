@@ -8,10 +8,22 @@ import { createTestStore } from '../../store/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import {
   catalogueReducer,
+  catalogueViewOf,
   loadCatalogue,
   selectCatalogue,
   type CatalogueState,
 } from './catalogue-slice';
+
+function catalogueState(overrides: Partial<CatalogueState>): CatalogueState {
+  return {
+    status: 'idle',
+    recipes: [],
+    error: null,
+    latestRequestId: null,
+    hasLoadedOnce: false,
+    ...overrides,
+  };
+}
 
 function twoRecipes(): Recipe[] {
   return [
@@ -29,6 +41,7 @@ describe('catalogue slice', () => {
       recipes: [],
       error: null,
       latestRequestId: null,
+      hasLoadedOnce: false,
     });
   });
 
@@ -44,6 +57,7 @@ describe('catalogue slice', () => {
       recipes,
       error: null,
       latestRequestId: loaded.meta.requestId,
+      hasLoadedOnce: true,
     });
   });
 
@@ -65,6 +79,7 @@ describe('catalogue slice', () => {
       recipes,
       error: 'Firestore indisponible',
       latestRequestId: failed.meta.requestId,
+      hasLoadedOnce: true,
     });
   });
 
@@ -79,18 +94,20 @@ describe('catalogue slice', () => {
       recipes: [],
       error: null,
       latestRequestId: inFlight.requestId,
+      hasLoadedOnce: false,
     });
   });
 
   it('loadCatalogue réussi depuis un état en erreur efface l’erreur périmée', () => {
     const stale = RecipeBuilder.aRecipe().withId('stale').build();
     const fresh = twoRecipes();
-    const errored: CatalogueState = {
+    const errored = catalogueState({
       status: 'error',
       error: 'Firestore indisponible',
       recipes: [stale],
       latestRequestId: 'req-1',
-    };
+      hasLoadedOnce: true,
+    });
 
     const next = catalogueReducer(errored, loadCatalogue.fulfilled(fresh, 'req-1', undefined));
 
@@ -99,17 +116,19 @@ describe('catalogue slice', () => {
       recipes: fresh,
       error: null,
       latestRequestId: 'req-1',
+      hasLoadedOnce: true,
     });
   });
 
   it('un rechargement (loadCatalogue.pending) efface l’erreur périmée et conserve les recettes', () => {
     const loaded = twoRecipes();
-    const errored: CatalogueState = {
+    const errored = catalogueState({
       status: 'error',
       error: 'Firestore indisponible',
       recipes: loaded,
       latestRequestId: null,
-    };
+      hasLoadedOnce: true,
+    });
 
     const next = catalogueReducer(errored, loadCatalogue.pending('req-1', undefined));
 
@@ -118,6 +137,7 @@ describe('catalogue slice', () => {
       recipes: loaded,
       error: null,
       latestRequestId: 'req-1',
+      hasLoadedOnce: true,
     });
   });
 
@@ -132,17 +152,19 @@ describe('catalogue slice', () => {
       recipes: [],
       error: null,
       latestRequestId: refused.meta.requestId,
+      hasLoadedOnce: false,
     });
   });
 
   it('un dépôt injoignable efface l’erreur périmée et conserve les recettes déjà chargées', () => {
     const loaded = twoRecipes();
-    const errored: CatalogueState = {
+    const errored = catalogueState({
       status: 'error',
       error: 'Firestore indisponible',
       recipes: loaded,
       latestRequestId: 'req-1',
-    };
+      hasLoadedOnce: true,
+    });
 
     const next = catalogueReducer(
       errored,
@@ -154,6 +176,7 @@ describe('catalogue slice', () => {
       recipes: loaded,
       error: null,
       latestRequestId: 'req-1',
+      hasLoadedOnce: true,
     });
   });
 
@@ -178,6 +201,7 @@ describe('catalogue slice', () => {
       recipes: fresh,
       error: null,
       latestRequestId: current.requestId,
+      hasLoadedOnce: true,
     });
   });
 
@@ -203,6 +227,96 @@ describe('catalogue slice', () => {
       recipes: fresh,
       error: null,
       latestRequestId: current.requestId,
+      hasLoadedOnce: true,
     });
+  });
+});
+
+describe('catalogueViewOf', () => {
+  it('tant qu’aucune lecture n’a abouti, une lecture en vol donne un écran de chargement', () => {
+    const view = catalogueViewOf(catalogueState({ status: 'loading' }));
+
+    expect(view).toEqual({ status: 'loading' });
+  });
+
+  it('tant qu’aucune lecture n’a abouti, un échec donne un constat d’échec', () => {
+    const view = catalogueViewOf(catalogueState({ status: 'error', error: 'Firestore down' }));
+
+    expect(view).toEqual({ status: 'error' });
+  });
+
+  it('tant qu’aucune lecture n’a abouti, un dépôt injoignable donne le constat hors-ligne', () => {
+    const view = catalogueViewOf(catalogueState({ status: 'unavailable' }));
+
+    expect(view).toEqual({ status: 'unavailable' });
+  });
+
+  it('une lecture aboutie affiche les recettes lues', () => {
+    const recipes = twoRecipes();
+
+    const view = catalogueViewOf(
+      catalogueState({ status: 'success', recipes, hasLoadedOnce: true }),
+    );
+
+    expect(view).toEqual({ status: 'loaded', recipes });
+  });
+
+  it('une lecture aboutie sans aucune recette est un catalogue vide, pas une lecture manquante', () => {
+    const view = catalogueViewOf(
+      catalogueState({ status: 'success', recipes: [], hasLoadedOnce: true }),
+    );
+
+    expect(view).toEqual({ status: 'empty' });
+  });
+
+  it('une relecture en vol garde les recettes déjà lues, elle ne redevient pas un chargement', () => {
+    const recipes = twoRecipes();
+
+    const view = catalogueViewOf(
+      catalogueState({ status: 'loading', recipes, hasLoadedOnce: true }),
+    );
+
+    expect(view).toEqual({ status: 'loaded', recipes });
+  });
+
+  it('une relecture en échec garde les recettes déjà lues, elle ne devient pas un constat d’échec', () => {
+    const recipes = twoRecipes();
+
+    const view = catalogueViewOf(
+      catalogueState({ status: 'error', error: 'Firestore down', recipes, hasLoadedOnce: true }),
+    );
+
+    expect(view).toEqual({ status: 'loaded', recipes });
+  });
+
+  it('une relecture sur dépôt injoignable garde les recettes déjà lues, elle n’annonce pas l’absence de connexion', () => {
+    const recipes = twoRecipes();
+
+    const view = catalogueViewOf(
+      catalogueState({ status: 'unavailable', recipes, hasLoadedOnce: true }),
+    );
+
+    expect(view).toEqual({ status: 'loaded', recipes });
+  });
+
+  it('un catalogue lu et vide reste vide pendant sa relecture, il ne redevient pas un chargement', () => {
+    const view = catalogueViewOf(
+      catalogueState({ status: 'loading', recipes: [], hasLoadedOnce: true }),
+    );
+
+    expect(view).toEqual({ status: 'empty' });
+  });
+
+  it('un catalogue lu et vide reste vide quand sa relecture échoue', () => {
+    const view = catalogueViewOf(
+      catalogueState({
+        status: 'error',
+        error: 'Firestore down',
+        recipes: [],
+        hasLoadedOnce: true,
+      }),
+    );
+
+    expect(view).toEqual({ status: 'empty' });
   });
 });

@@ -20,18 +20,18 @@ function menuCommencantLe(dateDebut: CalendarDate, recipeId = 'recipe-curry'): M
 }
 
 describe('E2eMenuRepository', () => {
-  it('démarre sans aucune période enregistrée', async () => {
+  it('démarre sans aucun menu enregistré', async () => {
     const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
 
-    expect(await repository.findAllStartDates()).toEqual([]);
+    expect(await repository.findAll()).toEqual([]);
   });
 
-  it('enregistre un menu et rend sa période', async () => {
+  it('enregistre un menu et le rend', async () => {
     const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
 
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
 
-    expect(await repository.findAllStartDates()).toEqual([LUNDI_5_JANVIER]);
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
   });
 
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
@@ -41,10 +41,10 @@ describe('E2eMenuRepository', () => {
     await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
     await repository.save(menuCommencantLe(LUNDI_2_FEVRIER));
 
-    expect(await repository.findAllStartDates()).toEqual([
-      LUNDI_2_FEVRIER,
-      LUNDI_19_JANVIER,
-      LUNDI_5_JANVIER,
+    expect(await repository.findAll()).toEqual([
+      menuCommencantLe(LUNDI_2_FEVRIER),
+      menuCommencantLe(LUNDI_19_JANVIER),
+      menuCommencantLe(LUNDI_5_JANVIER),
     ]);
   });
 
@@ -56,7 +56,9 @@ describe('E2eMenuRepository', () => {
       menuCommencantLe(createCalendarDate({ year: 2026, month: 1, day: 5 }), 'recipe-gratin'),
     );
 
-    expect(await repository.findAllStartDates()).toEqual([LUNDI_5_JANVIER]);
+    expect(await repository.findAll()).toEqual([
+      menuCommencantLe(LUNDI_5_JANVIER, 'recipe-gratin'),
+    ]);
   });
 
   it('efface la période demandée, et elle seule', async () => {
@@ -66,7 +68,7 @@ describe('E2eMenuRepository', () => {
 
     await repository.remove(createCalendarDate({ year: 2026, month: 1, day: 5 }));
 
-    expect(await repository.findAllStartDates()).toEqual([LUNDI_19_JANVIER]);
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_19_JANVIER)]);
   });
 
   it('efface une période vide en succès silencieux : le port est idempotent', async () => {
@@ -74,16 +76,16 @@ describe('E2eMenuRepository', () => {
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
 
     await expect(repository.remove(LUNDI_2_FEVRIER)).resolves.toBeUndefined();
-    expect(await repository.findAllStartDates()).toEqual([LUNDI_5_JANVIER]);
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
   });
 
-  it('rejette findAllStartDates avec RepositoryUnavailableError quand les lectures sont en panne', async () => {
+  it('rejette findAll avec RepositoryUnavailableError quand les lectures sont en panne', async () => {
     const failures = E2eFailureSwitch.create();
     const repository = E2eMenuRepository.startingEmpty(failures);
 
     failures.failReads();
 
-    await expect(repository.findAllStartDates()).rejects.toBeInstanceOf(RepositoryUnavailableError);
+    await expect(repository.findAll()).rejects.toBeInstanceOf(RepositoryUnavailableError);
   });
 
   it('rejette save quand les écritures sont en panne, et n’enregistre rien', async () => {
@@ -96,7 +98,7 @@ describe('E2eMenuRepository', () => {
       RepositoryUnavailableError,
     );
     failures.restore();
-    expect(await repository.findAllStartDates()).toEqual([]);
+    expect(await repository.findAll()).toEqual([]);
   });
 
   it('rejette remove quand les écritures sont en panne, et n’efface rien', async () => {
@@ -110,6 +112,6 @@ describe('E2eMenuRepository', () => {
       RepositoryUnavailableError,
     );
     failures.restore();
-    expect(await repository.findAllStartDates()).toEqual([LUNDI_5_JANVIER]);
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
   });
 });

@@ -17,11 +17,11 @@ export function saveMenuUseCase(deps: {
     await deps.menuRepository.save(menu);
     const limite = subtractMonths(deps.clock.today(), MOIS_DE_RETENTION);
     try {
-      const periodes = await deps.menuRepository.findAllStartDates();
+      const menus = await deps.menuRepository.findAll();
       await Promise.all(
-        periodes
-          .filter((periode) => isBefore(periode, limite))
-          .map((periode) => deps.menuRepository.remove(periode)),
+        menus
+          .filter((ancien) => isBefore(ancien.dateDebut, limite))
+          .map((ancien) => deps.menuRepository.remove(ancien.dateDebut)),
       );
       // eslint-disable-next-line no-empty
     } catch {}

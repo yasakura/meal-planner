@@ -142,6 +142,73 @@ test.describe('Menu', () => {
     await expect(page.getByText('Menu enregistré')).toHaveCount(1);
   });
 
+  test('deux menus enregistrés se consultent par les flèches, verrouillées à chaque borne', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    const periode = page.locator('main header p');
+    const flecheGauche = page.getByRole('button', { name: 'Menu précédent' });
+    const flecheDroite = page.getByRole('button', { name: 'Menu suivant' });
+    await expect(periode).toHaveText('5 – 18 janv.');
+    await expect(flecheGauche).toBeDisabled();
+    await expect(flecheDroite).toBeDisabled();
+
+    await page.getByRole('button', { name: '+ Nouveau menu' }).click();
+    await page.getByLabel('Début du menu').fill('2026-02-02');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    await expect(periode).toHaveText('2 – 15 févr.');
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(flecheDroite).toBeDisabled();
+    await expect(flecheGauche).toBeEnabled();
+
+    await flecheGauche.click();
+
+    await expect(periode).toHaveText('5 – 18 janv.');
+    await expect(
+      page.locator('main section').first().getByRole('heading', { level: 2 }),
+    ).toHaveText('lundi 5 janvier');
+    await expect(flecheGauche).toBeDisabled();
+    await expect(flecheDroite).toBeEnabled();
+
+    await flecheDroite.click();
+
+    await expect(periode).toHaveText('2 – 15 févr.');
+    await expect(
+      page.locator('main section').first().getByRole('heading', { level: 2 }),
+    ).toHaveText('lundi 2 février');
+  });
+
+  test('le menu enregistré se consulte en lecture seule, et se retrouve au retour sur l’onglet', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await expect(page.getByLabel('Début du menu')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Enregistrer' })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    await expect(page.getByText('5 – 18 janv.')).toHaveCount(1);
+    await expect(page.getByText('Menu enregistré')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Enregistrer' })).toHaveCount(0);
+    await expect(page.getByLabel('Début du menu')).toHaveCount(0);
+    await expect(page.locator('main section')).toHaveCount(14);
+
+    await page.click('nav a[href="/catalogue"]');
+    await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
+    await page.click('nav a[href="/menu"]');
+
+    await expect(page.getByText('5 – 18 janv.')).toHaveCount(1);
+    await expect(page.getByText('Menu enregistré')).toHaveCount(0);
+    await expect(page.locator('main section')).toHaveCount(14);
+  });
+
   test('hors ligne, l’enregistrement n’est pas confirmé ; le réseau rétabli, il l’est', async ({
     page,
   }) => {

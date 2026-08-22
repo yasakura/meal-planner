@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { CATALOGUE_UNAVAILABLE_NOTICE } from './catalogue-notice';
-import { loadCatalogue, selectCatalogue } from './catalogue-slice';
+import { catalogueViewOf, loadCatalogue, selectCatalogue } from './catalogue-slice';
 import {
   RecipeListScreen,
   type RecipeListItem,
@@ -17,7 +17,8 @@ function toItem(recipe: Recipe): RecipeListItem {
 }
 
 export function CatalogueContainer() {
-  const { status, recipes } = useAppSelector(selectCatalogue);
+  const catalogue = useAppSelector(selectCatalogue);
+  const view = catalogueViewOf(catalogue);
   const dispatch = useAppDispatch();
 
   useEffect(() => {
@@ -25,22 +26,21 @@ export function CatalogueContainer() {
   }, [dispatch]);
 
   let props: RecipeListScreenProps;
-  if (status === 'unavailable') {
+  if (view.status === 'unavailable') {
     props = {
       status: 'unavailable',
       message: CATALOGUE_UNAVAILABLE_NOTICE,
     };
-  } else if (status === 'error') {
+  } else if (view.status === 'error') {
     props = {
       status: 'error',
       message: 'Impossible de charger le catalogue.',
       onRetry: () => dispatch(loadCatalogue()),
     };
-  } else if (status === 'success') {
-    props =
-      recipes.length === 0
-        ? { status: 'empty' }
-        : { status: 'loaded', recipes: recipes.map(toItem) };
+  } else if (view.status === 'loaded') {
+    props = { status: 'loaded', recipes: view.recipes.map(toItem) };
+  } else if (view.status === 'empty') {
+    props = { status: 'empty' };
   } else {
     props = { status: 'loading' };
   }
