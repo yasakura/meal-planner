@@ -1,5 +1,6 @@
-// Outil de dev : RESET de la base dev — vide la collection `recipes` puis insère 20 recettes simples.
-// Usage : `npm run seed:dev`  (ou `node scripts/seed-recipes.mjs`)
+// Outil de dev : RESET de la base dev — vide les collections `recipes` et `convives`, puis insère
+// 20 recettes simples et les 4 convives du foyer de dev.
+// Usage : `npm run seed:dev`  (ou `node scripts/seed-dev.mjs`)
 //
 // - Lit la config Firebase depuis `.env.dev` (jamais `.env.prod`).
 // - Garde-fou : refuse si le projet ciblé ne ressemble pas à un projet `dev`.
@@ -160,6 +161,9 @@ const RECIPES = [
   ], instructions: 'Râper les pommes de terre, mélanger œufs + farine, poêler en galettes.' },
 ];
 
+// --- Convives du foyer de dev (forme du document : cf. `documentToConvive`, convive-mapper.ts) --
+const CONVIVES = [{ name: 'Camille' }, { name: 'Naïm' }, { name: 'Salomé' }, { name: 'Théo' }];
+
 async function main() {
   const env = loadDevEnv();
   const projectId = env.VITE_FIREBASE_PROJECT_ID;
@@ -205,9 +209,22 @@ async function main() {
     console.log(`  + ${r.title}`);
   }
 
-  // 3) Vérification.
+  // 3) Vider la collection `convives`.
+  const convivesSnap = await getDocs(collection(db, 'convives'));
+  console.log(`Suppression : ${convivesSnap.size} convive(s) existant(s)…`);
+  for (const d of convivesSnap.docs) await deleteDoc(d.ref);
+
+  // 4) Insérer les convives.
+  console.log(`Insertion : ${CONVIVES.length} convives…`);
+  for (const c of CONVIVES) {
+    await addDoc(collection(db, 'convives'), c);
+    console.log(`  + ${c.name}`);
+  }
+
+  // 5) Vérification.
   const after = await getDocs(collection(db, 'recipes'));
-  console.log(`\nOK — ${after.size} recette(s) en base.`);
+  const convivesAfter = await getDocs(collection(db, 'convives'));
+  console.log(`\nOK — ${after.size} recette(s) et ${convivesAfter.size} convive(s) en base.`);
   process.exit(0);
 }
 
