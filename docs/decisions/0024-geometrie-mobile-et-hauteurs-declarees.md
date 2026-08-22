@@ -60,7 +60,7 @@ de la **police effectivement résolue**, et donc de la machine.
    `obstacle: null` quand le point tombe sur la cible ou l'un de ses descendants — une icône, un
    `<span>` — et **nomme le coupable** sinon, pour qu'un échec dise qui masquait quoi.
 
-## Gager une mesure d'atteignabilité — `toBeVisible()` oui, `toBeEnabled()` non
+## Gager une mesure géométrique — `toBeVisible()` oui, `toBeEnabled()` non
 
 `elementFromPoint` sur une boîte de taille **nulle** rend un obstacle tout aussi nul : le scénario
 passerait sans avoir rien vu. Toute mesure a donc besoin d'un **gage** que la boîte est non vide. Le
@@ -78,6 +78,25 @@ D'où la règle : le gage est **à la charge de l'appelant**, et il se décide a
 qu'il ne peut pas savoir lequel des deux cas s'applique chez son appelant. Les assertions de taille
 qui subsistent dans la suite ne sont donc ni à généraliser par symétrie, ni à supprimer par
 symétrie : chacune se juge sur le gage qui la précède.
+
+**La dichotomie ne s'arrête pas à `attendreAtteignable` : elle vaut pour TOUTE mesure géométrique**
+— hauteur, largeur, `clientWidth`, ou une simple **coordonnée**. Et le gage se juge sur l'élément
+**mesuré**, jamais sur son voisin. Un gage posé à côté ne gage rien : trois mesures vivantes de la
+suite le montrent, chacune confrontée en rendant nulle la boîte de ce qu'elle mesure, sans que le
+gage qui la précède bronche.
+
+- `e2e/menu.spec.ts:399` — le gage est un `toHaveText` sur `role=alert`, la mesure porte sur le
+  **bloc parent**, dont l'étendue tient aussi à un `<button>` qu'aucune assertion ne touche.
+- `e2e/catalogue.spec.ts:292-293` — le `toBeVisible()` porte sur le **bouton**, la hauteur mesurée
+  sur son **parent** ; un enfant visible peut déborder d'un parent de hauteur nulle. La ligne
+  suivante mesure une **coordonnée**, `top` de la tab bar : `toBeVisible()` promet une boîte non
+  vide, jamais un endroit où elle se trouve.
+- `e2e/convives.spec.ts:86` — même localisateur que le gage, et pourtant vivante : `toHaveText`
+  lit `textContent` et se satisfait d'un `display: none`, qui met `clientWidth` à zéro.
+
+Corollaire mesuré au passage : `toBeVisible()` est le **seul** de ces gages à impliquer une boîte.
+`toHaveText` n'implique rien — sauf sur un localisateur **de rôle**, où la résolution ARIA écarte
+d'elle-même un élément `display: none`, sans pour autant écarter une boîte de hauteur nulle.
 
 ## Conséquences
 

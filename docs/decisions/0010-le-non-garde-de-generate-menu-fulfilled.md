@@ -30,10 +30,21 @@ Cette ligne produit deux effets dont dépend toute la sûreté de l'ensemble :
 
 ## La mesure
 
-Constat de revue, PR #42 : aucune mesure chiffrée, mais un fait vérifiable par lecture — **aucun
-test existant ne rougirait** si l'on retirait ce blanchiment. Le défaut n'apparaîtrait qu'en
-navigateur, sur un réseau lent, sous forme d'un catalogue périmé revenu par-dessus une génération
-réussie, avec des créneaux retombés sur « Recette inconnue ».
+Constat de revue, PR #42 : « aucun test existant ne rougirait si l'on retirait ce blanchiment ».
+**C'était faux à la rédaction, et ça l'est resté.** Retirer `state.menu = null` fait rouge **trois**
+tests de `menu-slice.test.ts` (`:133`, `:169`, `:355`), dont le plus ancien précédait cette page
+d'un mois. La phrase a été héritée d'un constat de revue sans être rejouée.
+
+Ce qui est vrai est plus étroit, et c'est ce qui compte ici : ces trois tests tiennent la **forme**
+— le champ vaut bien `null` après `generateMenu.pending` — et **aucun ne tient la conséquence**,
+c'est-à-dire la sûreté du non-garde de `generateMenu.fulfilled` qui en dépend. Ni l'un ni l'autre
+des deux effets énumérés plus haut n'a de test : rien ne montre une relecture refusant de partir
+**pendant une génération**, rien ne montre l'absence des trois commandes à l'écran en `loading`.
+Le blanchiment est donc verrouillé comme valeur, pas comme mécanisme — qui le déplacerait en
+gardant `null` dans `pending` garderait les trois tests verts sans avoir rien préservé.
+
+Le défaut n'apparaîtrait qu'en navigateur, sur un réseau lent, sous forme d'un catalogue périmé
+revenu par-dessus une génération réussie, avec des créneaux retombés sur « Recette inconnue ».
 
 Le même prédicat est écrit **deux fois** à dessein — dans le `condition` du thunk et dans
 `menuOpened` (`state.menu === null`) : qui touche à l'un doit revenir à l'autre.

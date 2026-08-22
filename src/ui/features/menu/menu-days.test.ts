@@ -67,7 +67,7 @@ describe('menuDays', () => {
     ]);
   });
 
-  it('un créneau dont la recette est absente du catalogue n’a ni titre ni destination, là où son voisin résolu a les deux', () => {
+  it('un créneau dont la recette est absente du catalogue porte un titre de substitution et aucune destination, là où son voisin résolu porte le titre de sa recette et un lien', () => {
     const menu = menuOf([
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'disparue' })] }),
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
