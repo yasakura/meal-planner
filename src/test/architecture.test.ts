@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import * as ts from 'typescript';
 import { describe, it, expect } from 'vitest';
 
 const ROOT = resolve(__dirname, '..');
@@ -41,13 +42,27 @@ function collectSourceFiles(dir: string): string[] {
   return files;
 }
 
-function extractImports(source: string): string[] {
-  const importRegex = /(?:import|from)\s+['"]([^'"]+)['"]/g;
+function moduleSpecifierOf(node: ts.Node): ts.Expression | undefined {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)
+    return node.arguments[0];
+  return undefined;
+}
+
+function typeImportSpecifierOf(node: ts.Node): ts.Expression | undefined {
+  if (!ts.isImportTypeNode(node) || !ts.isLiteralTypeNode(node.argument)) return undefined;
+  return node.argument.literal;
+}
+
+function extractImports(source: string, file: string): string[] {
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false);
   const specifiers: string[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = importRegex.exec(source)) !== null) {
-    if (match[1]) specifiers.push(match[1]);
-  }
+  const visit = (node: ts.Node): void => {
+    const specifier = moduleSpecifierOf(node) ?? typeImportSpecifierOf(node);
+    if (specifier && ts.isStringLiteral(specifier)) specifiers.push(specifier.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
   return specifiers;
 }
 
@@ -78,7 +93,7 @@ function featureEdges(): Map<string, Map<string, string[]>> {
   for (const file of collectFeatureFiles(FEATURES_DIR)) {
     const from = featureOf(file);
     if (from === undefined) continue;
-    for (const spec of extractImports(readFileSync(file, 'utf-8'))) {
+    for (const spec of extractImports(readFileSync(file, 'utf-8'), file)) {
       if (!spec.startsWith('.')) continue;
       const to = featureOf(resolve(dirname(file), spec));
       if (to === undefined || to === from) continue;
@@ -129,7 +144,7 @@ describe('Architecture boundaries', () => {
     const files = collectSourceFiles(domainDir);
     const violations: string[] = [];
     for (const file of files) {
-      const specifiers = extractImports(readFileSync(file, 'utf-8'));
+      const specifiers = extractImports(readFileSync(file, 'utf-8'), file);
       for (const spec of specifiers) {
         if (matchesForbidden(spec, FORBIDDEN_IN_DOMAIN)) {
           violations.push(`${relative(ROOT, file)} importe ${spec}`);
@@ -144,7 +159,7 @@ describe('Architecture boundaries', () => {
     const files = collectSourceFiles(dataDir);
     const violations: string[] = [];
     for (const file of files) {
-      const specifiers = extractImports(readFileSync(file, 'utf-8'));
+      const specifiers = extractImports(readFileSync(file, 'utf-8'), file);
       for (const spec of specifiers) {
         if (matchesForbidden(spec, FORBIDDEN_IN_DATA)) {
           violations.push(`${relative(ROOT, file)} importe ${spec}`);
@@ -154,7 +169,7 @@ describe('Architecture boundaries', () => {
     expect(violations, `Violations dans data/ :\n${violations.join('\n')}`).toHaveLength(0);
   });
 
-  it('les dossiers de src/ui/features ne doivent pas former de cycle', () => {
+  it("les dossiers de src/ui/features ne doivent pas former de cycle d'imports directs entre eux", () => {
     const edges = featureEdges();
     const cycle = findCycle(edges);
     expect(cycle, cycle ? describeCycle(cycle, edges) : '').toBeUndefined();
@@ -176,9 +191,94 @@ describe('Architecture boundaries', () => {
     );
   });
 
+  it("gage du garde de cycles : un chemin qui sort des features n'est pas une arête — recipe-detail importe ui/store, ui/store importe recipe, et le graphe ne relie pas recipe-detail à recipe", () => {
+    const sliceFile = join(FEATURES_DIR, 'recipe-detail', 'recipe-detail-slice.ts');
+    const storeFile = join(ROOT, 'ui', 'store', 'store.ts');
+
+    expect(extractImports(readFileSync(sliceFile, 'utf-8'), sliceFile)).toContain(
+      '../../store/store',
+    );
+    expect(extractImports(readFileSync(storeFile, 'utf-8'), storeFile)).toContain(
+      '../features/recipe/recipe-edit-slice',
+    );
+    expect(featureEdges().get('recipe-detail')?.get('recipe')).toBeUndefined();
+  });
+
   it('gage du garde de cycles : le graphe est construit sur les fichiers réels des features, .tsx compris', () => {
     expect(featureEdges().get('recipe')?.get('recipe-detail')).toContain(
       join('ui', 'features', 'recipe', 'RecipeEditContainer.tsx'),
     );
+  });
+
+  it("gage d'instrument : extractImports capture l'import statique, type-only, le ré-export, l'import dynamique et typeof import()", () => {
+    const source = [
+      "import { a } from './a';",
+      "import type { B } from './b';",
+      "export { c } from './c';",
+      "const d = await import('./d');",
+      "type E = typeof import('./e');",
+    ].join('\n');
+
+    expect(extractImports(source, join(ROOT, 'domain', 'exemple.ts'))).toEqual([
+      './a',
+      './b',
+      './c',
+      './d',
+      './e',
+    ]);
+  });
+
+  it("gage d'instrument : un .ts est analysé en TS — une arrow générique ne masque pas les imports qui la suivent", () => {
+    const source = [
+      "import { a } from './a';",
+      'const id = <T>(x: T): T => x;',
+      "const d = await import('./d');",
+    ].join('\n');
+
+    expect(extractImports(source, join(ROOT, 'domain', 'exemple.ts'))).toEqual(['./a', './d']);
+  });
+
+  it("gage d'instrument : extractImports voit l'import du fichier et ignore les chemins cités en commentaire ou en chaîne", () => {
+    const source = [
+      "import { RecipeDetailScreen } from './RecipeDetailScreen';",
+      "// avant, ce module était importé from '../recipe/recipe-for-route'",
+      'const legende = \'importé from "../recipe/legacy"\';',
+    ].join('\n');
+
+    expect(extractImports(source, join(FEATURES_DIR, 'recipe-detail', 'Exemple.tsx'))).toEqual([
+      './RecipeDetailScreen',
+    ]);
+  });
+
+  it("gage du garde de domain/ : un await import('firebase/firestore') est une violation", () => {
+    const specifiers = extractImports(
+      "export async function lire() {\n  await import('firebase/firestore');\n}",
+      join(ROOT, 'domain', 'exemple.ts'),
+    );
+
+    expect(specifiers.filter((spec) => matchesForbidden(spec, FORBIDDEN_IN_DOMAIN))).toEqual([
+      'firebase/firestore',
+    ]);
+  });
+
+  it("gage du garde de data/ : un await import('styled-components') est une violation", () => {
+    const specifiers = extractImports(
+      "export async function styler() {\n  await import('styled-components');\n}",
+      join(ROOT, 'data', 'exemple.ts'),
+    );
+
+    expect(specifiers.filter((spec) => matchesForbidden(spec, FORBIDDEN_IN_DATA))).toEqual([
+      'styled-components',
+    ]);
+  });
+
+  it("gage du garde de cycles : un await import('../recipe/…') depuis recipe-detail désigne la feature recipe", () => {
+    const file = join(FEATURES_DIR, 'recipe-detail', 'RecipeDetailContainer.tsx');
+    const specifiers = extractImports(
+      "export async function charger() {\n  await import('../recipe/ingredient-rows');\n}",
+      file,
+    );
+
+    expect(specifiers.map((spec) => featureOf(resolve(dirname(file), spec)))).toEqual(['recipe']);
   });
 });
