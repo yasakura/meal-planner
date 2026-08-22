@@ -74,3 +74,5 @@ Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou
 | [0030](0030-cliquet-de-couverture-au-niveau-mesure.md)       | Un cliquet de couverture, posé au niveau mesuré                      | 2026-08-22 |
 | [0031](0031-lecture-des-imports-par-l-ast.md)                | Les gardes d'architecture lisent les imports par l'AST               | 2026-08-22 |
 | [0032](0032-features-acycliques-au-premier-degre.md)         | Les features acycliques, et ce que le garde ne voit pas              | 2026-08-22 |
+| [0033](0033-le-depot-e2e-sait-se-taire.md)                   | Le dépôt e2e sait se taire, et c'est la borne qui parle              | 2026-08-23 |
+| [0034](0034-la-course-se-joue-dans-la-page.md)               | Une course contre une animation se joue DANS la page                 | 2026-08-23 |

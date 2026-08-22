@@ -3,6 +3,7 @@ import { type Page } from '@playwright/test';
 type E2eControls = {
   failReads(): void;
   failWrites(): void;
+  hangWrites(): void;
   restore(): void;
 };
 
@@ -20,6 +21,11 @@ export async function failReads(page: Page): Promise<void> {
 export async function failWrites(page: Page): Promise<void> {
   await e2eControls(page);
   await page.evaluate(() => (window as unknown as E2eWindow).__e2e.failWrites());
+}
+
+export async function hangWrites(page: Page): Promise<void> {
+  await e2eControls(page);
+  await page.evaluate(() => (window as unknown as E2eWindow).__e2e.hangWrites());
 }
 
 export async function restore(page: Page): Promise<void> {

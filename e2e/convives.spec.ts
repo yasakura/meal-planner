@@ -1,16 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import {
-  accountSheetButtonHandle,
+  armReopenDuringExit,
+  awaitReopenDuringExit,
   closeAccountSheet,
   isStillMounted,
   openAccountSheet,
   panelHandle,
-  reopenAccountSheetDuringExit,
-  waitForExitToStart,
-  waitForSheetBackInPlace,
 } from './support/account-sheet';
-import { failWrites, restore } from './support/e2e-controls';
+import { failWrites, hangWrites, restore } from './support/e2e-controls';
 
 function prenoms(page: Page) {
   return page.locator('[data-testid="convive-name"]');
@@ -107,6 +105,36 @@ test.describe('Foyer hors ligne', () => {
     await expect(champPrenom(page)).toHaveValue('Zoé');
     await expect(boutonAjouter(page)).toBeEnabled();
     await expect(champPrenom(page)).toBeEnabled();
+  });
+
+  test('un dépôt muet tient l’ajout en vol, puis la borne le déclare non confirmé, et le réseau revenu il aboutit', async ({
+    page,
+  }) => {
+    await page.goto('/catalogue');
+    await openAccountSheet(page);
+
+    await hangWrites(page);
+    await champPrenom(page).fill('Zoé');
+    await boutonAjouter(page).click();
+    await expect(boutonAjouter(page)).toBeDisabled();
+    await expect(champPrenom(page)).toBeDisabled();
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
+
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
+    await expect(
+      page.getByText('Aucune connexion — l’ajout de Zoé n’a pas pu être confirmé.', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(champPrenom(page)).toHaveValue('Zoé');
+    await expect(champPrenom(page)).toBeEnabled();
+    await expect(boutonAjouter(page)).toBeEnabled();
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile']);
+
+    await restore(page);
+    await boutonAjouter(page).click();
+    await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile', 'Zoé']);
+    await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
   });
 
   test('le constat d’ajout survit à la frappe, et c’est le second envoi qui le solde', async ({
@@ -229,13 +257,10 @@ test.describe('Foyer et cycle de vie de la sheet', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
 
     const panneau = await panelHandle(page);
-    const boutonCompte = await accountSheetButtonHandle(page);
+    const reouverture = await armReopenDuringExit(page, panneau);
     await closeAccountSheet(page);
 
-    await waitForExitToStart(page, panneau);
-    await reopenAccountSheetDuringExit(boutonCompte);
-
-    await waitForSheetBackInPlace(page, panneau);
+    await awaitReopenDuringExit(reouverture);
     expect(await isStillMounted(panneau)).toBe(true);
     await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
 
@@ -289,11 +314,9 @@ test.describe('Foyer et cycle de vie de la sheet', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
 
     const panneau = await panelHandle(page);
-    const boutonCompte = await accountSheetButtonHandle(page);
+    const reouverture = await armReopenDuringExit(page, panneau);
     await closeAccountSheet(page);
-    await waitForExitToStart(page, panneau);
-    await reopenAccountSheetDuringExit(boutonCompte);
-    await waitForSheetBackInPlace(page, panneau);
+    await awaitReopenDuringExit(reouverture);
     expect(await isStillMounted(panneau)).toBe(true);
 
     await expect(page.getByLabel('Nouveau prénom pour Alice')).toHaveValue('Alicia');

@@ -18,6 +18,7 @@ export class E2eRecipeRepository implements RecipeRepository {
 
   async save(recipe: Recipe): Promise<void> {
     this.failures.guardWrite();
+    await this.failures.serverAck();
     this.recipes.set(recipe.id, recipe);
   }
 

@@ -114,4 +114,17 @@ describe('E2eMenuRepository', () => {
     failures.restore();
     expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
   });
+
+  it('un dépôt muet ne refuse pas save : c’est la borne qui le déclare indisponible, et rien n’est enregistré', async () => {
+    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
+    const repository = E2eMenuRepository.startingEmpty(failures);
+
+    failures.hangWrites();
+
+    await expect(repository.save(menuCommencantLe(LUNDI_5_JANVIER))).rejects.toBeInstanceOf(
+      RepositoryUnavailableError,
+    );
+    failures.restore();
+    expect(await repository.findAll()).toEqual([]);
+  });
 });

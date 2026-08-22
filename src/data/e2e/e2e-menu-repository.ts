@@ -14,6 +14,7 @@ export class E2eMenuRepository implements MenuRepository {
 
   async save(menu: Menu): Promise<void> {
     this.failures.guardWrite();
+    await this.failures.serverAck();
     this.menus.set(toIsoDate(menu.dateDebut), menu);
   }
 
@@ -24,6 +25,7 @@ export class E2eMenuRepository implements MenuRepository {
 
   async remove(dateDebut: CalendarDate): Promise<void> {
     this.failures.guardWrite();
+    await this.failures.serverAck();
     this.menus.delete(toIsoDate(dateDebut));
   }
 }

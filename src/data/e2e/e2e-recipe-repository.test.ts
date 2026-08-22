@@ -53,4 +53,15 @@ describe('E2eRecipeRepository', () => {
     failures.restore();
     expect(await repository.findAll()).toEqual([]);
   });
+
+  it('un dépôt muet ne refuse pas save : c’est la borne qui le déclare indisponible, et rien n’est enregistré', async () => {
+    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
+    const repository = E2eRecipeRepository.seededWith([], failures);
+
+    failures.hangWrites();
+
+    await expect(repository.save(curry)).rejects.toBeInstanceOf(RepositoryUnavailableError);
+    failures.restore();
+    expect(await repository.findAll()).toEqual([]);
+  });
 });
