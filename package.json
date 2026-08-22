@@ -11,7 +11,7 @@
     "qr": "node scripts/qr.mjs",
     "seed:dev": "node scripts/seed-dev.mjs",
     "check:rules": "node scripts/check-rules.mjs",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "stryker run",
