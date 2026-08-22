@@ -17,7 +17,7 @@
     "test:mutation": "stryker run",
     "test:mutation:isolated": "rm -f reports/stryker-isolated.json && stryker run --incrementalFile reports/stryker-isolated.json --mutate",
     "e2e": "playwright test",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "prepare": "husky"
   },

@@ -92,7 +92,9 @@ export default tseslint.config(
         'error',
         {
           default: 'disallow',
+          checkAllOrigins: true,
           policies: [
+            { allow: { to: { module: { origin: ['external', 'core'] } } } },
             {
               from: { element: { types: 'domain' } },
               allow: { to: { element: { types: 'domain' } } },
@@ -120,39 +122,43 @@ export default tseslint.config(
               allow: { to: { element: { types: { anyOf: ['ui', 'config'] } } } },
             },
             { from: { element: { types: 'e2e' } }, allow: { to: { element: { types: 'e2e' } } } },
-          ],
-        },
-      ],
-      'boundaries/external': [
-        'error',
-        {
-          default: 'allow',
-          rules: [
             {
-              from: 'domain',
-              disallow: [
-                'react',
-                'react-dom',
-                'react-router-dom',
-                '@reduxjs/toolkit',
-                'react-redux',
-                'styled-components',
-                'firebase',
-                'firebase/*',
-                'date-fns',
-                'date-fns/*',
-              ],
+              from: { element: { types: 'domain' } },
+              disallow: {
+                to: {
+                  module: {
+                    origin: ['external', 'core'],
+                    source: [
+                      'react',
+                      'react-dom',
+                      'react-router-dom',
+                      '@reduxjs/toolkit',
+                      'react-redux',
+                      'styled-components',
+                      'firebase',
+                      'date-fns',
+                    ],
+                  },
+                },
+              },
             },
             {
-              from: 'data',
-              disallow: [
-                'react',
-                'react-dom',
-                'react-router-dom',
-                '@reduxjs/toolkit',
-                'react-redux',
-                'styled-components',
-              ],
+              from: { element: { types: 'data' } },
+              disallow: {
+                to: {
+                  module: {
+                    origin: ['external', 'core'],
+                    source: [
+                      'react',
+                      'react-dom',
+                      'react-router-dom',
+                      '@reduxjs/toolkit',
+                      'react-redux',
+                      'styled-components',
+                    ],
+                  },
+                },
+              },
             },
           ],
         },
