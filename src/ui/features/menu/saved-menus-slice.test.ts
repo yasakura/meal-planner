@@ -118,7 +118,7 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     ]);
     expect(consultation(store)?.days.at(0)?.slots).toEqual([
       {
-        key: '0-midi',
+        key: '0-0',
         creneauLabel: 'Midi',
         title: 'Ratatouille',
         recipe: 'known',

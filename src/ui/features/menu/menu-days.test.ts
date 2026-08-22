@@ -36,14 +36,14 @@ describe('menuDays', () => {
         label: 'lundi 24 août',
         slots: [
           {
-            key: '0-midi',
+            key: '0-0',
             creneauLabel: 'Midi',
             title: 'Ratatouille',
             recipe: 'known',
             href: '/catalogue/r1?depuis=menu',
           },
           {
-            key: '0-soir',
+            key: '0-1',
             creneauLabel: 'Soir',
             title: 'Blanquette',
             recipe: 'known',
@@ -56,7 +56,7 @@ describe('menuDays', () => {
         label: 'mardi 25 août',
         slots: [
           {
-            key: '1-midi',
+            key: '1-0',
             creneauLabel: 'Midi',
             title: 'Ratatouille',
             recipe: 'known',
@@ -78,9 +78,9 @@ describe('menuDays', () => {
         key: '0',
         label: 'lundi 24 août',
         slots: [
-          { key: '0-midi', creneauLabel: 'Midi', title: 'Recette inconnue', recipe: 'unknown' },
+          { key: '0-0', creneauLabel: 'Midi', title: 'Recette inconnue', recipe: 'unknown' },
           {
-            key: '0-soir',
+            key: '0-1',
             creneauLabel: 'Soir',
             title: 'Blanquette',
             recipe: 'known',
@@ -90,6 +90,51 @@ describe('menuDays', () => {
       },
     ]);
   });
+  it('deux slots d’un même repas donnent deux lignes, et leurs clés ne se confondent pas', () => {
+    const menu = menuOf([
+      createRepas({
+        jour: 0,
+        creneau: 'midi',
+        slots: [createSlot({ recipeId: 'r1' }), createSlot({ recipeId: 'r2' })],
+      }),
+    ]);
+
+    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => slot.title)).toEqual(['Ratatouille', 'Blanquette']);
+    expect(slots.at(0)?.key).not.toEqual(slots.at(1)?.key);
+  });
+
+  it('deux repas de même jour et même créneau donnent deux lignes, et leurs clés ne se confondent pas', () => {
+    const menu = menuOf([
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r2' })] }),
+    ]);
+
+    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => slot.title)).toEqual(['Ratatouille', 'Blanquette']);
+    expect(slots.at(0)?.key).not.toEqual(slots.at(1)?.key);
+  });
+
+  it('le même menu reconstruit à l’identique redonne exactement les mêmes clés', () => {
+    const repasDuMenu = () => [
+      createRepas({
+        jour: 0,
+        creneau: 'midi',
+        slots: [createSlot({ recipeId: 'r1' }), createSlot({ recipeId: 'r2' })],
+      }),
+      createRepas({ jour: 1, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+    ];
+    const keysOf = (menu: Menu) =>
+      menuDays(menu, twoRecipes(), FROM_MENU).flatMap((day) => day.slots.map((slot) => slot.key));
+
+    const premierRendu = keysOf(menuOf(repasDuMenu()));
+
+    expect(new Set(premierRendu).size).toBe(3);
+    expect(keysOf(menuOf(repasDuMenu()))).toEqual(premierRendu);
+  });
+
   it('les lignes d’un brouillon mènent aux fiches marquées comme venant du brouillon', () => {
     const menu = menuOf([
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
@@ -97,7 +142,7 @@ describe('menuDays', () => {
 
     expect(menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots).toEqual([
       {
-        key: '0-midi',
+        key: '0-0',
         creneauLabel: 'Midi',
         title: 'Ratatouille',
         recipe: 'known',
