@@ -65,8 +65,9 @@ contient aucun secret, pas même une clé Firebase, et un scénario doit pouvoir
 n'importe quelle machine sans configuration préalable.
 
 Deux scripts parlent au vrai projet Firebase de dev et ne tournent donc ni en CI ni à l'aveugle :
-`npm run seed:dev` (vide la collection `recipes` et insère un jeu de recettes) et
-`npm run check:rules` (vérifie que les règles **déployées** autorisent ce que `src/data/` fait).
+`npm run seed:dev` (vide les collections `recipes` et `convives`, puis insère un jeu de recettes et
+les convives du foyer de dev) et `npm run check:rules` (vérifie que les règles **déployées**
+autorisent ce que `src/data/` fait).
 
 ## Tester
 

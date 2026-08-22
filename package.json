@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build --mode prod",
     "preview": "vite preview --host --mode prod",
     "qr": "node scripts/qr.mjs",
-    "seed:dev": "node scripts/seed-recipes.mjs",
+    "seed:dev": "node scripts/seed-dev.mjs",
     "check:rules": "node scripts/check-rules.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
