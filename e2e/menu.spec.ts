@@ -7,6 +7,7 @@ test.describe('Menu', () => {
     await page.goto('/menu');
 
     await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
 
     const jours = page.locator('main section');
@@ -32,6 +33,7 @@ test.describe('Menu', () => {
 
   test('la fenêtre choisie survit à un aller-retour vers le catalogue', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
 
     const uneSemaine = page.getByRole('button', { name: '1 semaine' });
     const deuxSemaines = page.getByRole('button', { name: '2 semaines' });
@@ -46,6 +48,7 @@ test.describe('Menu', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
     await page.click('nav a[href="/menu"]');
     await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
 
     await expect(page.locator('main section')).toHaveCount(7);
     await expect(uneSemaine).toHaveAttribute('aria-pressed', 'true');
@@ -54,6 +57,7 @@ test.describe('Menu', () => {
 
   test('le menu refuse une date de début passée, puis accepte le jour même', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
 
     const champ = page.getByLabel('Début du menu');
     await expect(champ).toHaveValue('2026-01-05');
@@ -79,6 +83,7 @@ test.describe('Menu', () => {
     page,
   }) => {
     await page.goto('/menu?recipes=0');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
 
     await expect(page.getByRole('alert')).toHaveText(
@@ -96,6 +101,7 @@ test.describe('Menu', () => {
     await expect(page).toHaveURL('/catalogue');
 
     await page.click('nav a[href="/menu"]');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Réessayer' }).click();
 
     await expect(page.locator('main section')).toHaveCount(14);
@@ -108,6 +114,7 @@ test.describe('Menu', () => {
     page,
   }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await failReads(page);
     const generer = page.getByRole('button', { name: 'Générer un menu' });
     await expect(generer).toHaveCount(1);
@@ -124,6 +131,7 @@ test.describe('Menu', () => {
     await restore(page);
     await page.click('nav a[href="/catalogue"]');
     await page.click('nav a[href="/menu"]');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await generer.click();
 
     await expect(page.locator('main section')).toHaveCount(14);
@@ -134,18 +142,20 @@ test.describe('Menu', () => {
 
   test('générer un menu, puis l’enregistrer', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.locator('main section')).toHaveCount(14);
 
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    await expect(page.getByText('Menu enregistré')).toHaveCount(1);
+    await expect(page.getByText('Menu enregistré', { exact: true })).toHaveCount(1);
   });
 
   test('deux menus enregistrés se consultent par les flèches, verrouillées à chaque borne', async ({
     page,
   }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
@@ -156,7 +166,7 @@ test.describe('Menu', () => {
     await expect(flecheGauche).toBeDisabled();
     await expect(flecheDroite).toBeDisabled();
 
-    await page.getByRole('button', { name: '+ Nouveau menu' }).click();
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByLabel('Début du menu').fill('2026-02-02');
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
@@ -187,6 +197,7 @@ test.describe('Menu', () => {
     page,
   }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await expect(page.getByLabel('Début du menu')).toHaveCount(1);
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.getByRole('button', { name: 'Régénérer' })).toHaveCount(1);
@@ -194,7 +205,7 @@ test.describe('Menu', () => {
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
     await expect(page.getByText('5 – 18 janv.')).toHaveCount(1);
-    await expect(page.getByText('Menu enregistré')).toHaveCount(1);
+    await expect(page.getByText('Menu enregistré', { exact: true })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Régénérer' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Enregistrer' })).toHaveCount(0);
     await expect(page.getByLabel('Début du menu')).toHaveCount(0);
@@ -205,14 +216,88 @@ test.describe('Menu', () => {
     await page.click('nav a[href="/menu"]');
 
     await expect(page.getByText('5 – 18 janv.')).toHaveCount(1);
-    await expect(page.getByText('Menu enregistré')).toHaveCount(0);
+    await expect(page.getByText('Menu enregistré', { exact: true })).toHaveCount(0);
     await expect(page.locator('main section')).toHaveCount(14);
+  });
+
+  test('le retour navigateur ne ressuscite pas le constat d’enregistrement, ni ne déplace le menu consulté', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    const constat = page.getByText('Menu enregistré', { exact: true });
+    const periode = page.locator('main header p');
+    await expect(constat).toHaveCount(1);
+
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await page.getByLabel('Début du menu').fill('2026-03-02');
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    await expect(periode).toHaveText('2 – 15 mars');
+    await expect(constat).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Menu précédent' }).click();
+
+    await expect(periode).toHaveText('5 – 18 janv.');
+    await expect(constat).toHaveCount(0);
+
+    await page.click('nav a[href="/catalogue"]');
+    await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
+
+    await page.goBack();
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
+    await expect(periode).toHaveText('5 – 18 janv.');
+    await expect(constat).toHaveCount(0);
+  });
+
+  test('sans avoir changé de semaine, le retour navigateur ne ressuscite pas le constat', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    const constat = page.getByText('Menu enregistré', { exact: true });
+    await expect(constat).toHaveCount(1);
+
+    await page.click('nav a[href="/catalogue"]');
+    await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
+
+    await page.goBack();
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
+    await expect(page.locator('main header p')).toHaveText('5 – 18 janv.');
+    await expect(constat).toHaveCount(0);
+  });
+
+  test('l’adresse d’un enregistrement, collée ou rechargée, ne constate rien et se nettoie', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    const constat = page.getByText('Menu enregistré', { exact: true });
+    await expect(constat).toHaveCount(1);
+
+    await page.goto('/menu?enregistre');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
+    await expect(constat).toHaveCount(0);
+    await expect(page).toHaveURL('/menu');
   });
 
   test('hors ligne, l’enregistrement n’est pas confirmé ; le réseau rétabli, il l’est', async ({
     page,
   }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.locator('main section')).toHaveCount(14);
 
@@ -227,7 +312,7 @@ test.describe('Menu', () => {
     await restore(page);
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    await expect(page.getByText('Menu enregistré')).toHaveCount(1);
+    await expect(page.getByText('Menu enregistré', { exact: true })).toHaveCount(1);
     await expect(panne).toHaveCount(0);
   });
 });
@@ -237,6 +322,7 @@ test.describe('Menu et modification de recette', () => {
     page,
   }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
 
     const ancienTitre = page.getByText('Gratin dauphinois');
@@ -256,6 +342,7 @@ test.describe('Menu et modification de recette', () => {
     await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois');
 
     await page.click('nav a[href="/menu"]');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
 
     await expect(nouveauTitre).toHaveCount(9);
@@ -300,6 +387,7 @@ async function centrageVertical(etat: Locator): Promise<Centrage> {
 test.describe('Mise en page du menu', () => {
   test('le menu sans recette centre son constat dans la hauteur offerte', async ({ page }) => {
     await page.goto('/menu?recipes=0');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.getByRole('alert')).toHaveText(
       "Ajoute d'abord des recettes pour générer un menu.",
@@ -319,13 +407,14 @@ test.describe('Du menu à la fiche recette', () => {
 
   test('ouvrir une recette du menu, puis revenir au menu tel qu’il était', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.locator('main section')).toHaveCount(14);
 
     const premierJour = page.locator('main section').first().locator('li');
     await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
 
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Omelette aux herbes' }),
     ).toBeVisible();
@@ -334,7 +423,7 @@ test.describe('Du menu à la fiche recette', () => {
     await expect(retourRecettes(page)).toHaveCount(0);
 
     await retourMenu(page).click();
-    await expect(page).toHaveURL('/menu');
+    await expect(page).toHaveURL('/menu/nouveau');
 
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
     await expect(page.locator('main section')).toHaveCount(14);
@@ -350,6 +439,7 @@ test.describe('Du menu à la fiche recette', () => {
 
   test('la provenance survit à un rechargement de la fiche', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     const premierJour = page.locator('main section').first().locator('li');
     await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
@@ -364,30 +454,31 @@ test.describe('Du menu à la fiche recette', () => {
     await expect(retourRecettes(page)).toHaveCount(0);
 
     await retourMenu(page).click();
-    await expect(page).toHaveURL('/menu');
+    await expect(page).toHaveURL('/menu/nouveau');
     await expect(page.getByRole('button', { name: 'Générer un menu' })).toBeVisible();
   });
 
   test('modifier une recette ouverte depuis le menu, puis revenir au menu', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.locator('main section')).toHaveCount(14);
 
     const premierJour = page.locator('main section').first().locator('li');
     await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
 
     await page.getByRole('link', { name: 'Modifier' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu-nouveau');
     await expect(page.getByRole('link', { name: '← Recette', exact: true })).toHaveAttribute(
       'href',
-      '/catalogue/recipe-omelette-herbes?depuis=menu',
+      '/catalogue/recipe-omelette-herbes?depuis=menu-nouveau',
     );
 
     await page.getByLabel('Titre').fill('Omelette aux fines herbes');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Omelette aux fines herbes' }),
     ).toBeVisible();
@@ -395,7 +486,7 @@ test.describe('Du menu à la fiche recette', () => {
     await expect(retourRecettes(page)).toHaveCount(0);
 
     await retourMenu(page).click();
-    await expect(page).toHaveURL('/menu');
+    await expect(page).toHaveURL('/menu/nouveau');
 
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
     await expect(page.locator('main section')).toHaveCount(14);
@@ -404,16 +495,17 @@ test.describe('Du menu à la fiche recette', () => {
 
   test('la lecture en panne sur le formulaire venu du menu ramène au menu', async ({ page }) => {
     await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.locator('main section')).toHaveCount(14);
 
     const premierJour = page.locator('main section').first().locator('li');
     await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
 
     await failReads(page);
     await page.getByRole('link', { name: 'Modifier' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu-nouveau');
     await expect(
       page.getByText('Aucune connexion — la recette n’a pas pu être chargée.'),
     ).toHaveCount(1);
@@ -422,19 +514,19 @@ test.describe('Du menu à la fiche recette', () => {
     await expect(retourRecettes(page)).toHaveCount(0);
 
     await retourMenu(page).click();
-    await expect(page).toHaveURL('/menu');
+    await expect(page).toHaveURL('/menu/nouveau');
 
     const constat = page.getByText('Aucune connexion — le menu n’a pas pu être chargé.', {
       exact: true,
     });
-    await expect(constat).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Régénérer' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Réessayer' })).toHaveCount(0);
-    await expect(page.locator('main section')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(constat).toHaveCount(0);
 
     await restore(page);
     await page.click('nav a[href="/catalogue"]');
     await page.click('nav a[href="/menu"]');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
 
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
     await expect(page.locator('main section')).toHaveCount(14);

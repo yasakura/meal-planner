@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './Layout';
 import { CatalogueContainer } from './features/catalogue/CatalogueContainer';
 import { MenuContainer } from './features/menu/MenuContainer';
+import { MenuCreateContainer } from './features/menu/MenuCreateContainer';
 import { RecipeDetailContainer } from './features/recipe-detail/RecipeDetailContainer';
 import { RecipeCreateContainer } from './features/recipe/RecipeCreateContainer';
 import { RecipeEditContainer } from './features/recipe/RecipeEditContainer';
@@ -16,6 +17,7 @@ export function App() {
         <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
         <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
         <Route path="/menu" element={<MenuContainer />} />
+        <Route path="/menu/nouveau" element={<MenuCreateContainer />} />
         <Route path="/" element={<Navigate to="/catalogue" replace />} />
       </Route>
     </Routes>

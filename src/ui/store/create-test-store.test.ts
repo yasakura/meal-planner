@@ -12,7 +12,8 @@ import {
   loadRecipeDetail,
   selectRecipeDetail,
 } from '../features/recipe-detail/recipe-detail-slice';
-import { generateMenu, loadSavedMenus, saveMenu, selectMenu } from '../features/menu/menu-slice';
+import { generateMenu, saveMenu } from '../features/menu/menu-slice';
+import { loadSavedMenus, selectSavedMenus } from '../features/menu/saved-menus-slice';
 import { createRecipe } from '../features/recipe/recipe-slice';
 import { updateRecipe } from '../features/recipe/recipe-edit-slice';
 import { createTestStore } from './create-test-store';
@@ -41,9 +42,9 @@ describe('createTestStore', () => {
 
     await store.dispatch(generateMenu(7));
     await store.dispatch(saveMenu());
-    await store.dispatch(loadSavedMenus());
+    await store.dispatch(loadSavedMenus({ fromSave: false }));
 
-    expect(selectMenu(store.getState()).menus).toEqual([menu]);
+    expect(selectSavedMenus(store.getState()).menus).toEqual([menu]);
   });
 
   it('câble les use-cases recettes sur un même repository : une recette modifiée est relue à jour', async () => {

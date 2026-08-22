@@ -1,12 +1,19 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { StrictMode } from 'react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { createCalendarDate } from '../domain/entities/calendar-date';
+import { createMenu, type Menu } from '../domain/entities/menu';
+import { createRepas } from '../domain/entities/repas';
+import { createSlot } from '../domain/entities/slot';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { App } from './App';
+import { generateMenu, saveMenu } from './features/menu/menu-slice';
+import { MENU_APRES_ENREGISTREMENT } from './features/menu/menu-return';
 import { type AppDependencies } from './store/store';
 import { createTestStore } from './store/create-test-store';
 
@@ -19,6 +26,11 @@ function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
       </MemoryRouter>
     </Provider>,
   );
+}
+
+function AdresseCourante() {
+  const location = useLocation();
+  return <p data-testid="adresse">{`${location.pathname}${location.search}`}</p>;
 }
 
 function renderApp() {
@@ -124,7 +136,8 @@ describe('App', () => {
   it('rend l’écran Menu sur la route /menu', async () => {
     renderAppAt('/menu');
 
-    expect(await screen.findByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Menu' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Créer un menu' })).toBeInTheDocument();
   });
 
   it('affiche la navigation Recettes / Menu dans le chrome partagé', () => {
@@ -132,5 +145,170 @@ describe('App', () => {
 
     expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
+  });
+
+  const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+
+  function menuDeLaSemaine(): Menu {
+    return createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+        createRepas({ jour: 6, creneau: 'soir', slots: [createSlot({ recipeId: 'r1' })] }),
+      ],
+    });
+  }
+
+  function avecDeQuoiGenerer() {
+    return {
+      generateMenu: async () => menuDeLaSemaine(),
+      listRecipes: async () => [
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ],
+    };
+  }
+
+  it('rend l’écran de génération sur la route /menu/nouveau', async () => {
+    renderAppAt('/menu/nouveau');
+
+    expect(await screen.findByRole('heading', { name: 'Nouveau menu' })).toBeInTheDocument();
+  });
+
+  it('le « + » de l’onglet Menu mène à la génération, que la consultation n’offre pas', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu', avecDeQuoiGenerer());
+
+    expect(await screen.findByText('Aucun menu enregistré')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Début du menu')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /générer un menu/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Créer un menu' }));
+
+    expect(screen.getByLabelText('Début du menu')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
+  });
+
+  it('l’onglet Menu ne ramène jamais au brouillon, que le « + » retrouve intact', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu/nouveau', avecDeQuoiGenerer());
+
+    await user.click(await screen.findByRole('button', { name: /générer un menu/i }));
+    expect(await screen.findByRole('button', { name: /régénérer/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Menu' }));
+
+    expect(await screen.findByText('Aucun menu enregistré')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /régénérer/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Créer un menu' }));
+
+    expect(await screen.findByRole('button', { name: /régénérer/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'lundi 24 août' })).toBeInTheDocument();
+  });
+
+  it('un menu enregistré ramène à la consultation, positionnée sur lui', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu/nouveau', avecDeQuoiGenerer());
+
+    await user.click(await screen.findByRole('button', { name: /générer un menu/i }));
+    await user.click(await screen.findByRole('button', { name: /enregistrer/i }));
+
+    expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
+    expect(screen.getByText('Menu enregistré')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /régénérer/i })).not.toBeInTheDocument();
+  });
+
+  const LUNDI_31_AOUT = createCalendarDate({ year: 2026, month: 8, day: 31 });
+
+  function menuDatedOn(dateDebut: ReturnType<typeof createCalendarDate>): Menu {
+    return createMenu({
+      dateDebut,
+      repas: [
+        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+        createRepas({ jour: 6, creneau: 'soir', slots: [createSlot({ recipeId: 'r1' })] }),
+      ],
+    });
+  }
+
+  it('le menu consulté est en lecture seule ; le « + » ramène le formulaire et ses boutons', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu', {
+      ...avecDeQuoiGenerer(),
+      browseMenus: async () => ({ menus: [menuDeLaSemaine()], indexInitial: 0 }),
+    });
+
+    expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'lundi 24 août' })).toBeInTheDocument();
+    const lignes = screen.getAllByRole('link', { name: 'Ratatouille' });
+    expect(lignes).toHaveLength(2);
+    for (const ligne of lignes) {
+      expect(ligne).toHaveAttribute('href', '/catalogue/r1?depuis=menu');
+    }
+    expect(screen.queryByRole('button', { name: /régénérer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Début du menu')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Créer un menu' }));
+
+    expect(screen.getByLabelText('Début du menu')).toBeInTheDocument();
+    expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    expect(await screen.findByRole('button', { name: /régénérer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
+  });
+
+  it('le constat d’enregistrement ne suit pas le menu voisin', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu/nouveau', {
+      listRecipes: async () => [
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ],
+      generateMenu: async () => menuDatedOn(LUNDI_31_AOUT),
+      browseMenus: async () => ({
+        menus: [menuDeLaSemaine(), menuDatedOn(LUNDI_31_AOUT)],
+        indexInitial: 0,
+      }),
+      saveMenu: async () => {},
+    });
+
+    await user.click(await screen.findByRole('button', { name: /générer un menu/i }));
+    await user.click(await screen.findByRole('button', { name: /enregistrer/i }));
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getByText('Menu enregistré')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Menu précédent' }));
+
+    expect(screen.getByText('24 – 30 août')).toBeInTheDocument();
+    expect(screen.queryByText('Menu enregistré')).not.toBeInTheDocument();
+  });
+
+  it('sous StrictMode, l’arrivée après un enregistrement pose le constat et nettoie l’adresse', async () => {
+    const store = createTestStore({
+      browseMenus: async () => ({ menus: [menuDeLaSemaine()], indexInitial: 0 }),
+      listRecipes: async () => [
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ],
+      generateMenu: async () => menuDeLaSemaine(),
+      saveMenu: async () => {},
+    });
+    await store.dispatch(generateMenu(14));
+    await store.dispatch(saveMenu());
+
+    render(
+      <StrictMode>
+        <Provider store={store}>
+          <MemoryRouter initialEntries={[MENU_APRES_ENREGISTREMENT]}>
+            <App />
+            <AdresseCourante />
+          </MemoryRouter>
+        </Provider>
+      </StrictMode>,
+    );
+
+    expect(await screen.findByText('Menu enregistré')).toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent(/^\/menu$/);
   });
 });

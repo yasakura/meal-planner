@@ -2,27 +2,16 @@ import { styled, keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
-import { type MenuSaveNotice } from './menu-slice';
+import { type MenuDay } from './menu-days';
+import { type MenuSaveNotice } from './menu-notice';
 
 const { colors, space, fonts } = tokens;
 
-export type MenuSlotLine =
-  | { key: string; creneauLabel: string; title: string; recipe: 'known'; href: string }
-  | { key: string; creneauLabel: string; title: string; recipe: 'unknown' };
-export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
-
 export type MenuScreenProps =
-  | {
-      status: 'idle';
-      startDateIso: string;
-      startDateFloorIso: string;
-      startDateRefused: boolean;
-      onStartDateChange: (iso: string) => void;
-      selectedDays: number;
-      onSelect: (days: number) => void;
-      onGenerate: () => void;
-    }
   | { status: 'loading' }
+  | { status: 'error'; message: string; onRetry: () => void }
+  | { status: 'unavailable'; message: string }
+  | { status: 'empty' }
   | {
       status: 'consultation';
       days: MenuDay[];
@@ -32,23 +21,6 @@ export type MenuScreenProps =
       saveNotice: MenuSaveNotice | null;
       onPrevious: () => void;
       onNext: () => void;
-      onNewMenu: () => void;
-    }
-  | { status: 'error'; message: string; onRetry: () => void }
-  | { status: 'unavailable'; message: string }
-  | {
-      status: 'success';
-      days: MenuDay[];
-      startDateIso: string;
-      startDateFloorIso: string;
-      startDateRefused: boolean;
-      onStartDateChange: (iso: string) => void;
-      selectedDays: number;
-      onSelect: (days: number) => void;
-      onRegenerate: () => void;
-      onSave: () => void;
-      saveDisabled: boolean;
-      saveNotice: MenuSaveNotice | null;
     };
 
 const Page = styled.div`
@@ -59,171 +31,29 @@ const Page = styled.div`
   padding: ${space.lg}px;
 `;
 
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: ${space.xl}px;
+`;
+
 const Title = styled.h1`
   font-family: ${fonts.serif};
   font-size: 28px;
   color: ${colors.ink};
-  margin: 0 0 ${space.xl}px;
-`;
-
-const Segmented = styled.div`
-  align-self: flex-start;
-  display: inline-flex;
-  border: 1px solid ${colors.hairline};
-  border-radius: ${tokens.radii.sm};
-  overflow: hidden;
-  margin-bottom: ${space.lg}px;
-`;
-
-const Segment = styled.button<{ $active: boolean }>`
-  background: ${(props) => (props.$active ? colors.terracotta : 'transparent')};
-  color: ${(props) => (props.$active ? colors.creme : colors.inkSecondary)};
-  border: none;
-  font-family: ${fonts.body};
-  font-size: 14px;
-  padding: ${space.sm}px ${space.lg}px;
-`;
-
-const Field = styled.div`
-  align-self: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: ${space.xs}px;
-  margin-bottom: ${space.lg}px;
-`;
-
-const FieldLabel = styled.label`
-  font-family: ${fonts.body};
-  font-size: 13px;
-  color: ${colors.inkSecondary};
-`;
-
-const DateInput = styled.input`
-  background: transparent;
-  border: 1px solid ${colors.hairline};
-  border-radius: ${tokens.radii.sm};
-  color: ${colors.ink};
-  font-family: ${fonts.body};
-  font-size: 15px;
-  padding: ${space.sm}px ${space.md}px;
-`;
-
-const FieldNotice = styled.p`
-  font-family: ${fonts.body};
-  font-size: 13px;
-  color: ${colors.terracotta};
   margin: 0;
-  max-width: 320px;
 `;
 
-const START_DATE_FIELD_ID = 'menu-start-date';
-
-function StartDatePicker(props: {
-  value: string;
-  min: string;
-  refused: boolean;
-  onChange: (iso: string) => void;
-}) {
-  return (
-    <Field>
-      <FieldLabel htmlFor={START_DATE_FIELD_ID}>Début du menu</FieldLabel>
-      <DateInput
-        id={START_DATE_FIELD_ID}
-        type="date"
-        value={props.value}
-        min={props.min}
-        onChange={(event) => props.onChange(event.target.value)}
-      />
-      {props.refused ? (
-        <FieldNotice role="alert">Le menu ne peut pas commencer avant aujourd’hui.</FieldNotice>
-      ) : null}
-    </Field>
-  );
-}
-
-const MENU_WINDOWS: { days: number; label: string }[] = [
-  { days: 7, label: '1 semaine' },
-  { days: 14, label: '2 semaines' },
-];
-
-function WindowSelector(props: { selectedDays: number; onSelect: (days: number) => void }) {
-  return (
-    <Segmented role="group" aria-label="Fenêtre du menu">
-      {MENU_WINDOWS.map((window) => (
-        <Segment
-          key={window.days}
-          type="button"
-          $active={props.selectedDays === window.days}
-          aria-pressed={props.selectedDays === window.days}
-          onClick={() => props.onSelect(window.days)}
-        >
-          {window.label}
-        </Segment>
-      ))}
-    </Segmented>
-  );
-}
-
-const PrimaryButton = styled.button`
-  align-self: flex-start;
-  background: ${colors.terracotta};
-  border: none;
-  border-radius: ${tokens.radii.sm};
-  color: ${colors.creme};
-  font-family: ${fonts.body};
-  font-size: 15px;
-  padding: ${space.sm}px ${space.lg}px;
-
-  &:disabled {
-    opacity: 0.6;
-  }
-`;
-
-const Actions = styled.div`
-  align-self: flex-start;
-  display: flex;
-  gap: ${space.sm}px;
-`;
-
-const Note = styled.p`
-  font-family: ${fonts.body};
-  font-size: 13px;
-  color: ${colors.inkSecondary};
-  margin: ${space.sm}px 0 0;
-`;
-
-function SaveNoticeView({ notice }: { notice: MenuSaveNotice | null }) {
-  if (notice === null) return null;
-  return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
-}
-
-const RetryButton = styled.button`
-  background: none;
-  border: 1px solid ${colors.hairline};
-  border-radius: ${tokens.radii.sm};
-  color: ${colors.ink};
-  font-family: ${fonts.body};
-  font-size: 14px;
-  padding: ${space.sm}px ${space.md}px;
-`;
-
-const CenteredState = styled.div`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+const AddLink = styled(Link)`
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: ${space.md}px;
-  padding: ${space.xl}px;
-  text-align: center;
-`;
-
-const Intro = styled.p`
-  font-family: ${fonts.body};
-  font-size: 14px;
-  color: ${colors.inkSecondary};
-  margin: 0 0 ${space.lg}px;
-  max-width: 320px;
+  min-width: 44px;
+  min-height: 44px;
+  margin-right: -${space.sm}px;
+  color: ${colors.terracotta};
+  text-decoration: none;
 `;
 
 const spin = keyframes`
@@ -236,6 +66,17 @@ const Spinner = styled.svg`
   width: 40px;
   height: 40px;
   animation: ${spin} 0.8s linear infinite;
+`;
+
+const CenteredState = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: ${space.md}px;
+  padding: ${space.xl}px;
+  text-align: center;
 `;
 
 const StateText = styled.p`
@@ -259,6 +100,47 @@ const ErrorMessage = styled.p`
   font-size: 14px;
   color: ${colors.terracotta};
   margin: 0;
+`;
+
+const RetryButton = styled.button`
+  background: none;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${tokens.radii.sm};
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 14px;
+  padding: ${space.sm}px ${space.md}px;
+`;
+
+const EmptyState = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: ${space.sm}px;
+  padding: ${space.xl}px;
+  text-align: center;
+`;
+
+const EmptyIcon = styled.svg`
+  color: ${colors.hairline};
+  margin-bottom: ${space.sm}px;
+`;
+
+const EmptyTitle = styled.p`
+  font-family: ${fonts.serif};
+  font-size: 20px;
+  color: ${colors.ink};
+  margin: 0;
+`;
+
+const EmptyText = styled.p`
+  font-family: ${fonts.body};
+  font-size: 14px;
+  color: ${colors.inkSecondary};
+  margin: 0;
+  max-width: 260px;
 `;
 
 const PeriodBar = styled.header`
@@ -289,6 +171,13 @@ const ArrowButton = styled.button`
   &:disabled {
     opacity: 0.35;
   }
+`;
+
+const Note = styled.p`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.inkSecondary};
+  margin: ${space.sm}px 0 0;
 `;
 
 const DayList = styled.div`
@@ -340,7 +229,7 @@ const SlotLink = styled(Link)`
   text-decoration: none;
 `;
 
-function Days({ days }: { days: MenuDay[] }) {
+export function MenuDays({ days }: { days: MenuDay[] }) {
   return (
     <DayList>
       {days.map((day) => (
@@ -364,39 +253,40 @@ function Days({ days }: { days: MenuDay[] }) {
   );
 }
 
+export function MenuSpinner() {
+  return (
+    <CenteredState role="status">
+      <Spinner viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx={12} cy={12} r={9} stroke={colors.hairline} strokeWidth={2.5} />
+        <path
+          d="M12 3a9 9 0 0 1 9 9"
+          stroke={colors.terracotta}
+          strokeWidth={2.5}
+          strokeLinecap="round"
+        />
+      </Spinner>
+      <StateText>Chargement…</StateText>
+    </CenteredState>
+  );
+}
+
+export function MenuUnavailable({ message }: { message: string }) {
+  return (
+    <CenteredState>
+      <StateText role="status">{message}</StateText>
+    </CenteredState>
+  );
+}
+
+export function MenuSaveNoticeView({ notice }: { notice: MenuSaveNotice | null }) {
+  if (notice === null) return null;
+  return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
+}
+
 function Body(props: MenuScreenProps) {
   switch (props.status) {
-    case 'idle':
-      return (
-        <>
-          <Intro>Génère un menu à partir de tes recettes.</Intro>
-          <StartDatePicker
-            value={props.startDateIso}
-            min={props.startDateFloorIso}
-            refused={props.startDateRefused}
-            onChange={props.onStartDateChange}
-          />
-          <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
-          <PrimaryButton type="button" onClick={props.onGenerate}>
-            Générer un menu
-          </PrimaryButton>
-        </>
-      );
     case 'loading':
-      return (
-        <CenteredState role="status">
-          <Spinner viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx={12} cy={12} r={9} stroke={colors.hairline} strokeWidth={2.5} />
-            <path
-              d="M12 3a9 9 0 0 1 9 9"
-              stroke={colors.terracotta}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-            />
-          </Spinner>
-          <StateText>Chargement…</StateText>
-        </CenteredState>
-      );
+      return <MenuSpinner />;
     case 'error':
       return (
         <ErrorBox>
@@ -407,10 +297,29 @@ function Body(props: MenuScreenProps) {
         </ErrorBox>
       );
     case 'unavailable':
+      return <MenuUnavailable message={props.message} />;
+    case 'empty':
       return (
-        <CenteredState>
-          <StateText role="status">{props.message}</StateText>
-        </CenteredState>
+        <EmptyState>
+          <EmptyIcon
+            width={64}
+            height={64}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x={3} y={5} width={18} height={16} rx={2} />
+            <path d="M3 10h18" />
+            <path d="M8 3v4" />
+            <path d="M16 3v4" />
+          </EmptyIcon>
+          <EmptyTitle>Aucun menu enregistré</EmptyTitle>
+          <EmptyText>Génère ton premier menu pour le retrouver ici</EmptyText>
+        </EmptyState>
       );
     case 'consultation':
       return (
@@ -434,33 +343,8 @@ function Body(props: MenuScreenProps) {
               ›
             </ArrowButton>
           </PeriodBar>
-          <SaveNoticeView notice={props.saveNotice} />
-          <Days days={props.days} />
-          <PrimaryButton type="button" onClick={props.onNewMenu}>
-            + Nouveau menu
-          </PrimaryButton>
-        </>
-      );
-    case 'success':
-      return (
-        <>
-          <Days days={props.days} />
-          <StartDatePicker
-            value={props.startDateIso}
-            min={props.startDateFloorIso}
-            refused={props.startDateRefused}
-            onChange={props.onStartDateChange}
-          />
-          <WindowSelector selectedDays={props.selectedDays} onSelect={props.onSelect} />
-          <Actions>
-            <PrimaryButton type="button" onClick={props.onRegenerate}>
-              Régénérer
-            </PrimaryButton>
-            <PrimaryButton type="button" onClick={props.onSave} disabled={props.saveDisabled}>
-              Enregistrer
-            </PrimaryButton>
-          </Actions>
-          <SaveNoticeView notice={props.saveNotice} />
+          <MenuSaveNoticeView notice={props.saveNotice} />
+          <MenuDays days={props.days} />
         </>
       );
   }
@@ -469,7 +353,24 @@ function Body(props: MenuScreenProps) {
 export function MenuScreen(props: MenuScreenProps) {
   return (
     <Page>
-      <Title>Menu</Title>
+      <Header>
+        <Title>Menu</Title>
+        <AddLink to="/menu/nouveau" aria-label="Créer un menu">
+          <svg
+            width={24}
+            height={24}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+        </AddLink>
+      </Header>
       <Body {...props} />
     </Page>
   );

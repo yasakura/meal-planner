@@ -2,10 +2,13 @@ export type BackLink = { href: string; label: string };
 
 const DEPUIS = 'depuis';
 const MENU = 'menu';
+const MENU_BROUILLON = 'menu-nouveau';
 
 const RETOUR_CATALOGUE: BackLink = { href: '/catalogue', label: '← Recettes' };
 
 const RETOUR_MENU: BackLink = { href: '/menu', label: '← Menu' };
+
+const RETOUR_BROUILLON: BackLink = { href: '/menu/nouveau', label: '← Menu' };
 
 const RETOUR_RECETTE = '← Recette';
 
@@ -28,8 +31,13 @@ function origin(query: string, backLink: BackLink): Origin {
 
 export const FROM_MENU: Origin = origin(`?${DEPUIS}=${MENU}`, RETOUR_MENU);
 
+export const FROM_MENU_DRAFT: Origin = origin(`?${DEPUIS}=${MENU_BROUILLON}`, RETOUR_BROUILLON);
+
 const FROM_CATALOGUE: Origin = origin('', RETOUR_CATALOGUE);
 
 export function originOf(params: URLSearchParams): Origin {
-  return params.get(DEPUIS) === MENU ? FROM_MENU : FROM_CATALOGUE;
+  const depuis = params.get(DEPUIS);
+  if (depuis === MENU) return FROM_MENU;
+  if (depuis === MENU_BROUILLON) return FROM_MENU_DRAFT;
+  return FROM_CATALOGUE;
 }
