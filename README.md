@@ -73,9 +73,9 @@ changent à chaque run et un menu conservé n'afficherait que « Recette inconnu
 ## Tester
 
 ```bash
-npm run test          # Vitest — 991 tests, 83 fichiers
-npm run test:coverage # idem + couverture (seuils sur src/domain/**)
-npm run e2e           # Playwright — 50 scénarios, démarre lui-même le mode e2e
+npm run test          # Vitest, avec les seuils de couverture
+npm run test:coverage # idem (les seuils portent sur domain/, data/ et ui/)
+npm run e2e           # Playwright, démarre lui-même le mode e2e
 npm run test:mutation # Stryker — gate break: 80, LOCAL uniquement
 npm run lint          # ESLint, frontières comprises
 npm run build         # tsc -b puis build Vite (le seul à typechecker les tests)
