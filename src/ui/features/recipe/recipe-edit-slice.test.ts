@@ -5,7 +5,7 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { type UpdateRecipe, type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import {
   recipeEditFormOpened,
   recipeEditNoticeOf,

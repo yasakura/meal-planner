@@ -4,7 +4,7 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type GetRecipe } from '../../../domain/use-cases/get-recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import {
   loadRecipeDetail,

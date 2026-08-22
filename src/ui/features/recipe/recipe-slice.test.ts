@@ -6,7 +6,7 @@ import { type CreateRecipe, type CreateRecipeInput } from '../../../domain/use-c
 import { type NewRecipeId } from '../../../domain/use-cases/new-recipe-id';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import {
   createRecipe,

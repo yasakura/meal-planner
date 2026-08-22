@@ -11,7 +11,7 @@ import { type UpdateRecipe, type UpdateRecipeInput } from '../../../domain/use-c
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { loadRecipeDetail } from '../recipe-detail/recipe-detail-slice';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { RecipeEditContainer } from './RecipeEditContainer';
 
 const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));

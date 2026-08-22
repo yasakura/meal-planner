@@ -10,7 +10,7 @@ import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import {
   generateMenu,

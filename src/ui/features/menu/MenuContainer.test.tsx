@@ -16,7 +16,7 @@ import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { type NextMonday } from '../../../domain/use-cases/next-monday';
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { createTestStore } from '../../store/create-test-store';
+import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import { generateMenu, saveMenu } from './menu-slice';
 import { MENU_APRES_ENREGISTREMENT } from './menu-return';

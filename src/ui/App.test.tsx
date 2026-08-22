@@ -15,7 +15,7 @@ import { App } from './App';
 import { generateMenu, saveMenu } from './features/menu/menu-slice';
 import { MENU_APRES_ENREGISTREMENT } from './features/menu/menu-return';
 import { type AppDependencies } from './store/store';
-import { createTestStore } from './store/create-test-store';
+import { createTestStore } from '../test/create-test-store';
 
 function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession(), ...overrides });
