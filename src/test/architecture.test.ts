@@ -82,6 +82,30 @@ function violationsIn(files: string[], forbidden: string[]): string[] {
   return violations;
 }
 
+const TEST_INFRA_SEGMENTS = ['test', 'test-builders', 'test-doubles', 'test-utils'];
+
+function isTestInfra(file: string): boolean {
+  return relative(ROOT, file)
+    .split(sep)
+    .some((segment) => TEST_INFRA_SEGMENTS.includes(segment));
+}
+
+function productionFiles(): string[] {
+  return collectSourceFiles(ROOT).filter((file) => !isTestInfra(file));
+}
+
+function testInfraImportsIn(files: string[]): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    for (const spec of extractImports(readFileSync(file, 'utf-8'), file)) {
+      if (!spec.startsWith('.')) continue;
+      if (!isTestInfra(resolve(dirname(file), spec))) continue;
+      violations.push(`${relative(ROOT, file)} importe ${spec}`);
+    }
+  }
+  return violations;
+}
+
 function collectFeatureFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -289,5 +313,23 @@ describe('Architecture boundaries', () => {
     );
 
     expect(specifiers.map((spec) => featureOf(resolve(dirname(file), spec)))).toEqual(['recipe']);
+  });
+
+  it("aucun fichier de production n'importe l'infra de test — test-builders, test-doubles, test-utils, src/test", () => {
+    const violations = testInfraImportsIn(productionFiles());
+
+    expect(
+      violations,
+      `Infra de test importée depuis la production :\n${violations.join('\n')}`,
+    ).toHaveLength(0);
+  });
+
+  it("gage du garde d'infra de test : le même détecteur, lâché sur l'infra elle-même, NOMME recipe.builder.ts et son import de ingredient.builder — que le garde, lui, laisse passer", () => {
+    const infra = collectSourceFiles(ROOT).filter(isTestInfra);
+
+    expect(testInfraImportsIn(infra)).toContain(
+      `${join('domain', 'test-builders', 'recipe.builder.ts')} importe ./ingredient.builder`,
+    );
+    expect(testInfraImportsIn(productionFiles())).toHaveLength(0);
   });
 });

@@ -219,7 +219,9 @@ poser le seuil. — _Chantier fait, voir l'amendement en fin de page._
 
 ### Ce que l'exclusion ne masque pas
 
-Les deux entrées sont des **chemins exacts**, pas des globs : rien ne peut s'y glisser. Recomptage
+Les deux entrées sont des **chemins exacts**, pas des globs : rien ne peut s'y glisser. — _Les
+exclusions de l'[amendement du 2026-08-23](#amendement-du-2026-08-23--linfra-de-test-sort-du-dénominateur-et-cesse-dêtre-importable)
+sont, elles, des globs de répertoire ; ce qui tient leur contenu est un garde statique, pas la forme du chemin._ Recomptage
 après exclusion : `src/ui/**` passe de **52 à 50** fichiers ; `domain/`, `data/` et `config/` sont
 inchangés, au fichier près. Les deux seuls fichiers retirés de la mesure sont ceux-là.
 
@@ -389,3 +391,180 @@ parce qu'après extraction `firebase.ts` n'en porte plus aucune. Une exclusion n
 sur les quatre métriques à la fois.
 
 Aux valeurs retenues : `npm run test` **exit 0**, **0 ligne `ERROR`**, 93 fichiers, 1129 tests.
+
+## Amendement du 2026-08-23 — l'infra de test sort du dénominateur, et cesse d'être importable
+
+Branche `iter-44-infra-de-test`, issue [#120](https://github.com/yasakura/meal-planner/issues/120).
+L'issue ne nommait que `src/ui/test-utils/deferred.ts`. Le balayage en a trouvé **quatorze**, et
+c'est ce dénombrement qui change la nature du sujet.
+
+| répertoire                  | fichiers | couverture |
+| --------------------------- | -------: | ---------- |
+| `src/ui/test-utils/`        |        1 | 100 %      |
+| `src/domain/test-builders/` |        5 | 100 %      |
+| `src/domain/test-doubles/`  |        8 | 100 %      |
+
+### Ce que le cliquet de `src/domain/**` mesurait vraiment
+
+Les quatorze sont à 100 % sur les quatre métriques : ils **gonflent** le numérateur, exactement le
+mode de dilution que [#120](https://github.com/yasakura/meal-planner/issues/120) décrit comme plus
+sournois que celui de [#114](https://github.com/yasakura/meal-planner/issues/114), où le chiffre
+criait en tirant vers le bas.
+
+L'ampleur n'avait été mesurée par aucune des deux issues. Sur `src/domain/**` :
+
+| métrique   | dénominateur total | dont infra de test | part de l'infra |
+| ---------- | -----------------: | -----------------: | --------------: |
+| statements |                340 |                160 |        **47 %** |
+| functions  |                157 |                 93 |        **59 %** |
+| lines      |                328 |                158 |        **48 %** |
+| branches   |                101 |                 20 |            20 % |
+
+Le plancher à 100 % de `domain/` reposait donc pour **moitié de ses statements et près de trois
+cinquièmes de ses fonctions** sur des builders et des doubles qui se couvrent tout seuls : un test
+qui en construit un le couvre par construction, sans rien vérifier de lui.
+
+### Ce que la couverture appliquait déjà ailleurs
+
+`stryker.conf.mjs` retire du `mutate` `src/domain/test-doubles/**` et `src/domain/test-builders/**`,
+et `CLAUDE.md` le formule : « Exclus du `mutate` : les fichiers de test ET l'infra de test. » La
+couverture n'appliquait pas la règle que la mutation applique. Les trois répertoires sont désormais
+exclus.
+
+### Le critère du point 4, appliqué à une famille et non à un fichier
+
+Le point 4 dit « pas _quand c'est de l'infra_ : le critère est mesurable fichier par fichier ». Il
+tient, et c'est justement pourquoi une exclusion par répertoire est ici légitime : pour un builder ou
+un double, le critère rend la même réponse pour **tous** les membres, par construction. Le
+pourcentage d'un `RecipeBuilder` bascule selon qu'un test l'instancie, jamais selon que quelque chose
+est vérifié — c'est le raisonnement de `global-style.ts`, transposé à une famille dont chaque membre
+le satisfait par définition.
+
+Le risque d'un glob est qu'un fichier de production s'y glisse et échappe à la mesure. Il est fermé
+par le garde ci-dessous : un module posé dans un répertoire d'infra n'est plus importable depuis la
+production, donc il y est de l'infra ou du code mort.
+
+### Exclure ou déplacer — l'arbitrage de #114 ne se transpose pas
+
+[#114](https://github.com/yasakura/meal-planner/issues/114) avait retenu le **déplacement** pour un
+motif précis : l'exclusion rendait `create-test-store.ts` invisible à la couverture **tout en le
+laissant importable depuis la production**, alors que le déplacement dans `src/test/` rendait cet
+import illégal pour `eslint-plugin-boundaries`.
+
+Le motif vaut ici, la solution non : déplacer treize fichiers de `src/domain/` toucherait des
+dizaines d'importateurs pour un chantier de mesure. La vraie question a donc été posée à l'envers, et
+**mesurée au lieu d'être déduite de la configuration** : un fichier de production peut-il aujourd'hui
+importer l'infra de test sans qu'aucun garde ne bronche ?
+
+`src/domain/use-cases/get-recipe.ts` — fichier de production — a reçu un
+`import { InMemoryRecipeRepository } from '../test-doubles/in-memory-recipe-repository'`, utilisé
+dans le corps du use case.
+
+```
+LINT EXIT=0
+TSC EXIT=0
+ Test Files  93 passed (93)
+      Tests  1129 passed (1129)
+TEST EXIT=0
+```
+
+**Rien ne bronche.** `boundaries/dependencies` autorise `domain` → `domain`, et
+`src/domain/test-doubles/` est du `domain`. Idem côté `ui` pour `deferred.ts`, `ui` → `ui` étant
+autorisé. Le trou est réel, et une exclusion de couverture ne l'aurait pas fermé — elle l'aurait
+rendu moins visible.
+
+### Le garde statique, plutôt que treize déplacements
+
+`src/test/architecture.test.ts` sait déjà lire les imports par l'AST
+([ADR 0031](0031-lecture-des-imports-par-l-ast.md)). Il porte désormais un quatrième garde : **aucun
+fichier de production n'importe d'infra de test**, l'infra étant tout fichier dont un segment de
+chemin est `test`, `test-builders`, `test-doubles` ou `test-utils`.
+
+Il ferme les quatorze d'un coup, sans déplacer une ligne, et il couvre aussi les répertoires qui
+n'existent pas encore. Ce que le déplacement de #114 a obtenu par le rangement, celui-ci l'obtient
+par la lecture — et il l'obtient pour `src/domain/`, où `boundaries` ne peut structurellement rien
+dire, puisque `domain` → `domain` doit rester autorisé.
+
+Confronté par les deux violations qu'il annonce, une par couche :
+
+```
+AssertionError: Infra de test importée depuis la production :
+domain/use-cases/get-recipe.ts importe ../test-doubles/in-memory-recipe-repository
+```
+
+```
+AssertionError: Infra de test importée depuis la production :
+ui/store/store.ts importe ../test-utils/deferred
+```
+
+Son gage permanent, sur le modèle des trois autres : le même détecteur, lâché sur l'infra
+elle-même, **nomme** `domain/test-builders/recipe.builder.ts importe ./ingredient.builder` — un
+import que le garde, lui, laisse passer. L'assertion d'absence du garde est ainsi adossée au même
+localisateur vu trouver quelque chose.
+
+### Ce que la mesure devient
+
+| glob            | avant (fichiers / stmts / branch / funcs / lines) | après                              |
+| --------------- | ------------------------------------------------- | ---------------------------------- |
+| `src/domain/**` | 46 / 100 / 100 / 100 / 100                        | 33 / 100 / 100 / 100 / 100         |
+| `src/ui/**`     | 49 / 99.26 / 97.39 / 98.46 / 99.38                | 48 / 99.25 / 97.39 / 98.45 / 99.38 |
+
+`data/` et `config/` sont inchangés, au fichier près. Le recomptage confirme que les seuls fichiers
+retirés sont les quatorze.
+
+**Les deux cliquets ne bougent pas, et cette fois il faut le dire fort, car les deux sens du piège
+étaient ouverts.** Retirer des fichiers à 100 % fait baisser la valeur réelle ; ici la baisse est de
+**0,01 point** sur deux métriques de `src/ui/**` et **nulle** sur `src/domain/**`, où le reste du
+glob est lui aussi à 100 %. La doctrine « niveau mesuré, arrondi vers le bas à l'entier » rend donc
+les mêmes chiffres : 100 / 100 / 100 / 100 et 99 / 98 / 97 / 99.
+
+Les tolérances absolues ne bougent pas non plus — 2 statements, 3 lignes, 1 branche, 1 fonction sur
+`src/ui/**`, 0 partout sur `src/domain/**`.
+
+**Ce qui change n'est pas le chiffre, c'est ce qu'il garde.** Le 100 % de `src/domain/**` porte
+désormais sur 180 statements et 64 fonctions de code de production, au lieu de 340 et 157 dont
+l'infra faisait la moitié. Un cliquet identique, sur un dénominateur deux fois plus exigeant.
+
+### Chaque glob touché, vu échouer par `npm run test`
+
+Les deux globs dont le dénominateur change sont reconfrontés d'un cran au-dessus du réel, puis
+restaurés. `data/` et `config/` ne sont pas touchés, donc pas reconfrontés.
+
+```
+> vitest run --coverage
+ Test Files  93 passed (93)
+      Tests  1131 passed (1131)
+ERROR: Coverage for lines (100%) does not meet "src/domain/**" threshold (100.01%)
+ERROR: Coverage for functions (100%) does not meet "src/domain/**" threshold (100.01%)
+ERROR: Coverage for statements (100%) does not meet "src/domain/**" threshold (100.01%)
+ERROR: Coverage for branches (100%) does not meet "src/domain/**" threshold (100.01%)
+EXIT=1
+```
+
+```
+ERROR: Coverage for lines (99.38%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for functions (98.45%) does not meet "src/ui/**" threshold (99%)
+ERROR: Coverage for statements (99.25%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for branches (97.39%) does not meet "src/ui/**" threshold (98%)
+EXIT=1
+```
+
+Contre-épreuve de l'exclusion, les quatorze réintégrés :
+
+```
+ERROR: Coverage for lines (99.38%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for functions (98.46%) does not meet "src/ui/**" threshold (99%)
+ERROR: Coverage for statements (99.26%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for branches (97.39%) does not meet "src/ui/**" threshold (98%)
+```
+
+C'est vitest lui-même qui prononce les deux colonnes du tableau ci-dessus, à 99.26/98.46 avec l'infra
+et 99.25/98.45 sans.
+
+**Honnêteté du relevé** : les quatorze réintégrés, cliquets aux valeurs retenues, `npm run test` sort
+**exit 0, 0 ligne `ERROR`**. L'exclusion n'est donc arithmétiquement nécessaire à aucun seuil ; c'est
+une application du critère, comme celle de `global-style.ts`. Ce qu'elle change est ce que le
+pourcentage **signifie**, pas ce qu'il autorise aujourd'hui.
+
+Aux valeurs retenues, exclusions en place : `npm run test` **exit 0**, **0 ligne `ERROR`**, 93
+fichiers, 1131 tests.
