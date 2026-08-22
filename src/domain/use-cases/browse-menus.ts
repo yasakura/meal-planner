@@ -1,5 +1,5 @@
-import { addDays, isBefore, type CalendarDate } from '../entities/calendar-date';
-import { type Menu } from '../entities/menu';
+import { isBefore, type CalendarDate } from '../entities/calendar-date';
+import { dateFinDuMenu, type Menu } from '../entities/menu';
 import { type Clock } from '../ports/clock';
 import { type MenuRepository } from '../ports/menu-repository';
 
@@ -8,12 +8,8 @@ export type MenuNavigation = {
   indexInitial: number | null;
 };
 
-function dateFin(menu: Menu): CalendarDate {
-  return addDays(menu.dateDebut, Math.max(...menu.repas.map((repas) => repas.jour)));
-}
-
 function contient(menu: Menu, date: CalendarDate): boolean {
-  return !isBefore(date, menu.dateDebut) && !isBefore(dateFin(menu), date);
+  return !isBefore(date, menu.dateDebut) && !isBefore(dateFinDuMenu(menu), date);
 }
 
 function indexInitialParmi(menus: Menu[], aujourdHui: CalendarDate): number | null {

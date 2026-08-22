@@ -1,8 +1,8 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-import { addDays, type CalendarDate } from '../../../domain/entities/calendar-date';
-import { type Menu } from '../../../domain/entities/menu';
+import { type CalendarDate } from '../../../domain/entities/calendar-date';
+import { dateFinDuMenu, type Menu } from '../../../domain/entities/menu';
 
 const FORMAT_MOIS = 'MMM';
 const PREMIER_DU_MOIS = 1;
@@ -17,7 +17,7 @@ function quantiemeEtMois(date: CalendarDate): string {
 }
 
 export function menuPeriodLabel(menu: Menu): string {
-  const fin = addDays(menu.dateDebut, Math.max(...menu.repas.map((repas) => repas.jour)));
+  const fin = dateFinDuMenu(menu);
   const debut =
     menu.dateDebut.month === fin.month
       ? quantieme(menu.dateDebut)

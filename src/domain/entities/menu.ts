@@ -1,4 +1,4 @@
-import { type CalendarDate } from './calendar-date';
+import { addDays, type CalendarDate } from './calendar-date';
 import { type Repas } from './repas';
 
 export type Menu = {
@@ -19,4 +19,8 @@ export function createMenu(props: MenuProps): Menu {
     dateDebut: props.dateDebut,
     repas: Object.freeze([...props.repas]),
   });
+}
+
+export function dateFinDuMenu(menu: Menu): CalendarDate {
+  return addDays(menu.dateDebut, Math.max(...menu.repas.map((repas) => repas.jour)));
 }

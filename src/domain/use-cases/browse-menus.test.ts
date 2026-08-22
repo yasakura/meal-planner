@@ -86,12 +86,12 @@ describe('browseMenusUseCase', () => {
   });
 
   it('borne la période sur le PLUS GRAND jour de repas, pas sur le nombre de repas', async () => {
-    const menuTroue = menuCommencantDans(-3).withRepasAuxJours([0, 3, 1]).build();
+    const menuTroue = menuCommencantDans(-4).withRepasAuxJours([0, 5, 2]).build();
     const menuAVenir = menuCommencantDans(30).lastingDays(7).build();
 
     const navigation = await navigationSur(menuTroue, menuAVenir);
 
-    expect(debuts(navigation)).toEqual(['2026-08-16', '2026-09-18']);
+    expect(debuts(navigation)).toEqual(['2026-08-15', '2026-09-18']);
     expect(navigation.indexInitial).toBe(0);
   });
 
