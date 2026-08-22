@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
-import { createCalendarDate, type CalendarDate } from '../../../domain/entities/calendar-date';
+import { createCalendarDate } from '../../../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../../../domain/entities/menu';
 import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type BrowseMenus, type MenuNavigation } from '../../../domain/use-cases/browse-menus';
 import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
@@ -15,23 +14,19 @@ import { createTestStore } from '../../store/create-test-store';
 import { deferred } from '../../test-utils/deferred';
 import {
   generateMenu,
-  loadSavedMenus,
-  menuConsultationOf,
+  menuCreationViewOf,
+  menuSaveHonored,
   menuErrorMessage,
   menuInitialState,
   menuReducer,
   menuSaveNoticeOf,
-  menuScreenOpened,
+  menuCreateScreenOpened,
   menuStartDateSelected,
   menuWindowSelected,
-  newMenuRequested,
-  nextMenuSelected,
   NO_RECIPES,
-  previousMenuSelected,
   refreshMenuRecipes,
-  SAVED_MENUS_UNREADABLE,
   saveMenu,
-  selectIsSaveInFlight,
+  isSaveInFlight,
   selectMenu,
   selectStartDateIso,
   type MenuState,
@@ -90,9 +85,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: null,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -119,9 +111,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: generated.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -174,9 +163,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: failed.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -213,9 +199,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: inFlight.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -243,9 +226,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: refused.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
     expect(generateCalled).toBe(false);
   });
@@ -272,9 +252,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: refuse.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -288,7 +265,7 @@ describe('menu slice', () => {
     const refuse = await store.dispatch(generateMenu(7));
     expect(selectMenu(store.getState()).status).toBe('unavailable');
 
-    await store.dispatch(menuScreenOpened());
+    await store.dispatch(menuCreateScreenOpened());
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'idle',
@@ -302,9 +279,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: refuse.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -324,7 +298,7 @@ describe('menu slice', () => {
     expect(selectMenu(store.getState()).status).toBe('unavailable');
     expect(selectMenu(store.getState()).menu).not.toBeNull();
 
-    store.dispatch(menuScreenOpened());
+    store.dispatch(menuCreateScreenOpened());
 
     expect(selectMenu(store.getState()).status).toBe('unavailable');
   });
@@ -338,7 +312,7 @@ describe('menu slice', () => {
     await store.dispatch(generateMenu(7));
     expect(selectMenu(store.getState()).error).toBe('no-recipes');
 
-    store.dispatch(menuScreenOpened());
+    store.dispatch(menuCreateScreenOpened());
 
     expect(selectMenu(store.getState()).status).toBe('error');
     expect(selectMenu(store.getState()).error).toBe('no-recipes');
@@ -359,9 +333,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: 'req-0',
       saveStatus: 'saved',
       latestSaveRequestId: 'save-0',
-      mode: 'generation',
-      menus: [aMenu()],
-      index: 0,
     };
 
     const next = menuReducer(errored, generateMenu.fulfilled({ menu, recipes }, 'req-1', 7));
@@ -378,9 +349,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: 'req-0',
       saveStatus: 'saved',
       latestSaveRequestId: 'save-0',
-      mode: 'generation',
-      menus: [aMenu()],
-      index: 0,
     });
   });
 
@@ -397,9 +365,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: 'req-0',
       saveStatus: 'saved',
       latestSaveRequestId: 'save-0',
-      mode: 'generation',
-      menus: [aMenu()],
-      index: 0,
     };
 
     const next = menuReducer(dirty, generateMenu.pending('req-1', 7));
@@ -416,9 +381,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: 'req-1',
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'generation',
-      menus: [aMenu()],
-      index: 0,
     });
   });
 
@@ -463,9 +425,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: inFlight.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
 
     resolveGenerate(menu);
@@ -483,9 +442,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: inFlight.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
   it('rafraîchir les recettes met à jour les recettes sans toucher au menu ni à la fenêtre choisie', async () => {
@@ -523,9 +479,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: refreshed.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -568,9 +521,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: result.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -608,9 +558,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: result.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -652,9 +599,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: revenue.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -696,9 +640,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: courante.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -726,9 +667,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: null,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
   it('la relecture tardive d’un écran quitté ne fait pas revenir un ancien titre', async () => {
@@ -769,9 +707,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: courante.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 
@@ -812,9 +747,6 @@ describe('menu slice', () => {
       latestRecipesRequestId: regeneration.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
-      mode: 'consultation',
-      menus: [],
-      index: null,
     });
   });
 });
@@ -1031,12 +963,12 @@ describe('menu slice — enregistrement du menu', () => {
 
     const enregistrement = store.dispatch(saveMenu());
 
-    expect(selectIsSaveInFlight(store.getState())).toBe(true);
+    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(true);
     expect(constat(store)).toBeNull();
 
     enVol.resolve();
     await enregistrement;
-    expect(selectIsSaveInFlight(store.getState())).toBe(false);
+    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(false);
     expect(constat(store)).toEqual(SUCCES);
   });
 
@@ -1047,7 +979,7 @@ describe('menu slice — enregistrement du menu', () => {
     await store.dispatch(saveMenu());
 
     expect(constat(store)).toEqual(PANNE);
-    expect(selectIsSaveInFlight(store.getState())).toBe(false);
+    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(false);
   });
 
   it('un échec franc du dépôt : l’écran dit que l’enregistrement a échoué', async () => {
@@ -1057,7 +989,7 @@ describe('menu slice — enregistrement du menu', () => {
     await store.dispatch(saveMenu());
 
     expect(constat(store)).toEqual(ECHEC);
-    expect(selectIsSaveInFlight(store.getState())).toBe(false);
+    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(false);
   });
 
   it('sans menu affiché, aucun enregistrement ne part — et il part dès qu’un menu est à l’écran', async () => {
@@ -1139,7 +1071,7 @@ describe('menu slice — enregistrement du menu', () => {
     await store.dispatch(saveMenu());
     expect(constat(store)).toEqual(SUCCES);
 
-    store.dispatch(menuScreenOpened());
+    store.dispatch(menuCreateScreenOpened());
 
     expect(constat(store)).toBeNull();
   });
@@ -1149,530 +1081,14 @@ describe('menu slice — enregistrement du menu', () => {
     const store = await storeAvecMenuAffiche({ saveMenu: () => enVol.promise });
 
     const enregistrement = store.dispatch(saveMenu());
-    expect(selectIsSaveInFlight(store.getState())).toBe(true);
+    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(true);
 
-    store.dispatch(menuScreenOpened());
+    store.dispatch(menuCreateScreenOpened());
 
-    expect(selectIsSaveInFlight(store.getState())).toBe(true);
+    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(true);
     enVol.resolve();
     await enregistrement;
     expect(constat(store)).toEqual(SUCCES);
-  });
-});
-
-describe('menu slice — consultation des menus enregistrés', () => {
-  const LUNDI_31_AOUT = createCalendarDate({ year: 2026, month: 8, day: 31 });
-  const LUNDI_7_SEPT = createCalendarDate({ year: 2026, month: 9, day: 7 });
-
-  function menuDeLaSemaine(dateDebut: CalendarDate): Menu {
-    return createMenu({
-      dateDebut,
-      repas: [
-        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
-        createRepas({ jour: 6, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
-      ],
-    });
-  }
-
-  function browsing(menus: Menu[], indexInitial: number | null): BrowseMenus {
-    return async () => ({ menus, indexInitial });
-  }
-
-  const TROIS_SEMAINES = [
-    menuDeLaSemaine(LUNDI_24_AOUT),
-    menuDeLaSemaine(LUNDI_31_AOUT),
-    menuDeLaSemaine(LUNDI_7_SEPT),
-  ];
-
-  async function storeEnConsultation(menus: Menu[], indexInitial: number | null) {
-    const store = createTestStore({
-      browseMenus: browsing(menus, indexInitial),
-      listRecipes: async () => twoRecipes(),
-    });
-    await store.dispatch(menuScreenOpened());
-    return store;
-  }
-
-  function consultation(store: ReturnType<typeof createTestStore>) {
-    return menuConsultationOf(selectMenu(store.getState()));
-  }
-
-  it('à l’arrivée, la liste des menus enregistrés et le curseur viennent du domaine, sans retri', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
-
-    expect(selectMenu(store.getState()).menus).toEqual(TROIS_SEMAINES);
-    expect(selectMenu(store.getState()).index).toBe(1);
-  });
-
-  it('l’arrivée lit les menus enregistrés PUIS les titres du catalogue', async () => {
-    const appels: string[] = [];
-    const store = createTestStore({
-      browseMenus: async () => {
-        appels.push('menus');
-        return { menus: TROIS_SEMAINES, indexInitial: 1 };
-      },
-      listRecipes: async () => {
-        appels.push('recettes');
-        return twoRecipes();
-      },
-    });
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(appels).toEqual(['menus', 'recettes']);
-  });
-
-  it('sans menu enregistré ni menu généré, l’arrivée ne lit pas le catalogue', async () => {
-    let lectures = 0;
-    const store = createTestStore({
-      browseMenus: browsing([], null),
-      listRecipes: async () => {
-        lectures += 1;
-        return twoRecipes();
-      },
-    });
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(lectures).toBe(0);
-  });
-
-  it('l’écran consulte le menu désigné : sa période, ses jours, ses créneaux et ses liens', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
-
-    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
-    expect(consultation(store)?.days.map((jour) => jour.label)).toEqual([
-      'lundi 31 août',
-      'dimanche 6 septembre',
-    ]);
-    expect(consultation(store)?.days.at(0)?.slots).toEqual([
-      {
-        key: '0-midi',
-        creneauLabel: 'Midi',
-        title: 'Ratatouille',
-        recipe: 'known',
-        href: '/catalogue/r1?depuis=menu',
-      },
-    ]);
-  });
-
-  it('le curseur recule d’un menu, et avance d’un menu', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
-
-    store.dispatch(previousMenuSelected());
-    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
-
-    store.dispatch(nextMenuSelected());
-    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
-
-    store.dispatch(nextMenuSelected());
-    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
-  });
-
-  it('sur le plus ancien, seule la flèche de gauche est verrouillée', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 0);
-
-    expect(consultation(store)?.previousDisabled).toBe(true);
-    expect(consultation(store)?.nextDisabled).toBe(false);
-  });
-
-  it('sur le plus récent, seule la flèche de droite est verrouillée', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 2);
-
-    expect(consultation(store)?.previousDisabled).toBe(false);
-    expect(consultation(store)?.nextDisabled).toBe(true);
-  });
-
-  it('entre deux menus, aucune flèche n’est verrouillée', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
-
-    expect(consultation(store)?.previousDisabled).toBe(false);
-    expect(consultation(store)?.nextDisabled).toBe(false);
-  });
-
-  it('un seul menu enregistré verrouille les deux flèches', async () => {
-    const store = await storeEnConsultation([menuDeLaSemaine(LUNDI_24_AOUT)], 0);
-
-    expect(consultation(store)?.previousDisabled).toBe(true);
-    expect(consultation(store)?.nextDisabled).toBe(true);
-  });
-
-  it('aucun menu enregistré : l’écran ne consulte rien, même une fois un menu généré', async () => {
-    const store = createTestStore({
-      browseMenus: browsing([], null),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => aMenu(),
-    });
-    await store.dispatch(menuScreenOpened());
-
-    await store.dispatch(generateMenu(7));
-
-    expect(selectMenu(store.getState()).status).toBe('success');
-    expect(selectMenu(store.getState()).mode).toBe('consultation');
-    expect(consultation(store)).toBeNull();
-  });
-
-  it('tant que les titres ne sont pas lus, l’écran ne consulte rien', async () => {
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => twoRecipes(),
-    });
-
-    await store.dispatch(loadSavedMenus());
-
-    expect(selectMenu(store.getState()).index).toBe(1);
-    expect(consultation(store)).toBeNull();
-  });
-
-  it('hors ligne, le constat l’emporte sur la consultation', async () => {
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
-    });
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
-    expect(consultation(store)).toBeNull();
-  });
-
-  it('une relecture des titres qui échoue ne retire pas de l’écran le menu consulté', async () => {
-    let enPanne = false;
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => {
-        if (enPanne) throw new Error('Boom firestore');
-        return twoRecipes();
-      },
-    });
-    await store.dispatch(menuScreenOpened());
-    expect(consultation(store)).not.toBeNull();
-
-    enPanne = true;
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('error');
-    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
-    expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
-  });
-
-  it('un dépôt injoignable pendant la relecture des titres ne retire pas de l’écran le menu consulté', async () => {
-    let enPanne = false;
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => {
-        if (enPanne) throw RepositoryUnavailableError.create();
-        return twoRecipes();
-      },
-    });
-    await store.dispatch(menuScreenOpened());
-    expect(consultation(store)).not.toBeNull();
-
-    enPanne = true;
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
-    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
-    expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
-  });
-
-  it('le curseur déplacé revient au menu désigné par le domaine à chaque arrivée sur l’écran', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
-    store.dispatch(previousMenuSelected());
-    expect(selectMenu(store.getState()).index).toBe(0);
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).index).toBe(1);
-  });
-
-  it('« + Nouveau menu » quitte la consultation pour un formulaire vierge, sans le dernier menu généré', async () => {
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => aMenu(),
-    });
-    await store.dispatch(menuScreenOpened());
-    await store.dispatch(generateMenu(7));
-    expect(selectMenu(store.getState()).menu).not.toBeNull();
-
-    store.dispatch(newMenuRequested());
-
-    expect(consultation(store)).toBeNull();
-    expect(selectMenu(store.getState()).mode).toBe('generation');
-    expect(selectMenu(store.getState()).status).toBe('idle');
-    expect(selectMenu(store.getState()).menu).toBeNull();
-  });
-
-  it('« + Nouveau menu » efface le constat de l’enregistrement précédent', async () => {
-    const enregistre = menuDeLaSemaine(LUNDI_24_AOUT);
-    const store = createTestStore({
-      browseMenus: browsing([enregistre], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => enregistre,
-      saveMenu: async () => {},
-    });
-    await store.dispatch(generateMenu(7));
-    await store.dispatch(saveMenu());
-    expect(menuSaveNoticeOf(selectMenu(store.getState()))).not.toBeNull();
-
-    store.dispatch(newMenuRequested());
-
-    expect(menuSaveNoticeOf(selectMenu(store.getState()))).toBeNull();
-  });
-
-  it('un enregistrement réussi ramène en consultation, sur le menu enregistré et non sur celui du jour', async () => {
-    const duJour = menuDeLaSemaine(LUNDI_24_AOUT);
-    const nouveau = menuDeLaSemaine(LUNDI_7_SEPT);
-    const store = createTestStore({
-      browseMenus: browsing([duJour, nouveau], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => nouveau,
-      saveMenu: async () => {},
-    });
-    await store.dispatch(generateMenu(7));
-
-    await store.dispatch(saveMenu());
-
-    expect(selectMenu(store.getState()).index).toBe(1);
-    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
-  });
-
-  it('après l’enregistrement, la consultation porte encore le constat « Menu enregistré »', async () => {
-    const enregistre = menuDeLaSemaine(LUNDI_24_AOUT);
-    const store = createTestStore({
-      browseMenus: browsing([enregistre], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => enregistre,
-      saveMenu: async () => {},
-    });
-    await store.dispatch(generateMenu(7));
-
-    await store.dispatch(saveMenu());
-
-    expect(consultation(store)?.saveNotice).toEqual({
-      tone: 'success',
-      message: 'Menu enregistré',
-    });
-  });
-
-  it('un enregistrement réussi que la relecture ne retrouve pas laisse l’écran sur le générateur', async () => {
-    const duJour = menuDeLaSemaine(LUNDI_24_AOUT);
-    const nouveau = menuDeLaSemaine(LUNDI_7_SEPT);
-    const store = createTestStore({
-      browseMenus: browsing([duJour], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => nouveau,
-      saveMenu: async () => {},
-    });
-    await store.dispatch(menuScreenOpened());
-    store.dispatch(newMenuRequested());
-    await store.dispatch(generateMenu(7));
-
-    await store.dispatch(saveMenu());
-
-    expect(selectMenu(store.getState()).mode).toBe('generation');
-    expect(consultation(store)).toBeNull();
-    expect(menuSaveNoticeOf(selectMenu(store.getState()))).toEqual({
-      tone: 'success',
-      message: 'Menu enregistré',
-    });
-  });
-
-  it('un enregistrement désavoué par une génération ne ramène pas en consultation', async () => {
-    const enregistre = menuDeLaSemaine(LUNDI_24_AOUT);
-    const enVol = deferred<void>();
-    const store = createTestStore({
-      browseMenus: browsing([enregistre], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => enregistre,
-      saveMenu: () => enVol.promise,
-    });
-    await store.dispatch(menuScreenOpened());
-    store.dispatch(newMenuRequested());
-    await store.dispatch(generateMenu(7));
-
-    const enregistrement = store.dispatch(saveMenu());
-    await store.dispatch(generateMenu(7));
-    enVol.resolve();
-    await enregistrement;
-
-    expect(selectMenu(store.getState()).mode).toBe('generation');
-    expect(consultation(store)).toBeNull();
-  });
-
-  it('reculer d’un menu efface le constat de l’enregistrement précédent', async () => {
-    const duJour = menuDeLaSemaine(LUNDI_24_AOUT);
-    const nouveau = menuDeLaSemaine(LUNDI_7_SEPT);
-    const store = createTestStore({
-      browseMenus: browsing([duJour, nouveau], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => nouveau,
-      saveMenu: async () => {},
-    });
-    await store.dispatch(menuScreenOpened());
-    store.dispatch(newMenuRequested());
-    await store.dispatch(generateMenu(7));
-    await store.dispatch(saveMenu());
-    expect(consultation(store)?.saveNotice).toEqual({
-      tone: 'success',
-      message: 'Menu enregistré',
-    });
-
-    store.dispatch(previousMenuSelected());
-
-    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
-    expect(consultation(store)?.saveNotice).toBeNull();
-  });
-
-  it('avancer d’un menu efface le constat de l’enregistrement précédent', async () => {
-    const duJour = menuDeLaSemaine(LUNDI_24_AOUT);
-    const nouveau = menuDeLaSemaine(LUNDI_7_SEPT);
-    const store = createTestStore({
-      browseMenus: browsing([duJour, nouveau], 1),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => duJour,
-      saveMenu: async () => {},
-    });
-    await store.dispatch(menuScreenOpened());
-    store.dispatch(newMenuRequested());
-    await store.dispatch(generateMenu(7));
-    await store.dispatch(saveMenu());
-    expect(consultation(store)?.saveNotice).toEqual({
-      tone: 'success',
-      message: 'Menu enregistré',
-    });
-
-    store.dispatch(nextMenuSelected());
-
-    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
-    expect(consultation(store)?.saveNotice).toBeNull();
-  });
-
-  it('naviguer pendant un enregistrement EN VOL ne le déverrouille pas, et son verdict paraît au règlement', async () => {
-    const duJour = menuDeLaSemaine(LUNDI_24_AOUT);
-    const nouveau = menuDeLaSemaine(LUNDI_7_SEPT);
-    const enVol = deferred<void>();
-    const store = createTestStore({
-      browseMenus: browsing([duJour, nouveau], 1),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => nouveau,
-      saveMenu: () => enVol.promise,
-    });
-    await store.dispatch(menuScreenOpened());
-    store.dispatch(newMenuRequested());
-    await store.dispatch(generateMenu(7));
-
-    const enregistrement = store.dispatch(saveMenu());
-    store.dispatch(previousMenuSelected());
-
-    expect(selectIsSaveInFlight(store.getState())).toBe(true);
-
-    enVol.resolve();
-    await enregistrement;
-
-    expect(menuSaveNoticeOf(selectMenu(store.getState()))).toEqual({
-      tone: 'success',
-      message: 'Menu enregistré',
-    });
-  });
-
-  it('à l’arrivée, l’écran charge tant que les menus enregistrés ne sont pas lus', async () => {
-    const lente = deferred<MenuNavigation>();
-    const store = createTestStore({
-      browseMenus: () => lente.promise,
-      listRecipes: async () => twoRecipes(),
-    });
-
-    const arrivee = store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('loading');
-    expect(consultation(store)).toBeNull();
-
-    lente.resolve({ menus: TROIS_SEMAINES, indexInitial: 1 });
-    await arrivee;
-
-    expect(selectMenu(store.getState()).status).toBe('success');
-    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
-  });
-
-  it('le chargement couvre aussi la lecture des titres : aucun générateur entre les deux', async () => {
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => twoRecipes(),
-    });
-
-    await store.dispatch(loadSavedMenus());
-
-    expect(selectMenu(store.getState()).status).toBe('loading');
-    expect(consultation(store)).toBeNull();
-  });
-
-  it('sans aucun menu enregistré, le chargement rend la main au générateur', async () => {
-    const store = createTestStore({
-      browseMenus: browsing([], null),
-      listRecipes: async () => twoRecipes(),
-    });
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('idle');
-  });
-
-  it('l’arrivée ne recouvre pas d’un chargement le menu déjà à l’écran', async () => {
-    const lente = deferred<MenuNavigation>();
-    const store = createTestStore({
-      browseMenus: () => lente.promise,
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => aMenu(),
-    });
-    await store.dispatch(generateMenu(7));
-    expect(selectMenu(store.getState()).status).toBe('success');
-
-    void store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('success');
-  });
-
-  it('l’arrivée relue jusqu’au bout n’efface pas le constat d’un catalogue vide', async () => {
-    const store = createTestStore({
-      browseMenus: browsing([], null),
-      generateMenu: async () => aMenu(),
-      listRecipes: async () => [],
-    });
-    await store.dispatch(generateMenu(7));
-    expect(selectMenu(store.getState()).error).toBe(NO_RECIPES);
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('error');
-    expect(menuErrorMessage(selectMenu(store.getState()))).toBe(
-      "Ajoute d'abord des recettes pour générer un menu.",
-    );
-  });
-
-  it('les menus enregistrés illisibles : l’écran accuse les menus, pas la génération', async () => {
-    const store = createTestStore({
-      browseMenus: () => Promise.reject(new Error('Boom firestore')),
-    });
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('error');
-    expect(menuErrorMessage(selectMenu(store.getState()))).toBe(
-      'Impossible de charger tes menus enregistrés.',
-    );
-  });
-
-  it('le dépôt indisponible à l’arrivée porte le constat hors ligne, sans message d’échec', async () => {
-    const store = createTestStore({
-      browseMenus: () => Promise.reject(RepositoryUnavailableError.create()),
-    });
-
-    await store.dispatch(menuScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
-    expect(selectMenu(store.getState()).error).toBeNull();
   });
 });
 
@@ -1687,13 +1103,164 @@ describe('menu slice — ce que l’écran dit quand ça échoue', () => {
     );
   });
 
-  it('les menus enregistrés illisibles nomment les menus enregistrés', () => {
-    expect(menuErrorMessage(etatEnErreur(SAVED_MENUS_UNREADABLE))).toBe(
-      'Impossible de charger tes menus enregistrés.',
+  it('tout autre échec reste sur le message générique de génération', () => {
+    expect(menuErrorMessage(etatEnErreur('Boom firestore'))).toBe('Impossible de générer le menu.');
+  });
+});
+
+describe('menu slice — ce que la vue de génération montre', () => {
+  async function storeAvecBrouillon(overrides?: { listRecipes?: ListRecipes }) {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: overrides?.listRecipes ?? (async () => twoRecipes()),
+    });
+    await store.dispatch(generateMenu(7));
+    return store;
+  }
+
+  function vue(store: ReturnType<typeof createTestStore>) {
+    return menuCreationViewOf(selectMenu(store.getState()));
+  }
+
+  it('un store neuf montre le formulaire, sans constat', () => {
+    const store = createTestStore();
+
+    expect(vue(store)).toEqual({ status: 'form', saveNotice: null });
+  });
+
+  it('une génération en vol montre le chargement', () => {
+    const store = createTestStore({
+      generateMenu: () => new Promise<Menu>(() => {}),
+      listRecipes: async () => twoRecipes(),
+    });
+
+    void store.dispatch(generateMenu(7));
+
+    expect(vue(store).status).toBe('loading');
+  });
+
+  it('le menu généré est montré avec ses titres', async () => {
+    const store = await storeAvecBrouillon();
+
+    const montree = vue(store);
+
+    expect(montree.status).toBe('draft');
+    expect(montree.status === 'draft' && montree.days.map((jour) => jour.label)).toEqual([
+      'lundi 24 août',
+    ]);
+  });
+
+  it('le brouillon reste montré quand la relecture des titres échoue', async () => {
+    let enPanne = false;
+    const store = await storeAvecBrouillon({
+      listRecipes: async () => {
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
+    });
+    expect(vue(store).status).toBe('draft');
+
+    enPanne = true;
+    await store.dispatch(refreshMenuRecipes());
+
+    expect(selectMenu(store.getState()).status).toBe('unavailable');
+    const montree = vue(store);
+    expect(montree.status).toBe('draft');
+    expect(montree.status === 'draft' && montree.days.at(0)?.slots.at(0)?.title).toBe(
+      'Ratatouille',
     );
   });
 
-  it('tout autre échec reste sur le message générique de génération', () => {
-    expect(menuErrorMessage(etatEnErreur('Boom firestore'))).toBe('Impossible de générer le menu.');
+  it('sans brouillon, le dépôt injoignable porte le constat hors ligne', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
+    });
+
+    await store.dispatch(generateMenu(7));
+
+    expect(vue(store)).toEqual({
+      status: 'unavailable',
+      message: 'Aucune connexion — le menu n’a pas pu être chargé.',
+    });
+  });
+
+  it('sans brouillon, le catalogue vide invite à ajouter des recettes', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => [],
+    });
+
+    await store.dispatch(generateMenu(7));
+
+    expect(vue(store)).toEqual({
+      status: 'error',
+      message: "Ajoute d'abord des recettes pour générer un menu.",
+    });
+  });
+
+  it('le verrou d’un enregistrement en vol voyage jusqu’à la vue', async () => {
+    const enVol = deferred<void>();
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      saveMenu: () => enVol.promise,
+    });
+    await store.dispatch(generateMenu(7));
+    const montreeAvant = vue(store);
+    expect(montreeAvant.status === 'draft' && montreeAvant.saveDisabled).toBe(false);
+
+    void store.dispatch(saveMenu());
+
+    const montree = vue(store);
+    expect(montree.status === 'draft' && montree.saveDisabled).toBe(true);
+  });
+});
+
+describe('menu slice — le sort du brouillon enregistré', () => {
+  async function storeAvecBrouillon(overrides?: { saveMenu?: SaveMenu }) {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+      ...overrides,
+    });
+    await store.dispatch(generateMenu(7));
+    return store;
+  }
+
+  it('un enregistrement honoré rend le menu enregistré et efface le brouillon', async () => {
+    const store = await storeAvecBrouillon();
+
+    const issue = await store.dispatch(saveMenu());
+
+    expect(issue.payload).toEqual(aMenu());
+    expect(menuSaveHonored(issue)).toBe(true);
+    expect(selectMenu(store.getState()).menu).toBeNull();
+    expect(selectMenu(store.getState()).recipes).toBeNull();
+    expect(menuCreationViewOf(selectMenu(store.getState())).status).toBe('form');
+  });
+
+  it('un enregistrement DÉSAVOUÉ par une génération ne rend aucun menu et laisse le brouillon', async () => {
+    const enVol = deferred<void>();
+    const store = await storeAvecBrouillon({ saveMenu: () => enVol.promise });
+
+    const enregistrement = store.dispatch(saveMenu());
+    await store.dispatch(generateMenu(7));
+    enVol.resolve();
+    const issue = await enregistrement;
+
+    expect(issue.payload).toBeNull();
+    expect(menuSaveHonored(issue)).toBe(false);
+    expect(selectMenu(store.getState()).menu).toEqual(aMenu());
+    expect(menuCreationViewOf(selectMenu(store.getState())).status).toBe('draft');
+  });
+
+  it('un enregistrement REFUSÉ ne rend aucun menu et laisse le brouillon', async () => {
+    const store = await storeAvecBrouillon({ saveMenu: () => Promise.reject(new Error('Boom')) });
+
+    const issue = await store.dispatch(saveMenu());
+
+    expect(menuSaveHonored(issue)).toBe(false);
+    expect(selectMenu(store.getState()).menu).toEqual(aMenu());
   });
 });

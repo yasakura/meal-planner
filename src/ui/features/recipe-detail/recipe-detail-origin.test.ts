@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { FROM_MENU, originOf } from './recipe-detail-origin';
+import { FROM_MENU, FROM_MENU_DRAFT, originOf } from './recipe-detail-origin';
 
 function paramsOf(href: string): URLSearchParams {
   return new URL(href, 'http://localhost').searchParams;
@@ -9,6 +9,10 @@ function paramsOf(href: string): URLSearchParams {
 describe('les adresses produites par une provenance', () => {
   it('venue du menu, l’adresse d’une fiche inscrit la provenance', () => {
     expect(FROM_MENU.recipeHref('r1')).toBe('/catalogue/r1?depuis=menu');
+  });
+
+  it('venue du brouillon de menu, l’adresse d’une fiche inscrit CETTE provenance', () => {
+    expect(FROM_MENU_DRAFT.recipeHref('r1')).toBe('/catalogue/r1?depuis=menu-nouveau');
   });
 
   it('venue du catalogue, l’adresse d’une fiche n’invente aucune provenance', () => {
@@ -32,8 +36,22 @@ describe('le retour de la fiche', () => {
     });
   });
 
+  it('venue du brouillon de menu, le retour ramène au brouillon et non aux menus enregistrés', () => {
+    expect(originOf(paramsOf('/catalogue/r1?depuis=menu-nouveau')).backLink).toEqual({
+      href: '/menu/nouveau',
+      label: '← Menu',
+    });
+  });
+
   it('sans provenance, le retour ramène aux recettes', () => {
     expect(originOf(paramsOf('/catalogue/r1')).backLink).toEqual({
+      href: '/catalogue',
+      label: '← Recettes',
+    });
+  });
+
+  it('sur une provenance qui porte le nom d’une propriété d’Object, le retour retombe sur les recettes', () => {
+    expect(originOf(paramsOf('/catalogue/r1?depuis=constructor')).backLink).toEqual({
       href: '/catalogue',
       label: '← Recettes',
     });
@@ -48,6 +66,13 @@ describe('le retour de la fiche', () => {
 });
 
 describe('le retour du formulaire de modification', () => {
+  it('venu du brouillon de menu, ramène à une fiche qui sait encore d’où l’on vient', () => {
+    expect(FROM_MENU_DRAFT.backToRecipe('r1')).toEqual({
+      href: '/catalogue/r1?depuis=menu-nouveau',
+      label: '← Recette',
+    });
+  });
+
   it('venu du menu, ramène à une fiche qui sait encore d’où l’on vient', () => {
     expect(FROM_MENU.backToRecipe('r1')).toEqual({
       href: '/catalogue/r1?depuis=menu',

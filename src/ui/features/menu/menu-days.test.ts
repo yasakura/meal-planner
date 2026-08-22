@@ -6,6 +6,7 @@ import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
+import { FROM_MENU, FROM_MENU_DRAFT } from '../recipe-detail/recipe-detail-origin';
 import { menuDays } from './menu-days';
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
@@ -29,7 +30,7 @@ describe('menuDays', () => {
       createRepas({ jour: 1, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
     ]);
 
-    expect(menuDays(menu, twoRecipes())).toEqual([
+    expect(menuDays(menu, twoRecipes(), FROM_MENU)).toEqual([
       {
         key: '0',
         label: 'lundi 24 août',
@@ -72,7 +73,7 @@ describe('menuDays', () => {
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
     ]);
 
-    expect(menuDays(menu, twoRecipes())).toEqual([
+    expect(menuDays(menu, twoRecipes(), FROM_MENU)).toEqual([
       {
         key: '0',
         label: 'lundi 24 août',
@@ -86,6 +87,21 @@ describe('menuDays', () => {
             href: '/catalogue/r2?depuis=menu',
           },
         ],
+      },
+    ]);
+  });
+  it('les lignes d’un brouillon mènent aux fiches marquées comme venant du brouillon', () => {
+    const menu = menuOf([
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+    ]);
+
+    expect(menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots).toEqual([
+      {
+        key: '0-midi',
+        creneauLabel: 'Midi',
+        title: 'Ratatouille',
+        recipe: 'known',
+        href: '/catalogue/r1?depuis=menu-nouveau',
       },
     ]);
   });

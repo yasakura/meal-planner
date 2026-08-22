@@ -70,3 +70,4 @@ Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou
 | [0026](0026-regles-type-aware-et-runtime.md)                 | Trois règles type-aware, et ce qu'elles ignorent du runtime          | 2026-08-21 |
 | [0027](0027-le-cache-plutot-qu-un-faux-hors-ligne.md)        | `getDocsFromServer` n'attend pas : lire avec repli sur le cache      | 2026-08-21 |
 | [0028](0028-cliquet-de-complexite-au-maximum-atteint.md)     | Un cliquet de complexité, posé au maximum déjà atteint               | 2026-08-22 |
+| [0029](0029-deux-provenances-pour-deux-ecrans-de-menu.md)    | Deux provenances de menu, parce qu'il y a deux écrans de menu        | 2026-08-22 |

@@ -25,6 +25,7 @@ import { authReducer } from '../features/auth/auth-slice';
 import { catalogueReducer } from '../features/catalogue/catalogue-slice';
 import { convivesInitialState, convivesReducer } from '../features/convives/convives-slice';
 import { menuInitialState, menuReducer } from '../features/menu/menu-slice';
+import { savedMenusReducer } from '../features/menu/saved-menus-slice';
 import { recipeDetailReducer } from '../features/recipe-detail/recipe-detail-slice';
 import { recipeEditReducer } from '../features/recipe/recipe-edit-slice';
 import { recipeInitialState, recipeReducer } from '../features/recipe/recipe-slice';
@@ -55,6 +56,7 @@ const rootReducer = combineReducers({
   catalogue: catalogueReducer,
   recipeDetail: recipeDetailReducer,
   menu: menuReducer,
+  savedMenus: savedMenusReducer,
   convives: convivesReducer,
 });
 
