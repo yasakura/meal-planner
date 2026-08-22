@@ -1,3 +1,4 @@
+import { type Creneau } from '../../../domain/entities/creneau';
 import { type Menu } from '../../../domain/entities/menu';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type Origin } from '../recipe-detail/recipe-detail-origin';
@@ -9,7 +10,7 @@ export type MenuSlotLine =
 
 export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
 
-const CRENEAU_LABELS: Record<string, string> = {
+const CRENEAU_LABELS: Record<Creneau, string> = {
   midi: 'Midi',
   soir: 'Soir',
 };
@@ -31,8 +32,8 @@ export function menuDays(menu: Menu, recipes: Recipe[], origin: Origin): MenuDay
       byJour.set(repas.jour, day);
     }
     for (const slot of repas.slots) {
-      const key = `${repas.jour}-${repas.creneau}`;
-      const creneauLabel = CRENEAU_LABELS[repas.creneau] ?? repas.creneau;
+      const key = `${repas.jour}-${day.slots.length}`;
+      const creneauLabel = CRENEAU_LABELS[repas.creneau];
       const title = titleById.get(slot.recipeId);
       day.slots.push(
         title === undefined
