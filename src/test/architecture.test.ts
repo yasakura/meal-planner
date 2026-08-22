@@ -70,6 +70,18 @@ function matchesForbidden(specifier: string, forbidden: string[]): boolean {
   return forbidden.some((f) => specifier === f || specifier.startsWith(`${f}/`));
 }
 
+function violationsIn(files: string[], forbidden: string[]): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    for (const spec of extractImports(readFileSync(file, 'utf-8'), file)) {
+      if (matchesForbidden(spec, forbidden)) {
+        violations.push(`${relative(ROOT, file)} importe ${spec}`);
+      }
+    }
+  }
+  return violations;
+}
+
 function collectFeatureFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -140,33 +152,30 @@ function describeCycle(cycle: string[], edges: Map<string, Map<string, string[]>
 
 describe('Architecture boundaries', () => {
   it('src/domain ne doit jamais importer React, Redux, Firebase, styled-components, date-fns', () => {
-    const domainDir = join(ROOT, 'domain');
-    const files = collectSourceFiles(domainDir);
-    const violations: string[] = [];
-    for (const file of files) {
-      const specifiers = extractImports(readFileSync(file, 'utf-8'), file);
-      for (const spec of specifiers) {
-        if (matchesForbidden(spec, FORBIDDEN_IN_DOMAIN)) {
-          violations.push(`${relative(ROOT, file)} importe ${spec}`);
-        }
-      }
-    }
+    const violations = violationsIn(collectSourceFiles(join(ROOT, 'domain')), FORBIDDEN_IN_DOMAIN);
+
     expect(violations, `Violations dans domain/ :\n${violations.join('\n')}`).toHaveLength(0);
   });
 
   it('src/data ne doit jamais importer React, Redux, styled-components', () => {
-    const dataDir = join(ROOT, 'data');
-    const files = collectSourceFiles(dataDir);
-    const violations: string[] = [];
-    for (const file of files) {
-      const specifiers = extractImports(readFileSync(file, 'utf-8'), file);
-      for (const spec of specifiers) {
-        if (matchesForbidden(spec, FORBIDDEN_IN_DATA)) {
-          violations.push(`${relative(ROOT, file)} importe ${spec}`);
-        }
-      }
-    }
+    const violations = violationsIn(collectSourceFiles(join(ROOT, 'data')), FORBIDDEN_IN_DATA);
+
     expect(violations, `Violations dans data/ :\n${violations.join('\n')}`).toHaveLength(0);
+  });
+
+  it('gage du garde de domain/ : le même détecteur, lâché sur src/data, NOMME le fichier et son import Firebase — que le garde de data/, lui, laisse passer sur les mêmes fichiers', () => {
+    const fichiers = collectSourceFiles(join(ROOT, 'data'));
+
+    expect(violationsIn(fichiers, FORBIDDEN_IN_DOMAIN)).toContain(
+      `${join('data', 'firestore-recipe-repository.ts')} importe firebase/firestore`,
+    );
+    expect(violationsIn(fichiers, FORBIDDEN_IN_DATA)).toHaveLength(0);
+  });
+
+  it('gage du garde de data/ : le même détecteur, lâché sur src/ui, NOMME le fichier et son import styled-components', () => {
+    const violations = violationsIn(collectSourceFiles(join(ROOT, 'ui')), FORBIDDEN_IN_DATA);
+
+    expect(violations).toContain(`${join('ui', 'BottomTabBar.tsx')} importe styled-components`);
   });
 
   it("les dossiers de src/ui/features ne doivent pas former de cycle d'imports directs entre eux", () => {
