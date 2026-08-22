@@ -3,13 +3,15 @@
 - **Statut** : en vigueur
 - **Date** : 2026-08-19 (`3638a53`, `feat(menu): le menu mène aux fiches, et le retour ramène au
 menu`)
-- **Portée** : `src/ui/features/recipe-detail/recipe-detail-origin.ts`
+- **Portée** : `src/ui/features/recipe-detail/recipe-detail-origin.ts`,
+  `src/ui/features/catalogue/CatalogueContainer.tsx`
 
 ## Contexte
 
 Une fiche recette s'ouvre depuis deux endroits : le catalogue et le menu. Le lien « ← » doit ramener
-d'où l'on vient, et le parcours compte **trois** producteurs d'adresse — la fiche ouverte depuis le
-menu, le formulaire ouvert depuis la fiche, la fiche rendue par le formulaire enregistré.
+d'où l'on vient, et le parcours compte **quatre** producteurs d'adresse — la ligne du catalogue, la
+fiche ouverte depuis le menu, le formulaire ouvert depuis la fiche, la fiche rendue par le
+formulaire enregistré.
 
 ## Décision
 
@@ -32,6 +34,28 @@ Deux propriétés de forme, qui ferment des erreurs plutôt que de les surveille
 
 Le défaut retenu quand l'URL ne dit rien est le **catalogue** : c'est le seul qui ne mente pas — on
 n'affirme pas venir d'un menu qu'on n'a pas vu.
+
+### « Aucune façon de l'oublier » a été faux pendant que l'ADR l'affirmait
+
+La propriété ne vaut que sur les producteurs qui **passent** par le module, et elle ne dit rien de
+ceux qui l'ignorent. La liste du catalogue écrivait son lien à la main — `` `/catalogue/${recipe.id}` ``
+dans un composant dumb —, et `FROM_CATALOGUE` était privée : ce site ne _pouvait pas_ utiliser
+l'API, même en le voulant. Le résultat coïncidait au caractère près, donc rien ne se voyait ;
+aucun test unitaire ne reliait les deux. Un changement de route aurait été suivi par `menu-days.ts`
+et par les deux containers de fiche, et **pas** par le catalogue — seul Playwright l'aurait vu, dans
+le job non bloquant.
+
+Ce qui a fermé le trou (`iter-45`) n'est pas un test de surveillance de la coïncidence, mais sa
+**disparition** : `FROM_CATALOGUE` est exportée, le container du catalogue lui demande l'adresse et
+la descend en prop, et le composant dumb n'en fabrique plus aucune. Il n'y a donc plus deux endroits
+à garder d'accord. La règle qui en découle : une provenance connue **statiquement** s'importe comme
+constante (`FROM_MENU`, `FROM_MENU_DRAFT`, `FROM_CATALOGUE`) ; une provenance **lue dans l'URL**
+passe par `originOf(params)`. Le catalogue n'a rien à lire — il _est_ l'origine.
+
+Le gage est un test qui échoue si le lien cesse de venir de la provenance : il remplace
+`FROM_CATALOGUE.recipeHref` par une adresse témoin et exige que la ligne la porte. Confronté à
+l'envers aussi — changer la route dans `origin()` **seule** rend désormais le catalogue rouge, alors
+que le même changement le laissait vert avant.
 
 ## La mesure
 

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
@@ -11,6 +11,7 @@ import { IngredientBuilder } from '../../../domain/test-builders/ingredient.buil
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
 import { deferred } from '../../test-utils/deferred';
+import { FROM_CATALOGUE } from '../recipe-detail/recipe-detail-origin';
 import { CatalogueContainer } from './CatalogueContainer';
 import { selectCatalogue } from './catalogue-slice';
 
@@ -41,6 +42,22 @@ function spyReturning(recipes: Recipe[]): { fn: ListRecipes; callCount: () => nu
 }
 
 describe('CatalogueContainer', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('demande l’adresse d’une ligne à FROM_CATALOGUE avec l’identifiant de la recette, au lieu de la fabriquer sur place', async () => {
+    vi.spyOn(FROM_CATALOGUE, 'recipeHref').mockImplementation(
+      (recipeId) => `/adresse-rendue-par-la-provenance/${recipeId}`,
+    );
+    renderWithStore(async () => [
+      RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build(),
+    ]);
+
+    const lien = await screen.findByRole('link', { name: /Ratatouille/i });
+    expect(lien).toHaveAttribute('href', '/adresse-rendue-par-la-provenance/r-1');
+  });
+
   it('charge les recettes au montage et les affiche dans l’ordre renvoyé par le use case', async () => {
     const recipes = [
       RecipeBuilder.aRecipe().withId('r-1').withTitle('Zèbre au four').build(),

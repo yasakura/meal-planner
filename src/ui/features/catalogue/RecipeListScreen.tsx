@@ -5,7 +5,7 @@ import { tokens } from '../../theme/tokens';
 
 const { colors, space, fonts } = tokens;
 
-export type RecipeListItem = { id: string; title: string; meta: string };
+export type RecipeListItem = { id: string; title: string; meta: string; href: string };
 
 export type RecipeListScreenProps =
   | { status: 'loading' }
@@ -220,7 +220,7 @@ function Body(props: RecipeListScreenProps) {
         <List>
           {props.recipes.map((recipe) => (
             <Row key={recipe.id}>
-              <RowLink to={`/catalogue/${recipe.id}`}>
+              <RowLink to={recipe.href}>
                 <RowTitle>{recipe.title}</RowTitle>
                 <RowMeta>{recipe.meta}</RowMeta>
               </RowLink>

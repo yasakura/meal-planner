@@ -33,7 +33,7 @@ export const FROM_MENU: Origin = origin(`?${DEPUIS}=${MENU}`, RETOUR_MENU);
 
 export const FROM_MENU_DRAFT: Origin = origin(`?${DEPUIS}=${MENU_BROUILLON}`, RETOUR_BROUILLON);
 
-const FROM_CATALOGUE: Origin = origin('', RETOUR_CATALOGUE);
+export const FROM_CATALOGUE: Origin = origin('', RETOUR_CATALOGUE);
 
 export function originOf(params: URLSearchParams): Origin {
   const depuis = params.get(DEPUIS);
