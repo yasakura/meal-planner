@@ -1,5 +1,9 @@
 import { expect, type ElementHandle, type JSHandle, type Page } from '@playwright/test';
 
+type Prise = ElementHandle<HTMLElement | SVGElement>;
+
+type ReouvertureArmee = JSHandle<{ fait: Promise<void> }>;
+
 export async function openAccountSheet(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Compte' }).click();
   await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
@@ -9,50 +13,41 @@ export async function closeAccountSheet(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Fermer' }).click();
 }
 
-export async function panelHandle(page: Page): Promise<JSHandle<Element | null>> {
-  const prise = await page.evaluateHandle(() =>
-    document.querySelector('[data-testid="account-sheet-panel"]'),
-  );
-  expect(await prise.evaluate((noeud) => noeud !== null)).toBe(true);
-  return prise;
+export async function panelHandle(page: Page): Promise<Prise> {
+  return page.waitForSelector('[data-testid="account-sheet-panel"]', { state: 'attached' });
 }
 
-export async function isStillMounted(prise: JSHandle<Element | null>): Promise<boolean> {
-  return prise.evaluate((noeud) => noeud !== null && noeud.isConnected);
+export async function isStillMounted(prise: Prise): Promise<boolean> {
+  return prise.evaluate((noeud) => noeud.isConnected);
 }
 
-export async function accountSheetButtonHandle(
-  page: Page,
-): Promise<ElementHandle<SVGElement | HTMLElement>> {
-  return page.waitForSelector('role=button[name="Compte"]', { state: 'attached' });
-}
-
-export async function reopenAccountSheetDuringExit(
-  bouton: ElementHandle<SVGElement | HTMLElement>,
-): Promise<void> {
-  await bouton.dispatchEvent('click');
-}
-
-const ATTENTE_TRANSITION_MS = 5_000;
-
-export async function waitForExitToStart(
-  page: Page,
-  prise: JSHandle<Element | null>,
-): Promise<void> {
-  await page.waitForFunction(
-    (noeud) => noeud !== null && getComputedStyle(noeud).transform !== 'matrix(1, 0, 0, 1, 0, 0)',
-    prise,
-    { timeout: ATTENTE_TRANSITION_MS },
+export async function armReopenDuringExit(page: Page, panneau: Prise): Promise<ReouvertureArmee> {
+  const compte = await page.waitForSelector('role=button[name="Compte"]', { state: 'attached' });
+  return page.evaluateHandle(
+    ({ panneau, compte }) => {
+      const AU_REPOS = 'matrix(1, 0, 0, 1, 0, 0)';
+      const sortieCommencee = new Promise<void>((resolve) => {
+        const guetter = () => {
+          if (getComputedStyle(panneau).transform === AU_REPOS) requestAnimationFrame(guetter);
+          else resolve();
+        };
+        requestAnimationFrame(guetter);
+      });
+      const fait = sortieCommencee
+        .then(() => {
+          const sortieTerminee = new Promise<void>((resolve) => {
+            panneau.addEventListener('transitionend', () => resolve(), { once: true });
+          });
+          compte.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          return sortieTerminee;
+        })
+        .then(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+      return { fait };
+    },
+    { panneau, compte },
   );
 }
 
-export async function waitForSheetBackInPlace(
-  page: Page,
-  prise: JSHandle<Element | null>,
-): Promise<void> {
-  await page.waitForFunction(
-    (noeud) => noeud !== null && getComputedStyle(noeud).transform === 'matrix(1, 0, 0, 1, 0, 0)',
-    prise,
-    { timeout: ATTENTE_TRANSITION_MS },
-  );
+export async function awaitReopenDuringExit(reouverture: ReouvertureArmee): Promise<void> {
+  await reouverture.evaluate((armee) => armee.fait);
 }

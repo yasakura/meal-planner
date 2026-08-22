@@ -21,6 +21,7 @@ export class E2eConviveRepository implements ConviveRepository {
 
   async save(convive: Convive): Promise<void> {
     this.failures.guardWrite();
+    await this.failures.serverAck();
     this.convives.set(convive.id, convive);
   }
 
@@ -34,6 +35,7 @@ export class E2eConviveRepository implements ConviveRepository {
     transform: (existing: Convive) => Convive,
   ): Promise<Convive | undefined> {
     this.failures.guardWrite();
+    await this.failures.serverAck();
     const existing = this.convives.get(id);
     if (existing === undefined) return undefined;
     transform(existing);
@@ -44,6 +46,7 @@ export class E2eConviveRepository implements ConviveRepository {
 
   async remove(id: string): Promise<void> {
     this.failures.guardWrite();
+    await this.failures.serverAck();
     this.convives.delete(id);
   }
 }
