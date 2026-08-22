@@ -1,5 +1,7 @@
-// Outil de dev : RESET de la base dev — vide les collections `recipes` et `convives`, puis insère
-// 20 recettes simples et les 4 convives du foyer de dev.
+// Outil de dev : RESET de la base dev — vide les collections `recipes`, `convives` et `menus`,
+// puis insère 20 recettes simples et les 4 convives du foyer de dev. AUCUN menu n'est réinséré :
+// un menu référence ses recettes par identifiant, et le seed en génère de nouveaux à chaque run —
+// tout menu qui survivrait au reset n'afficherait que des créneaux « Recette inconnue ».
 // Usage : `npm run seed:dev`  (ou `node scripts/seed-dev.mjs`)
 //
 // - Lit la config Firebase depuis `.env.dev` (jamais `.env.prod`).
@@ -221,10 +223,18 @@ async function main() {
     console.log(`  + ${c.name}`);
   }
 
-  // 5) Vérification.
+  // 5) Vider la collection `menus` — sans réinsertion : on repart d'une ardoise propre.
+  const menusSnap = await getDocs(collection(db, 'menus'));
+  console.log(`Suppression : ${menusSnap.size} menu(s) existant(s)…`);
+  for (const d of menusSnap.docs) await deleteDoc(d.ref);
+
+  // 6) Vérification.
   const after = await getDocs(collection(db, 'recipes'));
   const convivesAfter = await getDocs(collection(db, 'convives'));
-  console.log(`\nOK — ${after.size} recette(s) et ${convivesAfter.size} convive(s) en base.`);
+  const menusAfter = await getDocs(collection(db, 'menus'));
+  console.log(
+    `\nOK — ${after.size} recette(s), ${convivesAfter.size} convive(s) et ${menusAfter.size} menu(s) en base.`,
+  );
   process.exit(0);
 }
 
