@@ -27,10 +27,13 @@ export const signIn = createAsyncThunk<
   Account,
   { email: string; password: string },
   AppThunkApiConfig
+>(
   // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
->('auth/signIn', async ({ email, password }, thunkApi) => {
-  return await thunkApi.extra.authGateway.signIn(email, password);
-});
+  'auth/signIn',
+  async ({ email, password }, thunkApi) => {
+    return await thunkApi.extra.authGateway.signIn(email, password);
+  },
+);
 
 // Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
 const authSlice = createSlice({
