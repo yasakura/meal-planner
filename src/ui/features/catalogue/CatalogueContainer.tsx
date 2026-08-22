@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { FROM_CATALOGUE } from '../recipe-detail/recipe-detail-origin';
 import { CATALOGUE_UNAVAILABLE_NOTICE } from './catalogue-notice';
 import { catalogueViewOf, loadCatalogue, selectCatalogue } from './catalogue-slice';
 import {
@@ -13,7 +14,12 @@ import {
 function toItem(recipe: Recipe): RecipeListItem {
   const count = recipe.ingredients.length;
   const meta = `${count} ingrédient${count > 1 ? 's' : ''} · ${recipe.convivesReference} personnes`;
-  return { id: recipe.id, title: recipe.title, meta };
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    meta,
+    href: FROM_CATALOGUE.recipeHref(recipe.id),
+  };
 }
 
 export function CatalogueContainer() {
