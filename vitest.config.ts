@@ -19,6 +19,9 @@ export default defineConfig({
       exclude: [
         'src/**/*.test.{ts,tsx}',
         'src/test/**',
+        'src/domain/test-builders/**',
+        'src/domain/test-doubles/**',
+        'src/ui/test-utils/**',
         'src/**/*.d.ts',
         'src/main.tsx',
         'src/config/firebase.ts',
