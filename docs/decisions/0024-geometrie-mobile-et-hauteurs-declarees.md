@@ -85,14 +85,15 @@ symétrie : chacune se juge sur le gage qui la précède.
 suite le montrent, chacune confrontée en rendant nulle la boîte de ce qu'elle mesure, sans que le
 gage qui la précède bronche.
 
-- `e2e/menu.spec.ts:399` — le gage est un `toHaveText` sur `role=alert`, la mesure porte sur le
+- `e2e/menu.spec.ts#centrageVertical` — le gage est un `toHaveText` sur `role=alert`, la mesure
+  porte sur le
   **bloc parent**, dont l'étendue tient aussi à un `<button>` qu'aucune assertion ne touche.
-- `e2e/catalogue.spec.ts:292-293` — le `toBeVisible()` porte sur le **bouton**, la hauteur mesurée
-  sur son **parent** ; un enfant visible peut déborder d'un parent de hauteur nulle. La ligne
-  suivante mesure une **coordonnée**, `top` de la tab bar : `toBeVisible()` promet une boîte non
-  vide, jamais un endroit où elle se trouve.
-- `e2e/convives.spec.ts:86` — même localisateur que le gage, et pourtant vivante : `toHaveText`
-  lit `textContent` et se satisfait d'un `display: none`, qui met `clientWidth` à zéro.
+- `e2e/catalogue.spec.ts#hautDeLaTabBar` — le `toBeVisible()` porte sur le **bouton**, la hauteur
+  mesurée sur son **parent** ; un enfant visible peut déborder d'un parent de hauteur nulle. La
+  mesure voisine porte sur une **coordonnée**, `top` de la tab bar : `toBeVisible()` promet une
+  boîte non vide, jamais un endroit où elle se trouve.
+- `e2e/convives.spec.ts#debordement` — même localisateur que le gage, et pourtant vivante :
+  `toHaveText` lit `textContent` et se satisfait d'un `display: none`, qui met `clientWidth` à zéro.
 
 Corollaire mesuré au passage : `toBeVisible()` est le **seul** de ces gages à impliquer une boîte.
 `toHaveText` n'implique rien — sauf sur un localisateur **de rôle**, où la résolution ARIA écarte

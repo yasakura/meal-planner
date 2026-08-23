@@ -84,8 +84,8 @@ un comportement qu'on vient d'écrire.
 
 ## Conséquences
 
-- **Le repli vaut au sein d'une session, pas au démarrage.** `src/config/firebase.ts:23` initialise
-  par `getFirestore(app)`, donc un cache **mémoire**, sans persistance IndexedDB. Après un
+- **Le repli vaut au sein d'une session, pas au démarrage.** `src/config/firebase.ts#getFirestore`
+  initialise par `getFirestore(app)`, donc un cache **mémoire**, sans persistance IndexedDB. Après un
   rechargement de page ou à froid, le cache est vide et `getDocs` doit joindre le serveur. Le
   symptôme rapporté (Recettes → Menu → Recettes) est couvert ; le **démarrage hors ligne ne l'est
   pas**.

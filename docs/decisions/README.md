@@ -38,6 +38,17 @@ parce que savoir qu'on a essayé et abandonné vaut autant que la décision cour
 
 Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou `caduque`.
 
+## Référencer du code
+
+Une ADR désigne le code par **`chemin/depuis/la/racine.ext#symbole`** —
+`src/test/architecture.test.ts#featureEdges` — et **jamais par un numéro de ligne**, qui dérive en
+silence au premier ajout en amont. Sept références sur vingt étaient fausses le jour où on les a
+comptées ([ADR 0035](0035-une-adr-designe-un-symbole-pas-une-ligne.md)).
+
+`src/test/adr-references.test.ts` refuse le numéro de ligne en prose et vérifie que chaque
+`#symbole` existe. Ce qui est **cité dans un bloc de code** — sortie d'outil, extrait daté — est
+exempt du premier point : c'est une citation figée, pas une affirmation sur le code d'aujourd'hui.
+
 ## Index
 
 | ADR                                                          | Décision                                                             | Date       |
@@ -76,3 +87,4 @@ Chaque fichier porte un **statut** : `en vigueur`, `remplacée par ADR NNNN`, ou
 | [0032](0032-features-acycliques-au-premier-degre.md)         | Les features acycliques, et ce que le garde ne voit pas              | 2026-08-22 |
 | [0033](0033-le-depot-e2e-sait-se-taire.md)                   | Le dépôt e2e sait se taire, et c'est la borne qui parle              | 2026-08-23 |
 | [0034](0034-la-course-se-joue-dans-la-page.md)               | Une course contre une animation se joue DANS la page                 | 2026-08-23 |
+| [0035](0035-une-adr-designe-un-symbole-pas-une-ligne.md)     | Une ADR désigne un symbole, pas une ligne                            | 2026-08-23 |
