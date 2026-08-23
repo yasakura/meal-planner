@@ -3,6 +3,7 @@ import { createCalendarDate, toIsoDate, type CalendarDate } from '../entities/ca
 import { createMenu, type Menu } from '../entities/menu';
 import { createRepas } from '../entities/repas';
 import { createSlot } from '../entities/slot';
+import { type Clock } from '../ports/clock';
 import { type MenuRepository } from '../ports/menu-repository';
 import { DriftingClock } from '../test-doubles/drifting-clock';
 import { InMemoryMenuRepository } from '../test-doubles/in-memory-menu-repository';
@@ -198,6 +199,19 @@ describe('saveMenuUseCase', () => {
 
     await expect(saveMenu({ menu: menuCommencantLe(LUNDI_24_AOUT, 14) })).resolves.toBeUndefined();
     expect(depot.byStartDate(LUNDI_24_AOUT)).toBeDefined();
+  });
+
+  it('enregistre le menu même si la LECTURE DE L’HORLOGE échoue', async () => {
+    const menuRepository = InMemoryMenuRepository.create();
+    const clock: Clock = {
+      today: () => {
+        throw new Error('horloge indisponible');
+      },
+    };
+    const saveMenu = saveMenuUseCase({ menuRepository, clock });
+
+    await expect(saveMenu({ menu: menuCommencantLe(LUNDI_24_AOUT, 14) })).resolves.toBeUndefined();
+    expect(menuRepository.byStartDate(LUNDI_24_AOUT)).toBeDefined();
   });
 
   it('propage la panne du dépôt quand c’est l’ENREGISTREMENT lui-même qui échoue', async () => {

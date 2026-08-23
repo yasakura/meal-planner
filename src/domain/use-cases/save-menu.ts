@@ -15,8 +15,8 @@ export function saveMenuUseCase(deps: {
 }): (input: SaveMenuInput) => Promise<void> {
   return async ({ menu }) => {
     await deps.menuRepository.save(menu);
-    const limite = subtractMonths(deps.clock.today(), MOIS_DE_RETENTION);
     try {
+      const limite = subtractMonths(deps.clock.today(), MOIS_DE_RETENTION);
       const menus = await deps.menuRepository.findAll();
       await Promise.all(
         menus

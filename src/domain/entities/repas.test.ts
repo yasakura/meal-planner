@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CRENEAUX, type Creneau } from './creneau';
 import { createRepas } from './repas';
 import { createSlot } from './slot';
 
@@ -22,6 +23,22 @@ describe('Repas', () => {
     expect(() =>
       createRepas({ jour: -1, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
     ).toThrow('Le jour du repas doit être positif ou nul');
+  });
+
+  it('rejette un créneau hors des créneaux du domaine', () => {
+    expect(() =>
+      createRepas({
+        jour: 0,
+        creneau: 'brunch' as Creneau,
+        slots: [createSlot({ recipeId: 'r1' })],
+      }),
+    ).toThrow('Créneau invalide');
+  });
+
+  it.each(CRENEAUX)("accepte le créneau valide '%s'", (creneau) => {
+    const repas = createRepas({ jour: 0, creneau, slots: [createSlot({ recipeId: 'r1' })] });
+
+    expect(repas.creneau).toBe(creneau);
   });
 
   it('rejette un repas sans aucun slot', () => {
