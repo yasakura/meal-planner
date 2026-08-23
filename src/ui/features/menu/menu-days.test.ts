@@ -41,6 +41,8 @@ describe('menuDays', () => {
             title: 'Ratatouille',
             recipe: 'known',
             href: '/catalogue/r1?depuis=menu',
+            address: { repasIndex: 0, slotIndex: 0 },
+            choose: null,
           },
           {
             key: '0-1',
@@ -48,6 +50,8 @@ describe('menuDays', () => {
             title: 'Blanquette',
             recipe: 'known',
             href: '/catalogue/r2?depuis=menu',
+            address: { repasIndex: 1, slotIndex: 0 },
+            choose: null,
           },
         ],
       },
@@ -61,6 +65,8 @@ describe('menuDays', () => {
             title: 'Ratatouille',
             recipe: 'known',
             href: '/catalogue/r1?depuis=menu',
+            address: { repasIndex: 2, slotIndex: 0 },
+            choose: null,
           },
         ],
       },
@@ -78,13 +84,22 @@ describe('menuDays', () => {
         key: '0',
         label: 'lundi 24 août',
         slots: [
-          { key: '0-0', creneauLabel: 'Midi', title: 'Recette inconnue', recipe: 'unknown' },
+          {
+            key: '0-0',
+            creneauLabel: 'Midi',
+            title: 'Recette inconnue',
+            recipe: 'unknown',
+            address: { repasIndex: 0, slotIndex: 0 },
+            choose: null,
+          },
           {
             key: '0-1',
             creneauLabel: 'Soir',
             title: 'Blanquette',
             recipe: 'known',
             href: '/catalogue/r2?depuis=menu',
+            address: { repasIndex: 1, slotIndex: 0 },
+            choose: null,
           },
         ],
       },
@@ -117,6 +132,37 @@ describe('menuDays', () => {
     expect(slots.at(0)?.key).not.toEqual(slots.at(1)?.key);
   });
 
+  it('deux slots d’un même repas se distinguent par le rang de leur créneau', () => {
+    const menu = menuOf([
+      createRepas({
+        jour: 0,
+        creneau: 'midi',
+        slots: [createSlot({ recipeId: 'r1' }), createSlot({ recipeId: 'r2' })],
+      }),
+    ]);
+
+    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => slot.address)).toEqual([
+      { repasIndex: 0, slotIndex: 0 },
+      { repasIndex: 0, slotIndex: 1 },
+    ]);
+  });
+
+  it('deux repas du même jour se distinguent par le rang de leur repas', () => {
+    const menu = menuOf([
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r2' })] }),
+    ]);
+
+    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => slot.address)).toEqual([
+      { repasIndex: 0, slotIndex: 0 },
+      { repasIndex: 1, slotIndex: 0 },
+    ]);
+  });
+
   it('le même menu reconstruit à l’identique redonne exactement les mêmes clés', () => {
     const repasDuMenu = () => [
       createRepas({
@@ -147,6 +193,8 @@ describe('menuDays', () => {
         title: 'Ratatouille',
         recipe: 'known',
         href: '/catalogue/r1?depuis=menu-nouveau',
+        address: { repasIndex: 0, slotIndex: 0 },
+        choose: null,
       },
     ]);
   });

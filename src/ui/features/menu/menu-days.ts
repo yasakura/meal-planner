@@ -1,12 +1,21 @@
 import { type Creneau } from '../../../domain/entities/creneau';
-import { type Menu } from '../../../domain/entities/menu';
+import { type Menu, type SlotAddress } from '../../../domain/entities/menu';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type Origin } from '../recipe-detail/recipe-detail-origin';
 import { menuDayLabel } from './menu-day-label';
 
+export type SlotChoiceLink = { href: string; label: string };
+
+type SlotLine = {
+  key: string;
+  creneauLabel: string;
+  title: string;
+  address: SlotAddress;
+  choose: SlotChoiceLink | null;
+};
+
 export type MenuSlotLine =
-  | { key: string; creneauLabel: string; title: string; recipe: 'known'; href: string }
-  | { key: string; creneauLabel: string; title: string; recipe: 'unknown' };
+  (SlotLine & { recipe: 'known'; href: string }) | (SlotLine & { recipe: 'unknown' });
 
 export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
 
@@ -17,11 +26,15 @@ const CRENEAU_LABELS: Record<Creneau, string> = {
 
 const RECETTE_INCONNUE = 'Recette inconnue';
 
+export function creneauLabel(creneau: Creneau): string {
+  return CRENEAU_LABELS[creneau];
+}
+
 export function menuDays(menu: Menu, recipes: Recipe[], origin: Origin): MenuDay[] {
   const titleById = new Map(recipes.map((recipe) => [recipe.id, recipe.title]));
   const byJour = new Map<number, MenuDay>();
 
-  for (const repas of menu.repas) {
+  for (const [repasIndex, repas] of menu.repas.entries()) {
     let day = byJour.get(repas.jour);
     if (day === undefined) {
       day = {
@@ -31,20 +44,18 @@ export function menuDays(menu: Menu, recipes: Recipe[], origin: Origin): MenuDay
       };
       byJour.set(repas.jour, day);
     }
-    for (const slot of repas.slots) {
-      const key = `${repas.jour}-${day.slots.length}`;
-      const creneauLabel = CRENEAU_LABELS[repas.creneau];
+    for (const [slotIndex, slot] of repas.slots.entries()) {
+      const ligne = {
+        key: `${repas.jour}-${day.slots.length}`,
+        creneauLabel: creneauLabel(repas.creneau),
+        address: { repasIndex, slotIndex },
+        choose: null,
+      };
       const title = titleById.get(slot.recipeId);
       day.slots.push(
         title === undefined
-          ? { key, creneauLabel, title: RECETTE_INCONNUE, recipe: 'unknown' }
-          : {
-              key,
-              creneauLabel,
-              title,
-              recipe: 'known',
-              href: origin.recipeHref(slot.recipeId),
-            },
+          ? { ...ligne, title: RECETTE_INCONNUE, recipe: 'unknown' }
+          : { ...ligne, title, recipe: 'known', href: origin.recipeHref(slot.recipeId) },
       );
     }
   }

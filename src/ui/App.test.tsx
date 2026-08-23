@@ -174,6 +174,13 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Nouveau menu' })).toBeInTheDocument();
   });
 
+  it('rend le sélecteur de recette sur /menu/nouveau/choisir/:repasIndex/:slotIndex, et non l’écran de génération', async () => {
+    renderAppAt('/menu/nouveau/choisir/0/0');
+
+    expect(await screen.findByRole('heading', { name: 'Choisir une recette' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /générer un menu/i })).toBeNull();
+  });
+
   it('le « + » de l’onglet Menu mène à la génération, que la consultation n’offre pas', async () => {
     const user = userEvent.setup();
     renderAppAt('/menu', avecDeQuoiGenerer());
