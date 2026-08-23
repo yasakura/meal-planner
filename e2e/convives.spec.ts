@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import {
+  accountSheetPanel,
   armReopenDuringExit,
   awaitReopenDuringExit,
   closeAccountSheet,
@@ -237,9 +238,10 @@ test.describe('Foyer hors ligne', () => {
     await expect(page.getByRole('button', { name: 'Renommer Alice' })).toBeEnabled();
     await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Émile']);
 
+    await expect(accountSheetPanel(page)).toHaveCount(1);
     await closeAccountSheet(page);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Compte' }).click();
+    await expect(accountSheetPanel(page)).toHaveCount(0);
+    await openAccountSheet(page);
     await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Émile']);
   });
 });
@@ -283,11 +285,11 @@ test.describe('Foyer et cycle de vie de la sheet', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
 
     const panneau = await panelHandle(page);
+    await expect(accountSheetPanel(page)).toHaveCount(1);
     await closeAccountSheet(page);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
+    await expect(accountSheetPanel(page)).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Compte' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
+    await openAccountSheet(page);
     expect(await isStillMounted(panneau)).toBe(false);
 
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(0);
@@ -323,10 +325,10 @@ test.describe('Foyer et cycle de vie de la sheet', () => {
     await expect(page.getByText('n’a pas pu être confirmé')).toHaveCount(1);
     await expect(prenoms(page)).toHaveText(['Bruno', 'Chloé', 'Émile']);
 
+    await expect(accountSheetPanel(page)).toHaveCount(1);
     await closeAccountSheet(page);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Compte' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: 'Compte' })).toBeVisible();
+    await expect(accountSheetPanel(page)).toHaveCount(0);
+    await openAccountSheet(page);
     expect(await isStillMounted(panneau)).toBe(false);
 
     await expect(prenoms(page)).toHaveText(['Alice', 'Bruno', 'Chloé', 'Émile']);

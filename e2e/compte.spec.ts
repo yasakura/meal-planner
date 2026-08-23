@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-import { openAccountSheet } from './support/account-sheet';
+import { accountSheetPanel, closeAccountSheet, openAccountSheet } from './support/account-sheet';
+import { failReads, restore } from './support/e2e-controls';
+
+const FOYER_INJOIGNABLE = 'Aucune connexion — le foyer n’a pas pu être chargé.';
 
 test.describe('Sheet Compte', () => {
   test('montre le foyer et la déconnexion', async ({ page }) => {
@@ -17,12 +20,12 @@ test.describe('Sheet Compte', () => {
     await expect(page.getByRole('button', { name: 'Se déconnecter' })).toBeVisible();
   });
 
-  test('se reconnecter rouvre l’application sur le foyer laissé par la session précédente', async ({
+  test('se reconnecter RELIT le foyer laissé par la session précédente : la lecture en panne, l’écran le dit ; rétablie, la liste revient', async ({
     page,
   }) => {
     await page.goto('/catalogue');
     await openAccountSheet(page);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(1);
+    await expect(accountSheetPanel(page)).toHaveCount(1);
     await expect(page.locator('nav a[href="/catalogue"]')).toHaveCount(1);
 
     await page.getByLabel('Prénom', { exact: true }).fill('Zoé');
@@ -45,9 +48,20 @@ test.describe('Sheet Compte', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
     await expect(page).toHaveURL('/catalogue');
     await expect(page.locator('nav a[href="/catalogue"]')).toHaveCount(1);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
+    await expect(accountSheetPanel(page)).toHaveCount(0);
 
+    await failReads(page);
     await openAccountSheet(page);
+    await expect(page.getByText(FOYER_INJOIGNABLE, { exact: true })).toHaveCount(1);
+    await expect(page.locator('[data-testid="convive-name"]')).toHaveCount(0);
+
+    await restore(page);
+    await expect(accountSheetPanel(page)).toHaveCount(1);
+    await closeAccountSheet(page);
+    await expect(accountSheetPanel(page)).toHaveCount(0);
+    await openAccountSheet(page);
+
+    await expect(page.getByText(FOYER_INJOIGNABLE, { exact: true })).toHaveCount(0);
     await expect(page.locator('[data-testid="convive-name"]')).toHaveText([
       'Alice',
       'Bruno',
@@ -62,7 +76,7 @@ test.describe('Sheet Compte', () => {
     await openAccountSheet(page);
 
     await expect(page.locator('nav a[href="/catalogue"]')).toHaveCount(1);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(1);
+    await expect(accountSheetPanel(page)).toHaveCount(1);
 
     await page.getByRole('button', { name: 'Se déconnecter' }).click();
 
@@ -70,6 +84,6 @@ test.describe('Sheet Compte', () => {
     await expect(page.getByLabel('Email')).toBeVisible();
 
     await expect(page.locator('nav a[href="/catalogue"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="account-sheet-panel"]')).toHaveCount(0);
+    await expect(accountSheetPanel(page)).toHaveCount(0);
   });
 });
