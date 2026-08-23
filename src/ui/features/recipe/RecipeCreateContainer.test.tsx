@@ -52,6 +52,8 @@ function capturingSpy() {
 const CONSTAT_NON_ACQUITTE =
   'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
 
+const CONSTAT_ECHEC = 'Impossible d’enregistrer la recette.';
+
 const nonAcquitte: CreateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
 
 const ID_DU_FORMULAIRE = 'generated-id-1';
@@ -196,6 +198,28 @@ describe('RecipeCreateContainer', () => {
       'Impossible d’enregistrer la recette.',
     );
     expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
+  });
+
+  it('après un échec, le second envoi efface le constat de panne avant même d’aboutir', async () => {
+    const user = userEvent.setup();
+    const enVol = deferred<Recipe>();
+    let appels = 0;
+    const depot: CreateRecipe = () => {
+      appels += 1;
+      return appels === 1 ? Promise.reject(new Error('Firestore indisponible')) : enVol.promise;
+    };
+    renderWithStore(depot);
+
+    await saisirUneRecette(user);
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
+
+    enVol.resolve(RecipeBuilder.aRecipe().build());
+    expect(await screen.findByText('Recette enregistrée.')).toBeInTheDocument();
   });
 
   it('le select d’unité propose les 5 unités (g, kg, ml, l, pièce)', () => {

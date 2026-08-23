@@ -1,6 +1,14 @@
-import { expect, type ElementHandle, type JSHandle, type Page } from '@playwright/test';
+import {
+  expect,
+  type ElementHandle,
+  type JSHandle,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 type Prise = ElementHandle<HTMLElement | SVGElement>;
+
+const PANNEAU = '[data-testid="account-sheet-panel"]';
 
 type ReouvertureArmee = JSHandle<{ fait: Promise<void> }>;
 
@@ -13,8 +21,12 @@ export async function closeAccountSheet(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Fermer' }).click();
 }
 
+export function accountSheetPanel(page: Page): Locator {
+  return page.locator(PANNEAU);
+}
+
 export async function panelHandle(page: Page): Promise<Prise> {
-  return page.waitForSelector('[data-testid="account-sheet-panel"]', { state: 'attached' });
+  return page.waitForSelector(PANNEAU, { state: 'attached' });
 }
 
 export async function isStillMounted(prise: Prise): Promise<boolean> {

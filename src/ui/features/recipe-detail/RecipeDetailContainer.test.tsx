@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
@@ -12,7 +12,7 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { useAppSelector } from '../../store/hooks';
 import { createTestStore } from '../../../test/create-test-store';
 import { RecipeDetailContainer } from './RecipeDetailContainer';
-import { selectRecipeDetail } from './recipe-detail-slice';
+import { selectRecipeDetail, type RecipeDetailStatus } from './recipe-detail-slice';
 
 const OFFLINE_NOTICE = 'Aucune connexion — la recette n’a pas pu être chargée.';
 
@@ -46,12 +46,22 @@ function renderAtWith(store: ReturnType<typeof createTestStore>, id: string) {
   );
 }
 
-type Frame = { texte: string; liensModifier: (string | null)[] };
+type Frame = {
+  chemin: string;
+  statut: RecipeDetailStatus;
+  recetteEnStore: string | null;
+  texte: string;
+  liensModifier: (string | null)[];
+};
 
 function SondeDeFrames(props: { frames: Frame[] }) {
-  useAppSelector(selectRecipeDetail);
+  const { status, recipe } = useAppSelector(selectRecipeDetail);
+  const { pathname } = useLocation();
   useLayoutEffect(() => {
     props.frames.push({
+      chemin: pathname,
+      statut: status,
+      recetteEnStore: recipe?.id ?? null,
       texte: document.body.textContent,
       liensModifier: Array.from(document.querySelectorAll('a'))
         .filter((lien) => lien.textContent === 'Modifier')
@@ -61,11 +71,12 @@ function SondeDeFrames(props: { frames: Frame[] }) {
   return null;
 }
 
-function renderAvecSonde(store: ReturnType<typeof createTestStore>, id: string) {
+function renderAvecSonde(store: ReturnType<typeof createTestStore>, id: string, cible?: string) {
   const frames: Frame[] = [];
   const vue = render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[`/catalogue/${id}`]}>
+        {cible !== undefined && <Link to={`/catalogue/${cible}`}>aller-ailleurs</Link>}
         <Routes>
           <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
         </Routes>
@@ -319,6 +330,12 @@ describe('RecipeDetailContainer', () => {
     const { frames } = renderAvecSonde(store, 'r-2');
     await screen.findByText('Recette Deux');
 
+    expect(frames[0]?.chemin).toBe('/catalogue/r-2');
+    expect(frames[0]?.statut).toBe('success');
+    expect(frames[0]?.recetteEnStore).toBe('r-1');
+    expect(frames[0]?.texte).toContain('Chargement…');
+    expect(frames[0]?.liensModifier).toEqual([]);
+
     expect(
       frames.filter(
         (frame) =>
@@ -330,6 +347,41 @@ describe('RecipeDetailContainer', () => {
     expect(frames.filter((frame) => frame.texte.includes('Recette Une'))).toHaveLength(0);
     expect(
       frames.filter((frame) => frame.liensModifier.includes('/catalogue/r-1/modifier')),
+    ).toHaveLength(0);
+  });
+
+  it('changer d’id SANS démontage ne peint pas davantage la recette précédente sous l’URL de la suivante', async () => {
+    const user = userEvent.setup();
+    const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
+    const r2 = RecipeBuilder.aRecipe().withId('r-2').withTitle('Recette Deux').build();
+    const getRecipe: GetRecipe = async (id) => (id === 'r-1' ? r1 : r2);
+    const store = createTestStore({ getRecipe });
+
+    const { frames } = renderAvecSonde(store, 'r-1', 'r-2');
+    await screen.findByText('Recette Une');
+
+    await user.click(screen.getByRole('link', { name: 'aller-ailleurs' }));
+    await screen.findByText('Recette Deux');
+
+    expect(
+      frames.filter(
+        (frame) =>
+          frame.chemin === '/catalogue/r-2' &&
+          frame.statut === 'success' &&
+          frame.recetteEnStore === 'r-1',
+      ),
+    ).toHaveLength(1);
+
+    expect(
+      frames.filter(
+        (frame) => frame.chemin === '/catalogue/r-1' && frame.texte.includes('Recette Une'),
+      ).length,
+    ).toBeGreaterThan(0);
+
+    expect(
+      frames.filter(
+        (frame) => frame.chemin === '/catalogue/r-2' && frame.texte.includes('Recette Une'),
+      ),
     ).toHaveLength(0);
   });
 
