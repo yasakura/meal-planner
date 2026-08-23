@@ -19,7 +19,9 @@ import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { DriftingClock } from '../../../domain/test-doubles/drifting-clock';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
+import { RecipesSubscription } from '../../RecipesSubscription';
 import { deferred } from '../../test-utils/deferred';
+import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { MenuCreateContainer } from './MenuCreateContainer';
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
@@ -484,67 +486,41 @@ describe('MenuCreateContainer', () => {
 
     expect(daysReceived).toEqual([7, 7]);
   });
-  it('arriver sur l’écran avec un menu déjà généré relit les recettes et rafraîchit les titres', async () => {
+
+  it('une émission du canal rafraîchit les titres du brouillon à l’écran, sans le régénérer', async () => {
     const user = userEvent.setup();
-    let catalogue = twoRecipes();
-    const { store, unmount } = renderWithStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: async () => catalogue,
-    });
-    await arriveeAchevee();
-
-    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
-    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
-
-    unmount();
-    catalogue = [
-      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
-      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
-    ];
-    renderOn(store);
-    await arriveeAchevee();
-
-    expect(await screen.findAllByText('Tian de légumes')).toHaveLength(2);
-    expect(screen.queryAllByText('Ratatouille')).toHaveLength(0);
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'lundi 24 août',
-      'mardi 25 août',
-    ]);
-  });
-
-  it('une relecture en vol n’affiche aucun indicateur de chargement par-dessus le menu', async () => {
-    const user = userEvent.setup();
-    let relectureEnVol = false;
-    const { store, unmount } = renderWithStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: () =>
-        relectureEnVol ? new Promise<Recipe[]>(() => {}) : Promise.resolve(twoRecipes()),
-    });
-    await arriveeAchevee();
-
-    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
-    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
-
-    unmount();
-    relectureEnVol = true;
-    renderOn(store);
-    await arriveeAchevee();
-
-    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-  });
-
-  it('sans menu généré, arriver sur l’écran ne relit pas les recettes', async () => {
-    let listCalls = 0;
-    renderWithStore({
-      listRecipes: async () => {
-        listCalls += 1;
-        return twoRecipes();
+    let generations = 0;
+    const canal = RecipeChannel.seededWith(twoRecipes());
+    const store = createTestStore({
+      generateMenu: async () => {
+        generations += 1;
+        return aMenu();
       },
+      listRecipes: async () => twoRecipes(),
+      observeRecipes: canal.observeRecipes,
+    });
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <RecipesSubscription>
+            <MenuCreateContainer />
+          </RecipesSubscription>
+        </MemoryRouter>
+      </Provider>,
+    );
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    expect(await screen.findAllByText('Ratatouille')).toHaveLength(2);
+
+    act(() => {
+      canal.emit([
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+        RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+      ]);
     });
 
-    expect(await screen.findByRole('button', { name: /générer un menu/i })).toBeInTheDocument();
-    expect(listCalls).toBe(0);
+    expect(screen.getAllByText('Tian de légumes')).toHaveLength(2);
+    expect(screen.queryAllByText('Ratatouille')).toHaveLength(0);
+    expect(generations).toBe(1);
   });
 
   it('affiche un champ « Début du menu » renseigné au prochain lundi', async () => {

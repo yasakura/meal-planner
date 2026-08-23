@@ -10,10 +10,10 @@ import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { deferred } from '../../test-utils/deferred';
+import { RecipesSubscription } from '../../RecipesSubscription';
+import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { MenuCreateContainer } from './MenuCreateContainer';
 import { generateMenu } from './menu-slice';
 import { SLOT_CHOICE_ROUTE } from './slot-choice-route';
@@ -56,30 +56,24 @@ function renderAt(store: TestStore, entree: string) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[entree]}>
-        <Routes>
-          <Route path="/menu/nouveau" element={<MenuCreateContainer />} />
-          <Route path={SLOT_CHOICE_ROUTE} element={<SlotChoiceContainer />} />
-        </Routes>
+        <RecipesSubscription>
+          <Routes>
+            <Route path="/menu/nouveau" element={<MenuCreateContainer />} />
+            <Route path={SLOT_CHOICE_ROUTE} element={<SlotChoiceContainer />} />
+          </Routes>
+        </RecipesSubscription>
       </MemoryRouter>
     </Provider>,
   );
 }
 
-function catalogueApresGeneration(suite: () => Promise<Recipe[]>): ListRecipes {
-  let premiere = true;
-  return async () => {
-    if (premiere) {
-      premiere = false;
-      return troisRecettes();
-    }
-    return suite();
-  };
-}
-
-async function storeAvecBrouillon(listRecipes?: ListRecipes): Promise<TestStore> {
+async function storeAvecBrouillon(
+  channel: RecipeChannel = RecipeChannel.seededWith(troisRecettes()),
+): Promise<TestStore> {
   const store = createTestStore({
     generateMenu: async () => unBrouillon(),
-    listRecipes: listRecipes ?? (async () => troisRecettes()),
+    listRecipes: async () => troisRecettes(),
+    observeRecipes: channel.observeRecipes,
   });
   await store.dispatch(generateMenu(7));
   return store;
@@ -179,7 +173,9 @@ describe('SlotChoiceContainer', () => {
   });
 
   it('sans brouillon en cours, le créneau est introuvable et le retour reste offert', async () => {
-    const store = createTestStore({ listRecipes: async () => troisRecettes() });
+    const store = createTestStore({
+      observeRecipes: RecipeChannel.seededWith(troisRecettes()).observeRecipes,
+    });
     renderAt(store, PREMIER_MIDI);
     await arriveeAchevee();
 
@@ -190,34 +186,29 @@ describe('SlotChoiceContainer', () => {
   });
 
   it('montre un chargement tant que le catalogue se lit', async () => {
-    const enVol = deferred<Recipe[]>();
-    const store = await storeAvecBrouillon(catalogueApresGeneration(() => enVol.promise));
+    const canal = RecipeChannel.silent();
+    const store = await storeAvecBrouillon(canal);
     renderAt(store, PREMIER_MIDI);
     await arriveeAchevee();
 
     expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
     expect(boutonsDeRecette()).toHaveLength(0);
 
-    await act(async () => enVol.resolve(troisRecettes()));
+    act(() => canal.emit(troisRecettes()));
 
     expect(boutonsDeRecette()).toHaveLength(3);
   });
 
   it('un catalogue illisible porte son constat, et « Réessayer » ramène les recettes', async () => {
     const user = userEvent.setup();
-    let enPanne = true;
-    const store = await storeAvecBrouillon(
-      catalogueApresGeneration(async () => {
-        if (enPanne) throw new Error('Boom firestore');
-        return troisRecettes();
-      }),
-    );
+    const canal = RecipeChannel.refusingWith(new Error('Boom firestore'));
+    const store = await storeAvecBrouillon(canal);
     renderAt(store, PREMIER_MIDI);
     await arriveeAchevee();
 
     expect(screen.getByRole('alert')).toHaveTextContent('Impossible de charger le catalogue.');
 
-    enPanne = false;
+    canal.willEmit(troisRecettes());
     await user.click(screen.getByRole('button', { name: /réessayer/i }));
 
     expect(await screen.findByRole('button', { name: /curry de pois chiches/i })).toBeVisible();
@@ -226,7 +217,7 @@ describe('SlotChoiceContainer', () => {
 
   it('hors ligne, le sélecteur porte le constat hors ligne', async () => {
     const store = await storeAvecBrouillon(
-      catalogueApresGeneration(() => Promise.reject(RepositoryUnavailableError.create())),
+      RecipeChannel.refusingWith(RepositoryUnavailableError.create()),
     );
     renderAt(store, PREMIER_MIDI);
     await arriveeAchevee();
@@ -238,7 +229,7 @@ describe('SlotChoiceContainer', () => {
   });
 
   it('un catalogue vide n’offre rien à choisir et le dit', async () => {
-    const store = await storeAvecBrouillon(catalogueApresGeneration(async () => []));
+    const store = await storeAvecBrouillon(RecipeChannel.seededWith([]));
     renderAt(store, PREMIER_MIDI);
     await arriveeAchevee();
 

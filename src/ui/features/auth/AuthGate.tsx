@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { RecipesSubscription } from '../../RecipesSubscription';
 import { LoginContainer } from './LoginContainer';
 import { Splash } from './Splash';
 import { observeAuthState, selectAuth } from './auth-slice';
@@ -19,7 +20,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (status === 'authenticated') {
-    return <>{children}</>;
+    return <RecipesSubscription>{children}</RecipesSubscription>;
   }
 
   return <LoginContainer />;

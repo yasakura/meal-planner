@@ -5,13 +5,10 @@ import { IngredientBuilder } from '../../domain/test-builders/ingredient.builder
 import { type E2eControls } from '../../data/e2e/e2e-failure-switch';
 import { E2E_TODAY } from '../../data/e2e/e2e-fixtures';
 import { observeAuthState, selectAuth } from '../features/auth/auth-slice';
-import { loadCatalogue, selectCatalogue } from '../features/catalogue/catalogue-slice';
+import { observeRecipes, selectCatalogue } from '../features/catalogue/catalogue-slice';
 import { addConvive, loadConvives, selectConvives } from '../features/convives/convives-slice';
 import { generateMenu, saveMenu, selectMenu } from '../features/menu/menu-slice';
-import {
-  loadRecipeDetail,
-  selectRecipeDetail,
-} from '../features/recipe-detail/recipe-detail-slice';
+import { recipeOfRoute } from '../features/recipe-detail/recipe-detail-states';
 import { updateRecipe } from '../features/recipe/recipe-edit-slice';
 import { createRecipe } from '../features/recipe/recipe-slice';
 import { createE2eStore, type E2eHost } from './create-e2e-store';
@@ -50,12 +47,12 @@ describe('createE2eStore', () => {
     ]);
   });
 
-  it('précharge le catalogue, dans l’ordre du domaine', async () => {
+  it('précharge le catalogue, dans l’ordre du domaine', () => {
     const store = createE2eStore(hostAt(''));
 
-    await store.dispatch(loadCatalogue());
+    store.dispatch(observeRecipes());
 
-    expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
+    expect(selectCatalogue(store.getState()).recipes?.map((recipe) => recipe.title)).toEqual([
       'Curry de pois chiches',
       'Gratin dauphinois',
       'Omelette aux herbes',
@@ -66,7 +63,7 @@ describe('createE2eStore', () => {
     const store = createE2eStore(hostAt('?convives=1&recipes=0'));
 
     await store.dispatch(loadConvives());
-    await store.dispatch(loadCatalogue());
+    store.dispatch(observeRecipes());
 
     expect(selectConvives(store.getState()).convives.map((convive) => convive.name)).toEqual([
       'Alice',
@@ -74,14 +71,14 @@ describe('createE2eStore', () => {
     expect(selectCatalogue(store.getState()).recipes).toEqual([]);
   });
 
-  it('ouvre le détail d’une recette préchargée par son id stable', async () => {
+  it('ouvre le détail d’une recette préchargée par son id stable', () => {
     const store = createE2eStore(hostAt(''));
 
-    await store.dispatch(loadRecipeDetail('recipe-gratin-dauphinois'));
+    store.dispatch(observeRecipes());
 
-    const detail = selectRecipeDetail(store.getState());
-    expect(detail.status).toBe('success');
-    expect(detail.recipe?.title).toBe('Gratin dauphinois');
+    const recette = recipeOfRoute(selectCatalogue(store.getState()), 'recipe-gratin-dauphinois');
+    expect(recette).not.toBeNull();
+    expect(recette?.title).toBe('Gratin dauphinois');
   });
 
   it('câble les use-cases convives sur un même dépôt : un ajout survit au rechargement', async () => {
@@ -119,9 +116,9 @@ describe('createE2eStore', () => {
         ingredients: [IngredientBuilder.anIngredient().build()],
       }),
     );
-    await store.dispatch(loadCatalogue());
+    store.dispatch(observeRecipes());
 
-    expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
+    expect(selectCatalogue(store.getState()).recipes?.map((recipe) => recipe.title)).toEqual([
       'Tarte aux poireaux',
     ]);
   });
@@ -136,9 +133,9 @@ describe('createE2eStore', () => {
         ingredients: [IngredientBuilder.anIngredient().build()],
       }),
     );
-    await store.dispatch(loadCatalogue());
+    store.dispatch(observeRecipes());
 
-    expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
+    expect(selectCatalogue(store.getState()).recipes?.map((recipe) => recipe.title)).toEqual([
       'Curry de pois chiches',
       'Gratin de courgettes',
       'Omelette aux herbes',

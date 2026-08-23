@@ -4,11 +4,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { type Ingredient } from '../../../domain/entities/ingredient';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { loadRecipeDetail, selectRecipeDetail } from '../recipe-detail/recipe-detail-slice';
-import { originOf, type BackLink } from '../recipe-detail/recipe-detail-origin';
-import { toPropsWithoutRecipe } from '../recipe-detail/recipe-detail-states';
+import { selectCatalogue } from '../catalogue/catalogue-slice';
+import { originOf, type BackLink } from '../catalogue/recipe-detail-origin';
+import { recipeOfRoute, toPropsWithoutRecipe } from '../recipe-detail/recipe-detail-states';
 import { RecipeDetailScreen } from '../recipe-detail/RecipeDetailScreen';
-import { recipeForRoute } from '../recipe-detail/recipe-for-route';
 import { RecipeCreateScreen } from './RecipeCreateScreen';
 import {
   INCOMPLETE_ROW_MESSAGE,
@@ -114,7 +113,7 @@ function RecipeEditForm(props: {
 export function RecipeEditContainer() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const { status: loadStatus, recipe } = useAppSelector(selectRecipeDetail);
+  const catalogue = useAppSelector(selectCatalogue);
   const edition = useAppSelector(selectRecipeEdition);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -122,10 +121,6 @@ export function RecipeEditContainer() {
 
   useEffect(() => {
     dispatch(recipeEditFormOpened());
-  }, [dispatch, id]);
-
-  useEffect(() => {
-    if (id !== undefined) dispatch(loadRecipeDetail(id));
   }, [dispatch, id]);
 
   const monte = useRef(true);
@@ -136,10 +131,10 @@ export function RecipeEditContainer() {
     };
   }, []);
 
-  const loaded = recipeForRoute(loadStatus, recipe, id);
+  const loaded = recipeOfRoute(catalogue, id);
 
   if (loaded === null)
-    return <RecipeDetailScreen {...toPropsWithoutRecipe(loadStatus)} back={origin.backLink} />;
+    return <RecipeDetailScreen {...toPropsWithoutRecipe(catalogue, id)} back={origin.backLink} />;
 
   const handleSave = (values: RecipeEditValues) => {
     void dispatch(updateRecipe({ id: loaded.id, ...values })).then((result) => {

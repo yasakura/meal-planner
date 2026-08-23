@@ -1,10 +1,8 @@
-import { useEffect } from 'react';
-
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { FROM_CATALOGUE } from '../recipe-detail/recipe-detail-origin';
+import { FROM_CATALOGUE } from './recipe-detail-origin';
 import { CATALOGUE_UNAVAILABLE_NOTICE, CATALOGUE_UNREADABLE_NOTICE } from './catalogue-notice';
-import { catalogueViewOf, loadCatalogue, selectCatalogue } from './catalogue-slice';
+import { catalogueRetried, catalogueViewOf, selectCatalogue } from './catalogue-slice';
 import {
   RecipeListScreen,
   type RecipeListItem,
@@ -27,10 +25,6 @@ export function CatalogueContainer() {
   const view = catalogueViewOf(catalogue);
   const dispatch = useAppDispatch();
 
-  useEffect(() => {
-    dispatch(loadCatalogue());
-  }, [dispatch]);
-
   let props: RecipeListScreenProps;
   if (view.status === 'unavailable') {
     props = {
@@ -41,7 +35,7 @@ export function CatalogueContainer() {
     props = {
       status: 'error',
       message: CATALOGUE_UNREADABLE_NOTICE,
-      onRetry: () => dispatch(loadCatalogue()),
+      onRetry: () => dispatch(catalogueRetried()),
     };
   } else if (view.status === 'loaded') {
     props = { status: 'loaded', recipes: view.recipes.map(toItem) };

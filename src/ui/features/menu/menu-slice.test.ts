@@ -11,6 +11,7 @@ import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
+import { recipesObserved } from '../catalogue/catalogue-slice';
 import { deferred } from '../../test-utils/deferred';
 import {
   generateMenu,
@@ -25,7 +26,6 @@ import {
   menuWindowSelected,
   NO_RECIPES,
   slotRecipeChosen,
-  refreshMenuRecipes,
   saveMenu,
   isSaveInFlight,
   selectMenu,
@@ -56,20 +56,6 @@ function twoRecipes(): Recipe[] {
   ];
 }
 
-function aMenuAvecR3(): Menu {
-  return createMenu({
-    dateDebut: LUNDI_24_AOUT,
-    repas: [
-      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r3' })] }),
-      createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
-    ],
-  });
-}
-
-function threeRecipes(): Recipe[] {
-  return [...twoRecipes(), RecipeBuilder.aRecipe().withId('r3').withTitle('Tarte').build()];
-}
-
 describe('menu slice', () => {
   it('un store neuf est idle, sans menu ni recettes ni erreur', () => {
     const store = createTestStore();
@@ -83,7 +69,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: null,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -98,7 +83,7 @@ describe('menu slice', () => {
 
     store.dispatch(menuWindowSelected(7));
 
-    const generated = await store.dispatch(generateMenu(5));
+    await store.dispatch(generateMenu(5));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'success',
@@ -109,7 +94,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: generated.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -150,7 +134,7 @@ describe('menu slice', () => {
     expect(selectMenu(store.getState()).menu).not.toBeNull();
 
     failPhase = true;
-    const failed = await store.dispatch(generateMenu(7));
+    await store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'error',
@@ -161,7 +145,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: failed.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -186,7 +169,7 @@ describe('menu slice', () => {
     expect(selectMenu(store.getState()).menu).not.toBeNull();
 
     pendingPhase = true;
-    const inFlight = store.dispatch(generateMenu(5));
+    store.dispatch(generateMenu(5));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'loading',
@@ -197,7 +180,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: inFlight.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -213,7 +195,7 @@ describe('menu slice', () => {
 
     store.dispatch(menuWindowSelected(7));
 
-    const refused = await store.dispatch(generateMenu(7));
+    await store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'error',
@@ -224,7 +206,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: refused.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -239,7 +220,7 @@ describe('menu slice', () => {
 
     store.dispatch(menuWindowSelected(7));
 
-    const refuse = await store.dispatch(generateMenu(7));
+    await store.dispatch(generateMenu(7));
 
     expect(selectMenu(store.getState())).toEqual({
       status: 'unavailable',
@@ -250,7 +231,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: refuse.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -263,7 +243,7 @@ describe('menu slice', () => {
     });
 
     store.dispatch(menuWindowSelected(7));
-    const refuse = await store.dispatch(generateMenu(7));
+    await store.dispatch(generateMenu(7));
     expect(selectMenu(store.getState()).status).toBe('unavailable');
 
     await store.dispatch(menuCreateScreenOpened());
@@ -277,31 +257,9 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: MARDI_25_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: refuse.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
-  });
-
-  it('l’arrivée sur l’écran ne lève pas le constat quand un menu attend sa relecture', async () => {
-    let failPhase = false;
-    const store = createTestStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: async () => {
-        if (failPhase) throw RepositoryUnavailableError.create();
-        return twoRecipes();
-      },
-    });
-
-    await store.dispatch(generateMenu(7));
-    failPhase = true;
-    await store.dispatch(refreshMenuRecipes());
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
-    expect(selectMenu(store.getState()).menu).not.toBeNull();
-
-    store.dispatch(menuCreateScreenOpened());
-
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
   });
 
   it('l’arrivée sur l’écran conserve le constat de catalogue vide', async () => {
@@ -331,7 +289,6 @@ describe('menu slice', () => {
       startDate: MERCREDI_2_SEPT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: true,
-      latestRecipesRequestId: 'req-0',
       saveStatus: 'saved',
       latestSaveRequestId: 'save-0',
     };
@@ -347,7 +304,6 @@ describe('menu slice', () => {
       startDate: MERCREDI_2_SEPT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: true,
-      latestRecipesRequestId: 'req-0',
       saveStatus: 'saved',
       latestSaveRequestId: 'save-0',
     });
@@ -363,7 +319,6 @@ describe('menu slice', () => {
       startDate: MERCREDI_2_SEPT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: true,
-      latestRecipesRequestId: 'req-0',
       saveStatus: 'saved',
       latestSaveRequestId: 'save-0',
     };
@@ -379,7 +334,6 @@ describe('menu slice', () => {
       startDate: MERCREDI_2_SEPT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: 'req-1',
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -423,7 +377,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: inFlight.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -440,312 +393,6 @@ describe('menu slice', () => {
       startDate: LUNDI_24_AOUT,
       startDateFloor: LUNDI_24_AOUT,
       startDateRefused: false,
-      latestRecipesRequestId: inFlight.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-  it('rafraîchir les recettes met à jour les recettes sans toucher au menu ni à la fenêtre choisie', async () => {
-    const menu = aMenu();
-    let catalogue = twoRecipes();
-    let generations = 0;
-    const store = createTestStore({
-      generateMenu: async () => {
-        generations += 1;
-        return menu;
-      },
-      listRecipes: async () => catalogue,
-    });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    catalogue = [
-      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
-      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
-    ];
-
-    const refreshed = await store.dispatch(refreshMenuRecipes());
-
-    expect(generations).toBe(1);
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'success',
-      menu,
-      recipes: catalogue,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: refreshed.meta.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-
-  it('une relecture échouée bascule l’écran sur le constat, sans effacer le menu du store', async () => {
-    const menu = aMenu();
-    const recipes = twoRecipes();
-    let failPhase = false;
-    let generations = 0;
-    let lectures = 0;
-    const store = createTestStore({
-      generateMenu: async () => {
-        generations += 1;
-        return menu;
-      },
-      listRecipes: async () => {
-        lectures += 1;
-        if (failPhase) throw RepositoryUnavailableError.create();
-        return recipes;
-      },
-    });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    failPhase = true;
-    const result = await store.dispatch(refreshMenuRecipes());
-
-    expect(lectures).toBe(2);
-    expect(refreshMenuRecipes.rejected.match(result)).toBe(true);
-    expect(generations).toBe(1);
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'unavailable',
-      menu,
-      recipes,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: result.meta.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-
-  it('une relecture REFUSÉE par le dépôt bascule l’écran sur l’échec, pas sur le constat hors ligne', async () => {
-    const menu = aMenu();
-    const recipes = twoRecipes();
-    let failPhase = false;
-    let lectures = 0;
-    const store = createTestStore({
-      generateMenu: async () => menu,
-      listRecipes: async () => {
-        lectures += 1;
-        if (failPhase) throw new Error('Boom firestore');
-        return recipes;
-      },
-    });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    failPhase = true;
-    const result = await store.dispatch(refreshMenuRecipes());
-
-    expect(lectures).toBe(2);
-    expect(refreshMenuRecipes.rejected.match(result)).toBe(true);
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'error',
-      menu,
-      recipes,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: result.meta.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-
-  it('après le constat, une relecture qui aboutit remet le menu à l’écran, titres à jour', async () => {
-    const menu = aMenu();
-    let catalogue = twoRecipes();
-    let failPhase = false;
-    const store = createTestStore({
-      generateMenu: async () => menu,
-      listRecipes: async () => {
-        if (failPhase) throw RepositoryUnavailableError.create();
-        return catalogue;
-      },
-    });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    failPhase = true;
-    await store.dispatch(refreshMenuRecipes());
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
-
-    failPhase = false;
-    catalogue = [
-      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
-      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
-    ];
-    const revenue = await store.dispatch(refreshMenuRecipes());
-
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'success',
-      menu,
-      recipes: catalogue,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: revenue.meta.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-
-  it('le rejet tardif d’une relecture abandonnée ne bascule pas l’écran sur le constat', async () => {
-    const menu = aMenu();
-    const ancien = twoRecipes();
-    const aJour = [
-      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
-      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
-    ];
-    const lente = deferred<Recipe[]>();
-    let lectures = 0;
-    const list: ListRecipes = () => {
-      lectures += 1;
-      if (lectures === 1) return Promise.resolve(ancien);
-      if (lectures === 2) return lente.promise;
-      return Promise.resolve(aJour);
-    };
-    const store = createTestStore({ generateMenu: async () => menu, listRecipes: list });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    const abandonnee = store.dispatch(refreshMenuRecipes());
-    const courante = store.dispatch(refreshMenuRecipes());
-    await courante;
-    lente.reject(RepositoryUnavailableError.create());
-    await abandonnee;
-
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'success',
-      menu,
-      recipes: aJour,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: courante.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-
-  it('sans menu à rafraîchir, aucune lecture du catalogue n’est déclenchée', async () => {
-    let listCalls = 0;
-    const store = createTestStore({
-      listRecipes: async () => {
-        listCalls += 1;
-        return twoRecipes();
-      },
-    });
-
-    await store.dispatch(refreshMenuRecipes());
-
-    expect(listCalls).toBe(0);
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'idle',
-      menu: null,
-      recipes: null,
-      error: null,
-      selectedDays: 14,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: null,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-  it('la relecture tardive d’un écran quitté ne fait pas revenir un ancien titre', async () => {
-    const menu = aMenu();
-    const ancien = twoRecipes();
-    const aJour = [
-      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
-      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
-    ];
-    const lente = deferred<Recipe[]>();
-    let lectures = 0;
-    const list: ListRecipes = () => {
-      lectures += 1;
-      if (lectures === 1) return Promise.resolve(ancien);
-      if (lectures === 2) return lente.promise;
-      return Promise.resolve(aJour);
-    };
-    const store = createTestStore({ generateMenu: async () => menu, listRecipes: list });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    const abandonnee = store.dispatch(refreshMenuRecipes());
-    const courante = store.dispatch(refreshMenuRecipes());
-    await courante;
-    lente.resolve(ancien);
-    await abandonnee;
-
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'success',
-      menu,
-      recipes: aJour,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: courante.requestId,
-      saveStatus: 'idle',
-      latestSaveRequestId: null,
-    });
-  });
-
-  it('la relecture tardive ne remplace pas le catalogue d’une régénération plus récente', async () => {
-    const menu = aMenu();
-    const menuAvecR3 = aMenuAvecR3();
-    const ancien = twoRecipes();
-    const aJour = threeRecipes();
-    const lente = deferred<Recipe[]>();
-    let lectures = 0;
-    const list: ListRecipes = () => {
-      lectures += 1;
-      if (lectures === 1) return Promise.resolve(ancien);
-      if (lectures === 2) return lente.promise;
-      return Promise.resolve(aJour);
-    };
-    let rendu = menu;
-    const store = createTestStore({ generateMenu: async () => rendu, listRecipes: list });
-
-    store.dispatch(menuWindowSelected(7));
-    await store.dispatch(generateMenu(7));
-
-    const abandonnee = store.dispatch(refreshMenuRecipes());
-    rendu = menuAvecR3;
-    const regeneration = await store.dispatch(generateMenu(7));
-    lente.resolve(ancien);
-    await abandonnee;
-
-    expect(selectMenu(store.getState())).toEqual({
-      status: 'success',
-      menu: menuAvecR3,
-      recipes: aJour,
-      error: null,
-      selectedDays: 7,
-      startDate: LUNDI_24_AOUT,
-      startDateFloor: LUNDI_24_AOUT,
-      startDateRefused: false,
-      latestRecipesRequestId: regeneration.meta.requestId,
       saveStatus: 'idle',
       latestSaveRequestId: null,
     });
@@ -944,6 +591,35 @@ describe('menu slice — enregistrement du menu', () => {
   function constat(store: ReturnType<typeof createTestStore>) {
     return menuSaveNoticeOf(selectMenu(store.getState()));
   }
+
+  it('une émission du canal met à jour les titres du brouillon, sans toucher au menu ni à la fenêtre choisie', async () => {
+    const store = await storeAvecMenuAffiche();
+    store.dispatch(menuWindowSelected(7));
+    const aJour = [
+      RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build(),
+      RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
+    ];
+
+    store.dispatch(recipesObserved(aJour));
+
+    expect(selectMenu(store.getState()).recipes).toEqual(aJour);
+    expect(selectMenu(store.getState()).menu).toEqual(aMenu());
+    expect(selectMenu(store.getState()).selectedDays).toBe(7);
+  });
+
+  it('sans brouillon, une émission du canal ne remplit pas les recettes du menu, là où un brouillon les prend', async () => {
+    const sansBrouillon = createTestStore();
+
+    sansBrouillon.dispatch(recipesObserved(twoRecipes()));
+
+    expect(selectMenu(sansBrouillon.getState()).recipes).toBeNull();
+
+    const aJour = [RecipeBuilder.aRecipe().withId('r1').withTitle('Tian de légumes').build()];
+    const avecBrouillon = await storeAvecMenuAffiche();
+    avecBrouillon.dispatch(recipesObserved(aJour));
+
+    expect(selectMenu(avecBrouillon.getState()).recipes).toEqual(aJour);
+  });
 
   it('enregistre le menu AFFICHÉ, et l’écran le constate', async () => {
     const menusRecus: unknown[] = [];
@@ -1149,27 +825,6 @@ describe('menu slice — ce que la vue de génération montre', () => {
     expect(montree.status === 'draft' && montree.days.map((jour) => jour.label)).toEqual([
       'lundi 24 août',
     ]);
-  });
-
-  it('le brouillon reste montré quand la relecture des titres échoue', async () => {
-    let enPanne = false;
-    const store = await storeAvecBrouillon({
-      listRecipes: async () => {
-        if (enPanne) throw RepositoryUnavailableError.create();
-        return twoRecipes();
-      },
-    });
-    expect(vue(store).status).toBe('draft');
-
-    enPanne = true;
-    await store.dispatch(refreshMenuRecipes());
-
-    expect(selectMenu(store.getState()).status).toBe('unavailable');
-    const montree = vue(store);
-    expect(montree.status).toBe('draft');
-    expect(montree.status === 'draft' && montree.days.at(0)?.slots.at(0)?.title).toBe(
-      'Ratatouille',
-    );
   });
 
   it('sans brouillon, le dépôt injoignable porte le constat hors ligne', async () => {

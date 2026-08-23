@@ -5,7 +5,7 @@ import { type Menu } from '../../../domain/entities/menu';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type AppThunkApiConfig, type AppThunkAsync, type RootState } from '../../store/store';
-import { FROM_MENU } from '../recipe-detail/recipe-detail-origin';
+import { FROM_MENU } from '../catalogue/recipe-detail-origin';
 import { menuDays, type MenuDay } from './menu-days';
 import { MENU_SAVED_MESSAGE, MENU_UNAVAILABLE_NOTICE, type MenuSaveNotice } from './menu-notice';
 import { menuPeriodLabel } from './menu-period-label';

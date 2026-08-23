@@ -492,47 +492,6 @@ test.describe('Du menu à la fiche recette', () => {
     await expect(page.locator('main section')).toHaveCount(14);
     await expect(page.getByText('Omelette aux fines herbes')).toHaveCount(10);
   });
-
-  test('la lecture en panne sur le formulaire venu du menu ramène au menu', async ({ page }) => {
-    await page.goto('/menu');
-    await page.getByRole('link', { name: 'Créer un menu' }).click();
-    await page.getByRole('button', { name: 'Générer un menu' }).click();
-    await expect(page.locator('main section')).toHaveCount(14);
-
-    const premierJour = page.locator('main section').first().locator('li');
-    await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
-
-    await failReads(page);
-    await page.getByRole('link', { name: 'Modifier' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu-nouveau');
-    await expect(
-      page.getByText('Aucune connexion — la recette n’a pas pu être chargée.'),
-    ).toHaveCount(1);
-
-    await expect(retourMenu(page)).toHaveCount(1);
-    await expect(retourRecettes(page)).toHaveCount(0);
-
-    await retourMenu(page).click();
-    await expect(page).toHaveURL('/menu/nouveau');
-
-    const constat = page.getByText('Aucune connexion — le menu n’a pas pu être chargé.', {
-      exact: true,
-    });
-    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
-    await expect(page.locator('main section')).toHaveCount(14);
-    await expect(constat).toHaveCount(0);
-
-    await restore(page);
-    await page.click('nav a[href="/catalogue"]');
-    await page.click('nav a[href="/menu"]');
-    await page.getByRole('link', { name: 'Créer un menu' }).click();
-
-    await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
-    await expect(page.locator('main section')).toHaveCount(14);
-    await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
-    await expect(constat).toHaveCount(0);
-  });
 });
 
 test.describe('Choisir soi-même la recette d’un créneau', () => {

@@ -7,7 +7,7 @@ import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { type CatalogueState } from '../catalogue/catalogue-slice';
-import { FROM_MENU_DRAFT } from '../recipe-detail/recipe-detail-origin';
+import { FROM_MENU_DRAFT } from '../catalogue/recipe-detail-origin';
 import { menuDays } from './menu-days';
 import { slotChoiceViewOf, withSlotChoice } from './slot-choice';
 import { slotAddressOf } from './slot-choice-route';
@@ -34,18 +34,11 @@ function unBrouillon(): Menu {
 }
 
 function catalogueState(overrides: Partial<CatalogueState>): CatalogueState {
-  return {
-    status: 'idle',
-    recipes: [],
-    error: null,
-    latestRequestId: null,
-    hasLoadedOnce: false,
-    ...overrides,
-  };
+  return { recipes: null, failure: null, attempt: 0, ...overrides };
 }
 
 function catalogueCharge(): CatalogueState {
-  return catalogueState({ status: 'success', recipes: troisRecettes(), hasLoadedOnce: true });
+  return catalogueState({ recipes: troisRecettes() });
 }
 
 const PREMIER_MIDI: SlotAddress = { repasIndex: 0, slotIndex: 0 };
@@ -122,13 +115,13 @@ describe('slotChoiceViewOf — ce que le sélecteur montre', () => {
   });
 
   it('ne propose rien tant que le catalogue se lit', () => {
-    const catalogue = catalogueState({ status: 'loading' });
+    const catalogue = catalogueState({});
 
     expect(vue(unBrouillon(), PREMIER_MIDI, catalogue)).toEqual({ status: 'loading' });
   });
 
   it('porte le constat de lecture quand le catalogue est illisible', () => {
-    const catalogue = catalogueState({ status: 'error', error: 'Boom firestore' });
+    const catalogue = catalogueState({ failure: 'unreadable' });
 
     expect(vue(unBrouillon(), PREMIER_MIDI, catalogue)).toEqual({
       status: 'error',
@@ -137,7 +130,7 @@ describe('slotChoiceViewOf — ce que le sélecteur montre', () => {
   });
 
   it('porte le constat hors ligne quand le catalogue est injoignable', () => {
-    const catalogue = catalogueState({ status: 'unavailable' });
+    const catalogue = catalogueState({ failure: 'unavailable' });
 
     expect(vue(unBrouillon(), PREMIER_MIDI, catalogue)).toEqual({
       status: 'unavailable',
@@ -146,7 +139,7 @@ describe('slotChoiceViewOf — ce que le sélecteur montre', () => {
   });
 
   it('n’a rien à proposer quand le catalogue est vide', () => {
-    const catalogue = catalogueState({ status: 'success', recipes: [], hasLoadedOnce: true });
+    const catalogue = catalogueState({ recipes: [] });
 
     expect(vue(unBrouillon(), PREMIER_MIDI, catalogue)).toEqual({ status: 'empty' });
   });

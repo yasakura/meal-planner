@@ -2,27 +2,25 @@ import { describe, it, expect } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
+import { type ObserveRecipes } from '../../../domain/use-cases/observe-recipes';
+import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { deferred } from '../../test-utils/deferred';
+import { authStateChanged } from '../auth/auth-slice';
 import {
-  catalogueReducer,
+  catalogueRetried,
   catalogueViewOf,
-  loadCatalogue,
+  observeRecipes,
+  recipesObservationFailed,
+  recipesObserved,
   selectCatalogue,
+  selectCatalogueAttempt,
+  selectCatalogueLinkLost,
   type CatalogueState,
 } from './catalogue-slice';
 
 function catalogueState(overrides: Partial<CatalogueState>): CatalogueState {
-  return {
-    status: 'idle',
-    recipes: [],
-    error: null,
-    latestRequestId: null,
-    hasLoadedOnce: false,
-    ...overrides,
-  };
+  return { recipes: null, failure: null, attempt: 0, ...overrides };
 }
 
 function twoRecipes(): Recipe[] {
@@ -32,291 +30,319 @@ function twoRecipes(): Recipe[] {
   ];
 }
 
+function emitting(recipes: Recipe[]): ObserveRecipes {
+  return (listener) => {
+    listener(recipes);
+    return () => {};
+  };
+}
+
+function refusing(error: unknown): ObserveRecipes {
+  return (_listener, onError) => {
+    onError(error);
+    return () => {};
+  };
+}
+
 describe('catalogue slice', () => {
-  it('un store neuf est idle, sans recettes ni erreur', () => {
+  it('un store neuf n’a rien lu, ne constate aucune panne, et n’a tenté qu’une fois', () => {
     const store = createTestStore();
 
     expect(selectCatalogue(store.getState())).toEqual({
-      status: 'idle',
-      recipes: [],
-      error: null,
-      latestRequestId: null,
-      hasLoadedOnce: false,
+      recipes: null,
+      failure: null,
+      attempt: 0,
     });
   });
 
-  it('loadCatalogue réussi passe en success avec les recettes renvoyées par le use case injecté', async () => {
+  it('une émission du canal remplit le catalogue avec les recettes émises', () => {
     const recipes = twoRecipes();
-    const listRecipes: ListRecipes = async () => recipes;
-    const store = createTestStore({ listRecipes });
+    const store = createTestStore();
 
-    const loaded = await store.dispatch(loadCatalogue());
+    store.dispatch(recipesObserved(recipes));
 
     expect(selectCatalogue(store.getState())).toEqual({
-      status: 'success',
       recipes,
-      error: null,
-      latestRequestId: loaded.meta.requestId,
-      hasLoadedOnce: true,
+      failure: null,
+      attempt: 0,
     });
   });
 
-  it('loadCatalogue en échec passe en error avec le message du use case et conserve les recettes déjà chargées', async () => {
+  it('une émission ultérieure remplace le catalogue, elle ne s’y ajoute pas', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+
+    const fraiches = [RecipeBuilder.aRecipe().withId('r9').withTitle('Tian').build()];
+    store.dispatch(recipesObserved(fraiches));
+
+    expect(selectCatalogue(store.getState()).recipes).toEqual(fraiches);
+  });
+
+  it('une panne ordinaire du canal se constate comme illisible', () => {
+    const store = createTestStore();
+
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
+
+    expect(selectCatalogue(store.getState())).toEqual({
+      recipes: null,
+      failure: 'unreadable',
+      attempt: 0,
+    });
+  });
+
+  it('une panne du canal sur dépôt injoignable se constate distinctement de l’illisible', () => {
+    const store = createTestStore();
+
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    expect(selectCatalogue(store.getState())).toEqual({
+      recipes: null,
+      failure: 'unavailable',
+      attempt: 0,
+    });
+  });
+
+  it('une émission après une panne efface le constat périmé', () => {
     const recipes = twoRecipes();
-    let shouldFail = false;
-    const listRecipes: ListRecipes = async () => {
-      if (shouldFail) throw new Error('Firestore indisponible');
-      return recipes;
-    };
-    const store = createTestStore({ listRecipes });
+    const store = createTestStore();
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
 
-    await store.dispatch(loadCatalogue());
-    shouldFail = true;
-    const failed = await store.dispatch(loadCatalogue());
+    store.dispatch(recipesObserved(recipes));
 
     expect(selectCatalogue(store.getState())).toEqual({
-      status: 'error',
       recipes,
-      error: 'Firestore indisponible',
-      latestRequestId: failed.meta.requestId,
-      hasLoadedOnce: true,
+      failure: null,
+      attempt: 0,
     });
   });
 
-  it('pendant un loadCatalogue en vol, le status passe à loading', () => {
-    const pending: ListRecipes = () => new Promise<Recipe[]>(() => {});
-    const store = createTestStore({ listRecipes: pending });
+  it('une panne après une émission garde les recettes déjà lues', () => {
+    const recipes = twoRecipes();
+    const store = createTestStore();
+    store.dispatch(recipesObserved(recipes));
 
-    const inFlight = store.dispatch(loadCatalogue());
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
 
     expect(selectCatalogue(store.getState())).toEqual({
-      status: 'loading',
-      recipes: [],
-      error: null,
-      latestRequestId: inFlight.requestId,
-      hasLoadedOnce: false,
+      recipes,
+      failure: 'unavailable',
+      attempt: 0,
     });
   });
 
-  it('loadCatalogue réussi depuis un état en erreur efface l’erreur périmée', () => {
-    const stale = RecipeBuilder.aRecipe().withId('stale').build();
-    const fresh = twoRecipes();
-    const errored = catalogueState({
-      status: 'error',
-      error: 'Firestore indisponible',
-      recipes: [stale],
-      latestRequestId: 'req-1',
-      hasLoadedOnce: true,
-    });
+  it('la relance efface le constat et compte une tentative de plus', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
 
-    const next = catalogueReducer(errored, loadCatalogue.fulfilled(fresh, 'req-1', undefined));
-
-    expect(next).toEqual({
-      status: 'success',
-      recipes: fresh,
-      error: null,
-      latestRequestId: 'req-1',
-      hasLoadedOnce: true,
-    });
-  });
-
-  it('un rechargement (loadCatalogue.pending) efface l’erreur périmée et conserve les recettes', () => {
-    const loaded = twoRecipes();
-    const errored = catalogueState({
-      status: 'error',
-      error: 'Firestore indisponible',
-      recipes: loaded,
-      latestRequestId: null,
-      hasLoadedOnce: true,
-    });
-
-    const next = catalogueReducer(errored, loadCatalogue.pending('req-1', undefined));
-
-    expect(next).toEqual({
-      status: 'loading',
-      recipes: loaded,
-      error: null,
-      latestRequestId: 'req-1',
-      hasLoadedOnce: true,
-    });
-  });
-
-  it('un chargement empêché par un dépôt injoignable prend un status distinct de error', async () => {
-    const unavailable: ListRecipes = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ listRecipes: unavailable });
-
-    const refused = await store.dispatch(loadCatalogue());
+    store.dispatch(catalogueRetried());
 
     expect(selectCatalogue(store.getState())).toEqual({
-      status: 'unavailable',
-      recipes: [],
-      error: null,
-      latestRequestId: refused.meta.requestId,
-      hasLoadedOnce: false,
+      recipes: null,
+      failure: null,
+      attempt: 1,
+    });
+    expect(selectCatalogueAttempt(store.getState())).toBe(1);
+  });
+
+  it('la relance ne jette pas les recettes déjà lues', () => {
+    const recipes = twoRecipes();
+    const store = createTestStore();
+    store.dispatch(recipesObserved(recipes));
+
+    store.dispatch(catalogueRetried());
+
+    expect(selectCatalogue(store.getState()).recipes).toEqual(recipes);
+  });
+
+  it('la déconnexion jette le catalogue de la session précédente', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+    store.dispatch(catalogueRetried());
+
+    store.dispatch(authStateChanged(null));
+
+    expect(selectCatalogue(store.getState())).toEqual({
+      recipes: null,
+      failure: null,
+      attempt: 0,
     });
   });
 
-  it('un dépôt injoignable efface l’erreur périmée et conserve les recettes déjà chargées', () => {
-    const loaded = twoRecipes();
-    const errored = catalogueState({
-      status: 'error',
-      error: 'Firestore indisponible',
-      recipes: loaded,
-      latestRequestId: 'req-1',
-      hasLoadedOnce: true,
-    });
+  it('une session qui s’ouvre ne jette pas ce que le canal vient d’émettre', () => {
+    const recipes = twoRecipes();
+    const store = createTestStore();
+    store.dispatch(recipesObserved(recipes));
 
-    const next = catalogueReducer(
-      errored,
-      loadCatalogue.rejected(RepositoryUnavailableError.create(), 'req-1', undefined),
-    );
+    store.dispatch(authStateChanged(AccountBuilder.anAccount().build()));
 
-    expect(next).toEqual({
-      status: 'unavailable',
-      recipes: loaded,
-      error: null,
-      latestRequestId: 'req-1',
-      hasLoadedOnce: true,
-    });
+    expect(selectCatalogue(store.getState()).recipes).toEqual(recipes);
+  });
+});
+
+describe('observeRecipes — l’abonnement branché sur le store', () => {
+  it('pousse dans le store les recettes émises par le use case injecté', () => {
+    const recipes = twoRecipes();
+    const store = createTestStore({ observeRecipes: emitting(recipes) });
+
+    store.dispatch(observeRecipes());
+
+    expect(selectCatalogue(store.getState()).recipes).toEqual(recipes);
   });
 
-  it('un rejet tardif d’un chargement dépassé n’écrase pas le catalogue fraîchement chargé', async () => {
-    const fresh = twoRecipes();
-    const slow = deferred<Recipe[]>();
-    let call = 0;
-    const listRecipes: ListRecipes = () => {
-      call += 1;
-      return call === 1 ? slow.promise : Promise.resolve(fresh);
+  it('pousse le constat hors-ligne quand le canal refuse pour dépôt injoignable', () => {
+    const store = createTestStore({
+      observeRecipes: refusing(RepositoryUnavailableError.create()),
+    });
+
+    store.dispatch(observeRecipes());
+
+    expect(selectCatalogue(store.getState()).failure).toBe('unavailable');
+  });
+
+  it('pousse le constat illisible pour toute autre panne', () => {
+    const store = createTestStore({ observeRecipes: refusing(new Error('Firestore down')) });
+
+    store.dispatch(observeRecipes());
+
+    expect(selectCatalogue(store.getState()).failure).toBe('unreadable');
+  });
+
+  it('rend le désabonnement du use case, et c’est bien celui-là', () => {
+    let desabonne = false;
+    const observe: ObserveRecipes = () => () => {
+      desabonne = true;
     };
-    const store = createTestStore({ listRecipes });
+    const store = createTestStore({ observeRecipes: observe });
 
-    const abandoned = store.dispatch(loadCatalogue());
-    const current = store.dispatch(loadCatalogue());
-    await current;
-    slow.reject(RepositoryUnavailableError.create());
-    await abandoned;
+    const unsubscribe = store.dispatch(observeRecipes());
+    expect(desabonne).toBe(false);
 
-    expect(selectCatalogue(store.getState())).toEqual({
-      status: 'success',
-      recipes: fresh,
-      error: null,
-      latestRequestId: current.requestId,
-      hasLoadedOnce: true,
-    });
-  });
+    unsubscribe();
 
-  it('un succès tardif d’un chargement dépassé ne réaffiche pas des recettes périmées', async () => {
-    const stale = [RecipeBuilder.aRecipe().withId('vieille').withTitle('Périmée').build()];
-    const fresh = twoRecipes();
-    const slow = deferred<Recipe[]>();
-    let call = 0;
-    const listRecipes: ListRecipes = () => {
-      call += 1;
-      return call === 1 ? slow.promise : Promise.resolve(fresh);
-    };
-    const store = createTestStore({ listRecipes });
-
-    const abandoned = store.dispatch(loadCatalogue());
-    const current = store.dispatch(loadCatalogue());
-    await current;
-    slow.resolve(stale);
-    await abandoned;
-
-    expect(selectCatalogue(store.getState())).toEqual({
-      status: 'success',
-      recipes: fresh,
-      error: null,
-      latestRequestId: current.requestId,
-      hasLoadedOnce: true,
-    });
+    expect(desabonne).toBe(true);
   });
 });
 
 describe('catalogueViewOf', () => {
-  it('tant qu’aucune lecture n’a abouti, une lecture en vol donne un écran de chargement', () => {
-    const view = catalogueViewOf(catalogueState({ status: 'loading' }));
+  it('tant qu’aucune émission n’est arrivée, l’écran est un chargement', () => {
+    const view = catalogueViewOf(catalogueState({}));
 
     expect(view).toEqual({ status: 'loading' });
   });
 
-  it('tant qu’aucune lecture n’a abouti, un échec donne un constat d’échec', () => {
-    const view = catalogueViewOf(catalogueState({ status: 'error', error: 'Firestore down' }));
+  it('tant qu’aucune émission n’est arrivée, une panne illisible donne un constat d’échec', () => {
+    const view = catalogueViewOf(catalogueState({ failure: 'unreadable' }));
 
     expect(view).toEqual({ status: 'error' });
   });
 
-  it('tant qu’aucune lecture n’a abouti, un dépôt injoignable donne le constat hors-ligne', () => {
-    const view = catalogueViewOf(catalogueState({ status: 'unavailable' }));
+  it('tant qu’aucune émission n’est arrivée, un dépôt injoignable donne le constat hors-ligne', () => {
+    const view = catalogueViewOf(catalogueState({ failure: 'unavailable' }));
 
     expect(view).toEqual({ status: 'unavailable' });
   });
 
-  it('une lecture aboutie affiche les recettes lues', () => {
+  it('une émission arrivée affiche les recettes émises', () => {
     const recipes = twoRecipes();
 
-    const view = catalogueViewOf(
-      catalogueState({ status: 'success', recipes, hasLoadedOnce: true }),
-    );
+    const view = catalogueViewOf(catalogueState({ recipes }));
 
     expect(view).toEqual({ status: 'loaded', recipes });
   });
 
-  it('une lecture aboutie sans aucune recette est un catalogue vide, pas une lecture manquante', () => {
-    const view = catalogueViewOf(
-      catalogueState({ status: 'success', recipes: [], hasLoadedOnce: true }),
-    );
+  it('une émission sans aucune recette est un catalogue vide, pas une lecture manquante', () => {
+    const view = catalogueViewOf(catalogueState({ recipes: [] }));
 
     expect(view).toEqual({ status: 'empty' });
   });
 
-  it('une relecture en vol garde les recettes déjà lues, elle ne redevient pas un chargement', () => {
+  it('une panne après émission garde les recettes à l’écran, elle ne devient pas un constat d’échec', () => {
     const recipes = twoRecipes();
 
-    const view = catalogueViewOf(
-      catalogueState({ status: 'loading', recipes, hasLoadedOnce: true }),
-    );
+    const view = catalogueViewOf(catalogueState({ recipes, failure: 'unreadable' }));
 
     expect(view).toEqual({ status: 'loaded', recipes });
   });
 
-  it('une relecture en échec garde les recettes déjà lues, elle ne devient pas un constat d’échec', () => {
+  it('un dépôt injoignable après émission garde les recettes à l’écran, il n’annonce pas l’absence de connexion', () => {
     const recipes = twoRecipes();
 
-    const view = catalogueViewOf(
-      catalogueState({ status: 'error', error: 'Firestore down', recipes, hasLoadedOnce: true }),
-    );
+    const view = catalogueViewOf(catalogueState({ recipes, failure: 'unavailable' }));
 
     expect(view).toEqual({ status: 'loaded', recipes });
   });
 
-  it('une relecture sur dépôt injoignable garde les recettes déjà lues, elle n’annonce pas l’absence de connexion', () => {
-    const recipes = twoRecipes();
-
-    const view = catalogueViewOf(
-      catalogueState({ status: 'unavailable', recipes, hasLoadedOnce: true }),
-    );
-
-    expect(view).toEqual({ status: 'loaded', recipes });
-  });
-
-  it('un catalogue lu et vide reste vide pendant sa relecture, il ne redevient pas un chargement', () => {
-    const view = catalogueViewOf(
-      catalogueState({ status: 'loading', recipes: [], hasLoadedOnce: true }),
-    );
+  it('un catalogue émis vide reste vide quand une panne survient ensuite', () => {
+    const view = catalogueViewOf(catalogueState({ recipes: [], failure: 'unreadable' }));
 
     expect(view).toEqual({ status: 'empty' });
   });
+});
 
-  it('un catalogue lu et vide reste vide quand sa relecture échoue', () => {
-    const view = catalogueViewOf(
-      catalogueState({
-        status: 'error',
-        error: 'Firestore down',
-        recipes: [],
-        hasLoadedOnce: true,
-      }),
-    );
+describe('selectCatalogueLinkLost', () => {
+  it('un store neuf n’a pas de lien perdu : rien n’a encore été observé', () => {
+    const store = createTestStore();
 
-    expect(view).toEqual({ status: 'empty' });
+    expect(selectCatalogueLinkLost(store.getState())).toBe(false);
+  });
+
+  it('une panne sans émission n’est pas un lien perdu : l’écran porte déjà le constat en pleine page', () => {
+    const store = createTestStore();
+
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
+
+    expect(selectCatalogueLinkLost(store.getState())).toBe(false);
+  });
+
+  it('une panne après émission est un lien perdu : les recettes restent mais plus rien ne les rafraîchira', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
+
+    expect(selectCatalogueLinkLost(store.getState())).toBe(true);
+  });
+
+  it('un dépôt injoignable après émission est un lien perdu au même titre qu’une panne ordinaire', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    expect(selectCatalogueLinkLost(store.getState())).toBe(true);
+  });
+
+  it('une émission qui arrive après la panne rétablit le lien', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    store.dispatch(recipesObserved(twoRecipes()));
+
+    expect(selectCatalogueLinkLost(store.getState())).toBe(false);
+  });
+
+  it('la relance rétablit le lien le temps de la tentative, et une nouvelle panne le reperd', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    store.dispatch(catalogueRetried());
+    expect(selectCatalogueLinkLost(store.getState())).toBe(false);
+
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    expect(selectCatalogueLinkLost(store.getState())).toBe(true);
+  });
+
+  it('la déconnexion oublie le lien perdu de la session précédente', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    store.dispatch(authStateChanged(null));
+
+    expect(selectCatalogueLinkLost(store.getState())).toBe(false);
   });
 });

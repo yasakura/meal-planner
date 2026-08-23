@@ -11,10 +11,10 @@ import { type AddConvive } from '../../domain/use-cases/add-convive';
 import { type BrowseMenus } from '../../domain/use-cases/browse-menus';
 import { type CreateRecipe } from '../../domain/use-cases/create-recipe';
 import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
-import { type GetRecipe } from '../../domain/use-cases/get-recipe';
 import { type ListConvives } from '../../domain/use-cases/list-convives';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
 import { type NewConviveId } from '../../domain/use-cases/new-convive-id';
+import { type ObserveRecipes } from '../../domain/use-cases/observe-recipes';
 import { type NewRecipeId } from '../../domain/use-cases/new-recipe-id';
 import { type NextMonday } from '../../domain/use-cases/next-monday';
 import { type RemoveConvive } from '../../domain/use-cases/remove-convive';
@@ -26,7 +26,6 @@ import { catalogueReducer } from '../features/catalogue/catalogue-slice';
 import { convivesInitialState, convivesReducer } from '../features/convives/convives-slice';
 import { menuInitialState, menuReducer } from '../features/menu/menu-slice';
 import { savedMenusReducer } from '../features/menu/saved-menus-slice';
-import { recipeDetailReducer } from '../features/recipe-detail/recipe-detail-slice';
 import { recipeEditReducer } from '../features/recipe/recipe-edit-slice';
 import { recipeInitialState, recipeReducer } from '../features/recipe/recipe-slice';
 
@@ -37,7 +36,7 @@ export type AppDependencies = {
   newRecipeId: NewRecipeId;
   updateRecipe: UpdateRecipe;
   listRecipes: ListRecipes;
-  getRecipe: GetRecipe;
+  observeRecipes: ObserveRecipes;
   generateMenu: GenerateMenu;
   browseMenus: BrowseMenus;
   nextMonday: NextMonday;
@@ -54,7 +53,6 @@ const rootReducer = combineReducers({
   recipe: recipeReducer,
   recipeEdit: recipeEditReducer,
   catalogue: catalogueReducer,
-  recipeDetail: recipeDetailReducer,
   menu: menuReducer,
   savedMenus: savedMenusReducer,
   convives: convivesReducer,

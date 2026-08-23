@@ -224,8 +224,8 @@ describe('Architecture boundaries', () => {
     );
   });
 
-  it("gage du garde de cycles : un chemin qui sort des features n'est pas une arête — recipe-detail importe ui/store, ui/store importe recipe, et le graphe ne relie pas recipe-detail à recipe", () => {
-    const sliceFile = join(FEATURES_DIR, 'recipe-detail', 'recipe-detail-slice.ts');
+  it("gage du garde de cycles : un chemin qui sort des features n'est pas une arête — catalogue importe ui/store, ui/store importe recipe, et le graphe ne relie pas catalogue à recipe", () => {
+    const sliceFile = join(FEATURES_DIR, 'catalogue', 'catalogue-slice.ts');
     const storeFile = join(ROOT, 'ui', 'store', 'store.ts');
 
     expect(extractImports(readFileSync(sliceFile, 'utf-8'), sliceFile)).toContain(
@@ -234,7 +234,7 @@ describe('Architecture boundaries', () => {
     expect(extractImports(readFileSync(storeFile, 'utf-8'), storeFile)).toContain(
       '../features/recipe/recipe-edit-slice',
     );
-    expect(featureEdges().get('recipe-detail')?.get('recipe')).toBeUndefined();
+    expect(featureEdges().get('catalogue')?.get('recipe')).toBeUndefined();
   });
 
   it('gage du garde de cycles : le graphe est construit sur les fichiers réels des features, .tsx compris', () => {

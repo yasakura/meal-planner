@@ -1,67 +1,64 @@
 import { useLayoutEffect } from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type GetRecipe } from '../../../domain/use-cases/get-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { useAppSelector } from '../../store/hooks';
 import { createTestStore } from '../../../test/create-test-store';
+import { RecipesSubscription } from '../../RecipesSubscription';
+import { useAppSelector } from '../../store/hooks';
+import { selectCatalogue } from '../catalogue/catalogue-slice';
+import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { RecipeDetailContainer } from './RecipeDetailContainer';
-import { selectRecipeDetail, type RecipeDetailStatus } from './recipe-detail-slice';
 
 const OFFLINE_NOTICE = 'Aucune connexion — la recette n’a pas pu être chargée.';
 
-function renderAt(id: string, getRecipe: GetRecipe) {
-  const store = createTestStore({ getRecipe });
-  return { store, ...renderAtWith(store, id) };
+function storeSur(channel: RecipeChannel) {
+  return createTestStore({ observeRecipes: channel.observeRecipes });
 }
 
-function renderAtPath(path: string, getRecipe: GetRecipe) {
-  const store = createTestStore({ getRecipe });
+function renderAtPathWith(store: ReturnType<typeof createTestStore>, path: string) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
-        </Routes>
+        <RecipesSubscription>
+          <Routes>
+            <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
+          </Routes>
+        </RecipesSubscription>
       </MemoryRouter>
     </Provider>,
   );
 }
 
-function renderAtWith(store: ReturnType<typeof createTestStore>, id: string) {
-  return render(
-    <Provider store={store}>
-      <MemoryRouter initialEntries={[`/catalogue/${id}`]}>
-        <Routes>
-          <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
-        </Routes>
-      </MemoryRouter>
-    </Provider>,
-  );
+function renderAt(id: string, recipes: Recipe[]) {
+  const store = storeSur(RecipeChannel.seededWith(recipes));
+  return { store, ...renderAtPathWith(store, `/catalogue/${id}`) };
 }
 
-type Frame = {
-  chemin: string;
-  statut: RecipeDetailStatus;
-  recetteEnStore: string | null;
-  texte: string;
-  liensModifier: (string | null)[];
-};
+function renderAtPath(path: string, recipes: Recipe[]) {
+  return renderAtPathWith(storeSur(RecipeChannel.seededWith(recipes)), path);
+}
+
+function renderRefusant(id: string, error: unknown) {
+  const channel = RecipeChannel.refusingWith(error);
+  const store = storeSur(channel);
+  return { store, channel, ...renderAtPathWith(store, `/catalogue/${id}`) };
+}
+
+type Frame = { chemin: string; texte: string; liensModifier: (string | null)[] };
 
 function SondeDeFrames(props: { frames: Frame[] }) {
-  const { status, recipe } = useAppSelector(selectRecipeDetail);
+  useAppSelector(selectCatalogue);
   const { pathname } = useLocation();
   useLayoutEffect(() => {
     props.frames.push({
       chemin: pathname,
-      statut: status,
-      recetteEnStore: recipe?.id ?? null,
       texte: document.body.textContent,
       liensModifier: Array.from(document.querySelectorAll('a'))
         .filter((lien) => lien.textContent === 'Modifier')
@@ -71,24 +68,8 @@ function SondeDeFrames(props: { frames: Frame[] }) {
   return null;
 }
 
-function renderAvecSonde(store: ReturnType<typeof createTestStore>, id: string, cible?: string) {
-  const frames: Frame[] = [];
-  const vue = render(
-    <Provider store={store}>
-      <MemoryRouter initialEntries={[`/catalogue/${id}`]}>
-        {cible !== undefined && <Link to={`/catalogue/${cible}`}>aller-ailleurs</Link>}
-        <Routes>
-          <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
-        </Routes>
-        <SondeDeFrames frames={frames} />
-      </MemoryRouter>
-    </Provider>,
-  );
-  return { frames, ...vue };
-}
-
 describe('RecipeDetailContainer', () => {
-  it('charge la recette de l’URL et affiche titre, personnes et ingrédients', async () => {
+  it('montre la recette de l’URL et affiche titre, personnes et ingrédients', async () => {
     const recipe = RecipeBuilder.aRecipe()
       .withId('r-1')
       .withTitle('Ratatouille')
@@ -102,9 +83,8 @@ describe('RecipeDetailContainer', () => {
         IngredientBuilder.anIngredient().withName('Œufs').withQuantity(3).withUnit('piece').build(),
       ])
       .build();
-    const getRecipe: GetRecipe = async () => recipe;
 
-    renderAt('r-1', getRecipe);
+    renderAt('r-1', [recipe]);
 
     expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
     expect(screen.getByText(/Pour 4 personnes/)).toBeInTheDocument();
@@ -116,9 +96,8 @@ describe('RecipeDetailContainer', () => {
 
   it('accorde « personne » au singulier pour une recette à 1 personne', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-solo').withConvivesReference(1).build();
-    const getRecipe: GetRecipe = async () => recipe;
 
-    renderAt('r-solo', getRecipe);
+    renderAt('r-solo', [recipe]);
 
     expect(await screen.findByText('Pour 1 personne')).toBeInTheDocument();
     expect(screen.queryByText('Pour 1 personnes')).not.toBeInTheDocument();
@@ -126,9 +105,8 @@ describe('RecipeDetailContainer', () => {
 
   it('accorde « personnes » au pluriel dès 2 personnes', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-duo').withConvivesReference(2).build();
-    const getRecipe: GetRecipe = async () => recipe;
 
-    renderAt('r-duo', getRecipe);
+    renderAt('r-duo', [recipe]);
 
     expect(await screen.findByText('Pour 2 personnes')).toBeInTheDocument();
   });
@@ -138,9 +116,8 @@ describe('RecipeDetailContainer', () => {
       .withId('r-2')
       .withInstructions('Émincer puis mijoter 30 min.')
       .build();
-    const getRecipe: GetRecipe = async () => recipe;
 
-    renderAt('r-2', getRecipe);
+    renderAt('r-2', [recipe]);
 
     expect(await screen.findByText('Préparation')).toBeInTheDocument();
     expect(screen.getByText('Émincer puis mijoter 30 min.')).toBeInTheDocument();
@@ -148,46 +125,36 @@ describe('RecipeDetailContainer', () => {
 
   it('gère explicitement l’absence de préparation', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-3').withoutInstructions().build();
-    const getRecipe: GetRecipe = async () => recipe;
 
-    renderAt('r-3', getRecipe);
+    renderAt('r-3', [recipe]);
 
     expect(await screen.findByText('Aucune préparation')).toBeInTheDocument();
   });
 
-  it('affiche « Recette introuvable » quand le use case ne trouve pas la recette', async () => {
-    const getRecipe: GetRecipe = async () => undefined;
-
-    renderAt('inconnu', getRecipe);
+  it('affiche « Recette introuvable » quand le catalogue émis ne porte pas cette recette', async () => {
+    renderAt('inconnu', []);
 
     expect(await screen.findByText('Recette introuvable')).toBeInTheDocument();
   });
 
   it('affiche un message d’échec sobre en erreur, sans exposer le message brut', async () => {
-    const getRecipe: GetRecipe = async () => {
-      throw new Error('Firestore down');
-    };
-
-    renderAt('r-1', getRecipe);
+    renderRefusant('r-1', new Error('Firestore down'));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger la recette.');
     expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
   });
 
-  it('affiche un indicateur de chargement tant que le use case n’a pas résolu', () => {
-    const pending: GetRecipe = () => new Promise(() => {});
-
-    renderAt('r-1', pending);
+  it('affiche un indicateur de chargement tant que le canal n’a rien émis', () => {
+    renderAtPathWith(storeSur(RecipeChannel.silent()), '/catalogue/r-1');
 
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
-  it('recharge la recette quand l’id de l’URL change', async () => {
+  it('montre l’autre recette quand l’id de l’URL change', async () => {
     const user = userEvent.setup();
     const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
     const r2 = RecipeBuilder.aRecipe().withId('r-2').withTitle('Recette Deux').build();
-    const getRecipe: GetRecipe = async (id) => (id === 'r-1' ? r1 : r2);
-    const store = createTestStore({ getRecipe });
+    const store = storeSur(RecipeChannel.seededWith([r1, r2]));
 
     function Nav() {
       const navigate = useNavigate();
@@ -201,10 +168,12 @@ describe('RecipeDetailContainer', () => {
     render(
       <Provider store={store}>
         <MemoryRouter initialEntries={['/catalogue/r-1']}>
-          <Nav />
-          <Routes>
-            <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
-          </Routes>
+          <RecipesSubscription>
+            <Nav />
+            <Routes>
+              <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
+            </Routes>
+          </RecipesSubscription>
         </MemoryRouter>
       </Provider>,
     );
@@ -216,31 +185,10 @@ describe('RecipeDetailContainer', () => {
     expect(await screen.findByText('Recette Deux')).toBeInTheDocument();
   });
 
-  it('ne déclenche aucun chargement quand la route ne fournit pas d’id', () => {
-    let calls = 0;
-    const getRecipe: GetRecipe = async () => {
-      calls += 1;
-      return undefined;
-    };
-    const store = createTestStore({ getRecipe });
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/sans-id']}>
-          <Routes>
-            <Route path="/sans-id" element={<RecipeDetailContainer />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>,
-    );
-
-    expect(calls).toBe(0);
-  });
-
   it('offre toujours un lien retour vers la liste des recettes', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
-    renderAt('r-1', async () => recipe);
+    renderAt('r-1', [recipe]);
     await screen.findByText('Ratatouille');
 
     const link = screen.getByRole('link', { name: /recettes/i });
@@ -248,7 +196,7 @@ describe('RecipeDetailContainer', () => {
   });
 
   it('hors ligne, l’app dit qu’elle n’a pas pu charger la recette — jamais qu’elle est introuvable', async () => {
-    renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
+    renderRefusant('r-1', RepositoryUnavailableError.create());
 
     expect(await screen.findByText(OFFLINE_NOTICE)).toBeInTheDocument();
     expect(screen.queryByText('Recette introuvable')).not.toBeInTheDocument();
@@ -256,7 +204,7 @@ describe('RecipeDetailContainer', () => {
   });
 
   it('le constat hors-ligne est annoncé poliment, jamais comme une alerte', async () => {
-    renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
+    renderRefusant('r-1', RepositoryUnavailableError.create());
     await screen.findByText(OFFLINE_NOTICE);
 
     expect(screen.getByRole('status')).toHaveTextContent(OFFLINE_NOTICE);
@@ -264,33 +212,28 @@ describe('RecipeDetailContainer', () => {
   });
 
   it('hors ligne, le lien retour vers la liste reste accessible', async () => {
-    renderAt('r-1', () => Promise.reject(RepositoryUnavailableError.create()));
+    renderRefusant('r-1', RepositoryUnavailableError.create());
     await screen.findByText(OFFLINE_NOTICE);
 
     expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');
   });
 
-  it('un rechargement réussi au remontage efface le constat hors-ligne, sur le MÊME store', async () => {
-    let offline = true;
-    const flaky: GetRecipe = async () => {
-      if (offline) throw RepositoryUnavailableError.create();
-      return RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
-    };
-    const store = createTestStore({ getRecipe: flaky });
-    const { unmount } = renderAtWith(store, 'r-1');
+  it('une émission qui succède au constat hors-ligne met la recette à l’écran, sur le MÊME store', async () => {
+    const { channel } = renderRefusant('r-1', RepositoryUnavailableError.create());
     await screen.findByText(OFFLINE_NOTICE);
 
-    offline = false;
-    unmount();
-    renderAtWith(store, 'r-1');
+    act(() => {
+      channel.emit([RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()]);
+    });
 
-    expect(await screen.findByText('Ratatouille')).toBeInTheDocument();
+    expect(screen.getByText('Ratatouille')).toBeInTheDocument();
     expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
   });
+
   it('offre un accès « Modifier » vers le formulaire d’édition de CETTE recette', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
-    renderAt('r-1', async () => recipe);
+    renderAt('r-1', [recipe]);
     await screen.findByText('Ratatouille');
 
     expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(
@@ -302,7 +245,7 @@ describe('RecipeDetailContainer', () => {
   it('vise la recette RÉELLEMENT affichée, pas un identifiant figé', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-42').withTitle('Ratatouille').build();
 
-    renderAt('r-42', async () => recipe);
+    renderAt('r-42', [recipe]);
     await screen.findByText('Ratatouille');
 
     expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(
@@ -312,65 +255,36 @@ describe('RecipeDetailContainer', () => {
   });
 
   it('n’offre pas « Modifier » quand la recette est introuvable', async () => {
-    renderAt('r-inconnue', async () => undefined);
+    renderAt('r-inconnue', []);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Recette introuvable');
     expect(screen.queryByRole('link', { name: 'Modifier' })).not.toBeInTheDocument();
   });
-  it('ne peint jamais, fût-ce une frame, la recette précédente sous l’URL de la suivante', async () => {
-    const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
-    const r2 = RecipeBuilder.aRecipe().withId('r-2').withTitle('Recette Deux').build();
-    const getRecipe: GetRecipe = async (id) => (id === 'r-1' ? r1 : r2);
-    const store = createTestStore({ getRecipe });
 
-    const { unmount } = renderAtWith(store, 'r-1');
-    await screen.findByText('Recette Une');
-    unmount();
-
-    const { frames } = renderAvecSonde(store, 'r-2');
-    await screen.findByText('Recette Deux');
-
-    expect(frames[0]?.chemin).toBe('/catalogue/r-2');
-    expect(frames[0]?.statut).toBe('success');
-    expect(frames[0]?.recetteEnStore).toBe('r-1');
-    expect(frames[0]?.texte).toContain('Chargement…');
-    expect(frames[0]?.liensModifier).toEqual([]);
-
-    expect(
-      frames.filter(
-        (frame) =>
-          frame.texte.includes('Recette Deux') &&
-          frame.liensModifier.includes('/catalogue/r-2/modifier'),
-      ).length,
-    ).toBeGreaterThan(0);
-
-    expect(frames.filter((frame) => frame.texte.includes('Recette Une'))).toHaveLength(0);
-    expect(
-      frames.filter((frame) => frame.liensModifier.includes('/catalogue/r-1/modifier')),
-    ).toHaveLength(0);
-  });
-
-  it('changer d’id SANS démontage ne peint pas davantage la recette précédente sous l’URL de la suivante', async () => {
+  it('changer d’id ne peint jamais, fût-ce une frame, la recette précédente sous l’URL de la suivante', async () => {
     const user = userEvent.setup();
     const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
     const r2 = RecipeBuilder.aRecipe().withId('r-2').withTitle('Recette Deux').build();
-    const getRecipe: GetRecipe = async (id) => (id === 'r-1' ? r1 : r2);
-    const store = createTestStore({ getRecipe });
+    const store = storeSur(RecipeChannel.seededWith([r1, r2]));
+    const frames: Frame[] = [];
 
-    const { frames } = renderAvecSonde(store, 'r-1', 'r-2');
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/catalogue/r-1']}>
+          <RecipesSubscription>
+            <Link to="/catalogue/r-2">aller-ailleurs</Link>
+            <Routes>
+              <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
+            </Routes>
+            <SondeDeFrames frames={frames} />
+          </RecipesSubscription>
+        </MemoryRouter>
+      </Provider>,
+    );
     await screen.findByText('Recette Une');
 
     await user.click(screen.getByRole('link', { name: 'aller-ailleurs' }));
     await screen.findByText('Recette Deux');
-
-    expect(
-      frames.filter(
-        (frame) =>
-          frame.chemin === '/catalogue/r-2' &&
-          frame.statut === 'success' &&
-          frame.recetteEnStore === 'r-1',
-      ),
-    ).toHaveLength(1);
 
     expect(
       frames.filter(
@@ -383,13 +297,28 @@ describe('RecipeDetailContainer', () => {
         (frame) => frame.chemin === '/catalogue/r-2' && frame.texte.includes('Recette Une'),
       ),
     ).toHaveLength(0);
+
+    expect(
+      frames.filter(
+        (frame) =>
+          frame.chemin === '/catalogue/r-2' &&
+          frame.liensModifier.includes('/catalogue/r-1/modifier'),
+      ),
+    ).toHaveLength(0);
+    expect(
+      frames.filter(
+        (frame) =>
+          frame.chemin === '/catalogue/r-2' &&
+          frame.liensModifier.includes('/catalogue/r-2/modifier'),
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it('sous une route sans identifiant, ne montre pas la dernière recette consultée', async () => {
     const r1 = RecipeBuilder.aRecipe().withId('r-1').withTitle('Recette Une').build();
-    const store = createTestStore({ getRecipe: async () => r1 });
+    const store = storeSur(RecipeChannel.seededWith([r1]));
 
-    const { unmount } = renderAtWith(store, 'r-1');
+    const { unmount } = renderAtPathWith(store, '/catalogue/r-1');
     expect(await screen.findByText('Recette Une')).toBeInTheDocument();
     unmount();
 
@@ -410,7 +339,7 @@ describe('RecipeDetailContainer', () => {
   it('arrivé depuis le menu, le lien retour ramène au menu', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
-    renderAtPath('/catalogue/r-1?depuis=menu', async () => recipe);
+    renderAtPath('/catalogue/r-1?depuis=menu', [recipe]);
     await screen.findByText('Ratatouille');
 
     const retour = screen.getByRole('link', { name: '← Menu' });
@@ -421,7 +350,7 @@ describe('RecipeDetailContainer', () => {
   it('sans provenance dans l’URL, le lien retour ramène aux recettes et jamais au menu', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
-    renderAtPath('/catalogue/r-1', async () => recipe);
+    renderAtPath('/catalogue/r-1', [recipe]);
     await screen.findByText('Ratatouille');
 
     expect(screen.getByRole('link', { name: '← Recettes' })).toHaveAttribute('href', '/catalogue');
@@ -431,7 +360,7 @@ describe('RecipeDetailContainer', () => {
   it('arrivé depuis le menu, le lien « Modifier » emporte la provenance', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
 
-    renderAtPath('/catalogue/r-1?depuis=menu', async () => recipe);
+    renderAtPath('/catalogue/r-1?depuis=menu', [recipe]);
     await screen.findByText('Ratatouille');
 
     expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(

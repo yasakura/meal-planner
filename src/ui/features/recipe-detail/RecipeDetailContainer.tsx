@@ -1,13 +1,11 @@
-import { useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type Unit } from '../../../domain/entities/ingredient';
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { recipeForRoute } from './recipe-for-route';
-import { loadRecipeDetail, selectRecipeDetail } from './recipe-detail-slice';
-import { originOf, type Origin } from './recipe-detail-origin';
-import { toPropsWithoutRecipe } from './recipe-detail-states';
+import { useAppSelector } from '../../store/hooks';
+import { selectCatalogue } from '../catalogue/catalogue-slice';
+import { originOf, type Origin } from '../catalogue/recipe-detail-origin';
+import { recipeOfRoute, toPropsWithoutRecipe } from './recipe-detail-states';
 import {
   RecipeDetailScreen,
   type RecipeDetailIngredient,
@@ -37,19 +35,14 @@ function toLoadedProps(recipe: Recipe, origin: Origin): RecipeDetailScreenProps 
 export function RecipeDetailContainer() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const { status, recipe } = useAppSelector(selectRecipeDetail);
-  const dispatch = useAppDispatch();
+  const catalogue = useAppSelector(selectCatalogue);
 
-  useEffect(() => {
-    if (id !== undefined) dispatch(loadRecipeDetail(id));
-  }, [dispatch, id]);
-
-  const aMontrer = recipeForRoute(status, recipe, id);
+  const aMontrer = recipeOfRoute(catalogue, id);
 
   const origin = originOf(searchParams);
 
   const props: RecipeDetailScreenProps =
-    aMontrer !== null ? toLoadedProps(aMontrer, origin) : toPropsWithoutRecipe(status);
+    aMontrer !== null ? toLoadedProps(aMontrer, origin) : toPropsWithoutRecipe(catalogue, id);
 
   return <RecipeDetailScreen {...props} back={origin.backLink} />;
 }

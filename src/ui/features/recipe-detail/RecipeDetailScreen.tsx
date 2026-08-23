@@ -2,7 +2,7 @@ import { styled, keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
-import { type BackLink } from './recipe-detail-origin';
+import { type BackLink } from '../catalogue/recipe-detail-origin';
 
 const { colors, space, fonts } = tokens;
 
