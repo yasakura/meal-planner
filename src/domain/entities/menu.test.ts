@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createCalendarDate } from './calendar-date';
-import { createMenu } from './menu';
+import { type Creneau } from './creneau';
+import { createMenu, replaceSlotRecipe } from './menu';
 import { createRepas } from './repas';
 import { createSlot } from './slot';
 
@@ -48,5 +49,89 @@ describe('Menu', () => {
     const menu = createMenu({ repas: [aRepas()], dateDebut: LUNDI_24_AOUT });
 
     expect(menu.dateDebut).toEqual({ year: 2026, month: 8, day: 24 });
+  });
+});
+
+const repasDe = (jour: number, creneau: Creneau, recipeIds: string[]) =>
+  createRepas({ jour, creneau, slots: recipeIds.map((recipeId) => createSlot({ recipeId })) });
+
+const menuDeLaSemaine = () =>
+  createMenu({
+    dateDebut: LUNDI_24_AOUT,
+    repas: [
+      repasDe(0, 'midi', ['r-lundi-midi']),
+      repasDe(0, 'soir', ['r-lundi-soir', 'r-gamelle']),
+      repasDe(1, 'midi', ['r-mardi-midi']),
+    ],
+  });
+
+describe('remplacement de la recette d’un créneau du menu', () => {
+  it('associe la recette choisie au créneau visé', () => {
+    const menu = menuDeLaSemaine();
+
+    const modifie = replaceSlotRecipe(menu, { repasIndex: 1, slotIndex: 1 }, 'r-choisie');
+
+    expect(modifie.repas[1]?.slots[1]).toEqual({ recipeId: 'r-choisie' });
+  });
+
+  it('rend un autre menu et laisse le menu d’origine intact', () => {
+    const menu = menuDeLaSemaine();
+
+    const modifie = replaceSlotRecipe(menu, { repasIndex: 1, slotIndex: 1 }, 'r-choisie');
+
+    expect(modifie).not.toBe(menu);
+    expect(menu.repas[1]?.slots[1]).toEqual({ recipeId: 'r-gamelle' });
+  });
+
+  it('ne change ni les autres repas, ni les autres créneaux du repas visé, ni la date de début', () => {
+    const menu = menuDeLaSemaine();
+
+    const modifie = replaceSlotRecipe(menu, { repasIndex: 1, slotIndex: 1 }, 'r-choisie');
+
+    expect(modifie.repas).toEqual([
+      repasDe(0, 'midi', ['r-lundi-midi']),
+      repasDe(0, 'soir', ['r-lundi-soir', 'r-choisie']),
+      repasDe(1, 'midi', ['r-mardi-midi']),
+    ]);
+    expect(modifie.dateDebut).toEqual(LUNDI_24_AOUT);
+  });
+
+  it('distingue deux repas de même jour et même créneau', () => {
+    const menu = createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [repasDe(0, 'soir', ['r-lionel']), repasDe(0, 'soir', ['r-rory'])],
+    });
+
+    const modifie = replaceSlotRecipe(menu, { repasIndex: 1, slotIndex: 0 }, 'r-choisie');
+
+    expect(modifie.repas).toEqual([
+      repasDe(0, 'soir', ['r-lionel']),
+      repasDe(0, 'soir', ['r-choisie']),
+    ]);
+  });
+
+  it('accepte une recette déjà utilisée dans un autre créneau du menu', () => {
+    const menu = menuDeLaSemaine();
+
+    const modifie = replaceSlotRecipe(menu, { repasIndex: 1, slotIndex: 1 }, 'r-mardi-midi');
+
+    expect(modifie.repas[1]?.slots[1]).toEqual({ recipeId: 'r-mardi-midi' });
+    expect(modifie.repas[2]?.slots[0]).toEqual({ recipeId: 'r-mardi-midi' });
+  });
+
+  it('refuse une désignation dont le repas est hors du menu', () => {
+    const menu = menuDeLaSemaine();
+
+    expect(() => replaceSlotRecipe(menu, { repasIndex: 3, slotIndex: 0 }, 'r-choisie')).toThrow(
+      'Le créneau visé est introuvable dans le menu',
+    );
+  });
+
+  it('refuse une désignation dont le créneau est hors du repas visé', () => {
+    const menu = menuDeLaSemaine();
+
+    expect(() => replaceSlotRecipe(menu, { repasIndex: 0, slotIndex: 1 }, 'r-choisie')).toThrow(
+      'Le créneau visé est introuvable dans le menu',
+    );
   });
 });

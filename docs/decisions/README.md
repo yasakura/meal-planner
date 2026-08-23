@@ -88,3 +88,4 @@ exempt du premier point : c'est une citation figée, pas une affirmation sur le 
 | [0033](0033-le-depot-e2e-sait-se-taire.md)                   | Le dépôt e2e sait se taire, et c'est la borne qui parle              | 2026-08-23 |
 | [0034](0034-la-course-se-joue-dans-la-page.md)               | Une course contre une animation se joue DANS la page                 | 2026-08-23 |
 | [0035](0035-une-adr-designe-un-symbole-pas-une-ligne.md)     | Une ADR désigne un symbole, pas une ligne                            | 2026-08-23 |
+| [0036](0036-designer-un-creneau-par-sa-position.md)          | Désigner un créneau par sa position, pas par son jour                | 2026-08-23 |
