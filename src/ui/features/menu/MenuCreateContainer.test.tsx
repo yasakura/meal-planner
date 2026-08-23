@@ -902,6 +902,30 @@ describe('MenuCreateContainer', () => {
     expect(screen.queryByRole('link', { name: 'Recette inconnue' })).not.toBeInTheDocument();
   });
 
+  it('chaque créneau du brouillon ouvre le choix d’une autre recette, sans perdre le lien vers sa fiche', async () => {
+    const user = userEvent.setup();
+    renderWithStore({ generateMenu: async () => aMenu(), listRecipes: async () => twoRecipes() });
+    await arriveeAchevee();
+
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+
+    const acces = await screen.findAllByRole('link', { name: /choisir une recette/i });
+    expect(acces.map((lien) => lien.getAttribute('href'))).toEqual([
+      '/menu/nouveau/choisir/0/0',
+      '/menu/nouveau/choisir/1/0',
+      '/menu/nouveau/choisir/2/0',
+    ]);
+    expect(acces.map((lien) => lien.getAttribute('aria-label'))).toEqual([
+      'Choisir une recette pour lundi 24 août, Midi',
+      'Choisir une recette pour lundi 24 août, Soir',
+      'Choisir une recette pour mardi 25 août, Midi',
+    ]);
+    expect(screen.getByRole('link', { name: 'Blanquette' })).toHaveAttribute(
+      'href',
+      '/catalogue/r2?depuis=menu-nouveau',
+    );
+  });
+
   it('l’écran de génération ramène au menu par un lien', async () => {
     renderWithStore({});
     await arriveeAchevee();

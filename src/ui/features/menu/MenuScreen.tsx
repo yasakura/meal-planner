@@ -2,7 +2,7 @@ import { styled, keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
-import { type MenuDay } from './menu-days';
+import { type MenuDay, type SlotChoiceLink } from './menu-days';
 import { type MenuSaveNotice } from './menu-notice';
 
 const { colors, space, fonts } = tokens;
@@ -229,6 +229,44 @@ const SlotLink = styled(Link)`
   text-decoration: none;
 `;
 
+const SlotEnd = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${space.sm}px;
+`;
+
+const ChooseLink = styled(Link)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  margin: -${space.xs}px -${space.sm}px -${space.xs}px 0;
+  color: ${colors.terracotta};
+  text-decoration: none;
+`;
+
+function ChooseSlotLink({ choose }: { choose: SlotChoiceLink }) {
+  return (
+    <ChooseLink to={choose.href} aria-label={choose.label}>
+      <svg
+        width={18}
+        height={18}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    </ChooseLink>
+  );
+}
+
 export function MenuDays({ days }: { days: MenuDay[] }) {
   return (
     <DayList>
@@ -239,11 +277,14 @@ export function MenuDays({ days }: { days: MenuDay[] }) {
             {day.slots.map((slot) => (
               <SlotItem key={slot.key}>
                 <CreneauLabel>{slot.creneauLabel}</CreneauLabel>
-                {slot.recipe === 'known' ? (
-                  <SlotLink to={slot.href}>{slot.title}</SlotLink>
-                ) : (
-                  <SlotTitle>{slot.title}</SlotTitle>
-                )}
+                <SlotEnd>
+                  {slot.recipe === 'known' ? (
+                    <SlotLink to={slot.href}>{slot.title}</SlotLink>
+                  ) : (
+                    <SlotTitle>{slot.title}</SlotTitle>
+                  )}
+                  {slot.choose === null ? null : <ChooseSlotLink choose={slot.choose} />}
+                </SlotEnd>
               </SlotItem>
             ))}
           </SlotList>

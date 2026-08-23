@@ -68,6 +68,18 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     return menuConsultationOf(selectSavedMenus(store.getState()));
   }
 
+  it('un menu enregistré n’ouvre le choix d’aucune de ses recettes, là où ses lignes mènent bien aux fiches', async () => {
+    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+
+    const lignes = consultation(store)?.days.flatMap((jour) => jour.slots) ?? [];
+
+    expect(lignes.map((slot) => slot.choose)).toEqual([null, null]);
+    expect(lignes.map((slot) => slot.recipe === 'known' && slot.href)).toEqual([
+      '/catalogue/r1?depuis=menu',
+      '/catalogue/r2?depuis=menu',
+    ]);
+  });
+
   it('à l’arrivée, la liste des menus enregistrés et le curseur viennent du domaine, sans retri', async () => {
     const store = await storeEnConsultation(TROIS_SEMAINES, 1);
 
@@ -123,6 +135,8 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
         title: 'Ratatouille',
         recipe: 'known',
         href: '/catalogue/r1?depuis=menu',
+        address: { repasIndex: 0, slotIndex: 0 },
+        choose: null,
       },
     ]);
   });

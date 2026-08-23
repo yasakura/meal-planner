@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { FROM_CATALOGUE } from '../recipe-detail/recipe-detail-origin';
-import { CATALOGUE_UNAVAILABLE_NOTICE } from './catalogue-notice';
+import { CATALOGUE_UNAVAILABLE_NOTICE, CATALOGUE_UNREADABLE_NOTICE } from './catalogue-notice';
 import { catalogueViewOf, loadCatalogue, selectCatalogue } from './catalogue-slice';
 import {
   RecipeListScreen,
@@ -40,7 +40,7 @@ export function CatalogueContainer() {
   } else if (view.status === 'error') {
     props = {
       status: 'error',
-      message: 'Impossible de charger le catalogue.',
+      message: CATALOGUE_UNREADABLE_NOTICE,
       onRetry: () => dispatch(loadCatalogue()),
     };
   } else if (view.status === 'loaded') {

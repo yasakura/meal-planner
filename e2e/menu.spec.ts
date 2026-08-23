@@ -534,3 +534,104 @@ test.describe('Du menu à la fiche recette', () => {
     await expect(constat).toHaveCount(0);
   });
 });
+
+test.describe('Choisir soi-même la recette d’un créneau', () => {
+  const retourMenu = (page: Page) => page.getByRole('link', { name: '← Menu', exact: true });
+  const accesAuChoix = (page: Page) => page.getByRole('link', { name: 'Choisir une recette pour' });
+  const dejaAuMenu = (page: Page) => page.getByText('Déjà dans ce menu', { exact: true });
+
+  async function brouillonDeLaQuinzaine(page: Page, seed = ''): Promise<void> {
+    await page.goto(`/menu${seed}`);
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.locator('main section')).toHaveCount(14);
+  }
+
+  test('une recette créée après le menu se choisit pour un créneau, sans être signalée comme déjà servie', async ({
+    page,
+  }) => {
+    await brouillonDeLaQuinzaine(page, '?recipes=1');
+    await expect(page.getByText('Curry de pois chiches')).toHaveCount(28);
+
+    await page.click('nav a[href="/catalogue"]');
+    await page.getByRole('link', { name: 'Ajouter une recette' }).click();
+    await page.getByLabel('Titre').fill('Tarte aux poireaux');
+    await page.locator('#ingredient-name-0').fill('Poireaux');
+    await page.locator('#ingredient-quantity-0').fill('3');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page).toHaveURL('/catalogue');
+
+    await page.click('nav a[href="/menu"]');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    const premierJour = page.locator('main section').first().locator('li');
+    await premierJour.nth(0).getByRole('link', { name: 'Choisir une recette' }).click();
+
+    await expect(page).toHaveURL('/menu/nouveau/choisir/0/0');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Choisir une recette' }),
+    ).toBeVisible();
+    await expect(page.getByText('lundi 5 janvier, Midi')).toHaveCount(1);
+    const curry = page.getByRole('button', { name: 'Curry de pois chiches' });
+    const tarte = page.getByRole('button', { name: 'Tarte aux poireaux' });
+    await expect(dejaAuMenu(page)).toHaveCount(1);
+    await expect(curry.getByText('Déjà dans ce menu', { exact: true })).toHaveCount(1);
+    await expect(tarte.getByText('Déjà dans ce menu', { exact: true })).toHaveCount(0);
+
+    await tarte.click();
+
+    await expect(page).toHaveURL('/menu/nouveau');
+    await expect(premierJour.nth(0)).toContainText('Midi');
+    await expect(premierJour.nth(0)).toContainText('Tarte aux poireaux');
+    await expect(page.getByText('Tarte aux poireaux')).toHaveCount(1);
+    await expect(page.getByText('Curry de pois chiches')).toHaveCount(27);
+  });
+
+  test('revenir du sélecteur sans choisir laisse le brouillon tel qu’il était', async ({
+    page,
+  }) => {
+    await brouillonDeLaQuinzaine(page);
+    const premierJour = page.locator('main section').first().locator('li');
+    await expect(premierJour.nth(0)).toContainText('Omelette aux herbes');
+
+    await premierJour.nth(0).getByRole('link', { name: 'Choisir une recette' }).click();
+    await expect(page).toHaveURL('/menu/nouveau/choisir/0/0');
+    await retourMenu(page).click();
+
+    await expect(page).toHaveURL('/menu/nouveau');
+    await expect(premierJour.nth(0)).toContainText('Omelette aux herbes');
+    await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
+    await expect(page.getByText('Gratin dauphinois')).toHaveCount(9);
+    await expect(page.getByText('Curry de pois chiches')).toHaveCount(9);
+  });
+
+  test('les créneaux d’un menu enregistré ne s’échangent plus, là où ceux du brouillon le pouvaient', async ({
+    page,
+  }) => {
+    await brouillonDeLaQuinzaine(page);
+    await expect(accesAuChoix(page)).toHaveCount(28);
+
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Menu enregistré')).toBeVisible();
+
+    await expect(page.locator('main section li')).toHaveCount(28);
+    await expect(page.getByRole('link', { name: 'Omelette aux herbes' })).toHaveCount(10);
+    await expect(accesAuChoix(page)).toHaveCount(0);
+  });
+
+  test('une adresse de créneau collée ne mène pas dans le vide', async ({ page }) => {
+    await page.goto('/menu/nouveau/choisir/9/0');
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Choisir une recette' }),
+    ).toBeVisible();
+    await expect(
+      page.getByText('Ce créneau est introuvable dans le menu.', { exact: true }),
+    ).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Curry de pois chiches' })).toHaveCount(0);
+
+    await retourMenu(page).click();
+
+    await expect(page).toHaveURL('/menu/nouveau');
+    await expect(page.getByRole('button', { name: 'Générer un menu' })).toBeVisible();
+  });
+});

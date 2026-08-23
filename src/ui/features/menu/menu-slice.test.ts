@@ -24,6 +24,7 @@ import {
   menuStartDateSelected,
   menuWindowSelected,
   NO_RECIPES,
+  slotRecipeChosen,
   refreshMenuRecipes,
   saveMenu,
   isSaveInFlight,
@@ -1262,5 +1263,57 @@ describe('menu slice — le sort du brouillon enregistré', () => {
 
     expect(menuSaveHonored(issue)).toBe(false);
     expect(selectMenu(store.getState()).menu).toEqual(aMenu());
+  });
+});
+
+describe('menu slice — choisir soi-même la recette d’un créneau', () => {
+  async function storeAvecBrouillon() {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+    });
+    await store.dispatch(generateMenu(7));
+    return store;
+  }
+
+  function recettesDuBrouillon(store: ReturnType<typeof createTestStore>) {
+    const menu = selectMenu(store.getState()).menu as Menu;
+    return menu.repas.flatMap((repas) => repas.slots.map((slot) => slot.recipeId));
+  }
+
+  it('porte la recette choisie au créneau visé, et laisse les autres créneaux intacts', async () => {
+    const store = await storeAvecBrouillon();
+    expect(recettesDuBrouillon(store)).toEqual(['r1', 'r2']);
+
+    store.dispatch(slotRecipeChosen({ address: { repasIndex: 1, slotIndex: 0 }, recipeId: 'r3' }));
+
+    expect(recettesDuBrouillon(store)).toEqual(['r1', 'r3']);
+  });
+
+  it('accepte une recette déjà servie ailleurs dans la fenêtre', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(slotRecipeChosen({ address: { repasIndex: 1, slotIndex: 0 }, recipeId: 'r1' }));
+
+    expect(recettesDuBrouillon(store)).toEqual(['r1', 'r1']);
+  });
+
+  it('laisse la date de début du brouillon inchangée', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(slotRecipeChosen({ address: { repasIndex: 0, slotIndex: 0 }, recipeId: 'r2' }));
+
+    expect((selectMenu(store.getState()).menu as Menu).dateDebut).toEqual(LUNDI_24_AOUT);
+  });
+
+  it('ouvre, sur chaque ligne du brouillon, le choix d’une recette pour son créneau', async () => {
+    const store = await storeAvecBrouillon();
+
+    const montree = menuCreationViewOf(selectMenu(store.getState()));
+
+    expect(
+      montree.status === 'draft' &&
+        montree.days.flatMap((jour) => jour.slots.map((slot) => slot.choose?.href)),
+    ).toEqual(['/menu/nouveau/choisir/0/0', '/menu/nouveau/choisir/1/0']);
   });
 });

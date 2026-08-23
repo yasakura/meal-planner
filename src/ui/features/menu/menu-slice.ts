@@ -11,7 +11,7 @@ import {
   toIsoDate,
   type CalendarDate,
 } from '../../../domain/entities/calendar-date';
-import { type Menu } from '../../../domain/entities/menu';
+import { replaceSlotRecipe, type Menu, type SlotAddress } from '../../../domain/entities/menu';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type Recipe } from '../../../domain/entities/recipe';
 import {
@@ -23,6 +23,7 @@ import {
 import { FROM_MENU_DRAFT } from '../recipe-detail/recipe-detail-origin';
 import { menuDays, type MenuDay } from './menu-days';
 import { MENU_SAVED_MESSAGE, MENU_UNAVAILABLE_NOTICE, type MenuSaveNotice } from './menu-notice';
+import { withSlotChoice } from './slot-choice';
 
 export type MenuStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
 
@@ -158,6 +159,9 @@ const menuSlice = createSlice({
       state.startDate = choisi;
       state.startDateRefused = false;
     },
+    slotRecipeReplaced(state, action: PayloadAction<Menu>) {
+      state.menu = action.payload as typeof state.menu;
+    },
     menuOpened(state, action: PayloadAction<CalendarDate>) {
       state.startDateFloor = action.payload;
       state.startDateRefused = false;
@@ -221,7 +225,16 @@ const menuSlice = createSlice({
 
 export const { menuWindowSelected } = menuSlice.actions;
 
-const { menuOpened, startDateChosen } = menuSlice.actions;
+const { menuOpened, slotRecipeReplaced, startDateChosen } = menuSlice.actions;
+
+type SlotChoice = { address: SlotAddress; recipeId: string };
+
+export function slotRecipeChosen(choice: SlotChoice): AppThunk {
+  return (dispatch, getState) => {
+    const brouillon = displayedMenuOf(getState().menu);
+    dispatch(slotRecipeReplaced(replaceSlotRecipe(brouillon, choice.address, choice.recipeId)));
+  };
+}
 
 export function menuStartDateSelected(iso: string): AppThunk {
   return (dispatch, _getState, extra) => {
@@ -285,7 +298,7 @@ export function menuCreationViewOf(state: MenuState): MenuCreationView {
   if (state.menu !== null && state.recipes !== null) {
     return {
       status: 'draft',
-      days: menuDays(state.menu, state.recipes, FROM_MENU_DRAFT),
+      days: withSlotChoice(menuDays(state.menu, state.recipes, FROM_MENU_DRAFT)),
       saveNotice: menuSaveNoticeOf(state),
       saveDisabled: isSaveInFlight(state),
     };
