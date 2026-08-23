@@ -2,6 +2,7 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-23 (branche `iter-50-references-adr`)
+- **Amendée le** : 2026-08-23 (branche `iter-53-observation`) — l'exemple canonique, joué en vrai
 - **Portée** : `docs/decisions/**`, `src/test/adr-references.test.ts`
 
 ## Contexte
@@ -61,7 +62,8 @@ Quand le symbole choisi peut **porter la conclusion de l'ADR**, c'est lui qu'on 
 que le cache est un cache mémoire _parce que_ l'initialisation passe par `getFirestore(app)` ; ancrée
 sur `#getFirestore`, l'ADR devient rouge le jour où le dépôt passe à `initializeFirestore` avec
 persistance — c'est-à-dire le jour où sa conclusion cesse d'être vraie. Ancrée sur `#db`, l'export
-voisin, elle serait restée verte en mentant.
+voisin, elle serait restée verte en mentant. — _Ce pari a été joué pour de vrai le jour même : voir
+l'[amendement du 2026-08-23](#amendement-du-2026-08-23--lexemple-canonique-sest-vérifié-puis-sest-défait)._
 
 Les vingt références sont converties en une passe. En laisser sept fragiles à côté de treize robustes
 garantissait qu'on rouvre le dossier.
@@ -100,6 +102,9 @@ reste.
 - **Un symbole qui reste pendant que la conclusion change.** `0028` dit `createRecipe` à complexité
   10 ; si elle tombe à 8, la référence résout toujours. Le garde tient la **désignation**, pas le
   **chiffre**. Il n'y a pas de remède mécanique à cela — un chiffre reste un chiffre.
+- **Un symbole qui part, puis revient.** Le garde repasse au vert de lui-même, sans que personne
+  ait relu la phrase qu'il était censé tenir. Constaté sur `#getFirestore`, en deux lots —
+  [amendement du 2026-08-23](#amendement-du-2026-08-23--lexemple-canonique-sest-vérifié-puis-sest-défait).
 - **Les références sans symbole.** Une mention nue comme `` `store.ts` `` n'est pas vérifiée : le
   corpus en compte environ deux cents, dont des chemins étrangers au dépôt
   (`node_modules/typescript/lib/lib.dom.d.ts`, `Rules/External.js` d'un outil PHP). Les couvrir
@@ -114,3 +119,58 @@ balayage manuel avait cherché la forme `src/…:NN` et trouvé trois référenc
 exhaustif, qui couvre aussi `e2e/…`, les noms de fichiers nus et la prose « (ligne 97) », en a trouvé
 **sept**. Un remède qui dépend d'une relecture humaine rate déjà plus de la moitié des cas le jour où
 on le prend au sérieux.
+
+## Amendement du 2026-08-23 — l'exemple canonique s'est vérifié, puis s'est défait
+
+Branche `iter-53-observation`. L'exemple pris ci-dessus pour illustrer la technique —
+`0027` ancrée sur `src/config/firebase.ts#getFirestore`, qui « devient rouge le jour où le dépôt
+passe à `initializeFirestore` avec persistance » — a été joué en vrai le jour même, trois branches
+plus tard, en **deux lots**.
+
+**Lot 1 : la prophétie se réalise.** Le passage à `initializeFirestore` retire `getFirestore` du
+fichier. Le garde devient **rouge**, nomme la référence de `0027`, et il a raison au meilleur
+moment possible : la conclusion de `0027` venait de cesser d'être vraie.
+
+**Lot 2 : le garde se tait.** Le repli mémoire de [ADR 0037](0037-sonder-indexeddb-avant-d-y-adosser-le-cache.md)
+réintroduit `getFirestore(app)` dans la branche que la sonde emprunte quand IndexedDB est refusée.
+Le symbole est revenu. Le garde repasse au **vert tout seul** — pendant que la prose de `0027`,
+elle, reste fausse : elle affirme toujours un cache mémoire, alors que le cas nominal est un cache
+persistant. Sans le passage de documentation de ce lot, personne n'aurait rouvert la page.
+
+### Ce que le garde asserte réellement
+
+Le garde valide qu'un symbole **résout**, pas qu'une phrase soit **vraie**. C'est toute sa portée,
+et c'est déjà beaucoup — un entier n'est falsifiable par rien. Mais un symbole qui revient **pour
+une raison sans rapport** rallume le vert et éteint le signal, et rien dans la mécanique ne
+distingue « la conclusion est redevenue vraie » de « le mot est réapparu ailleurs ».
+
+Le cas est plus dangereux que celui déjà listé plus haut — le symbole qui reste pendant que le
+chiffre change. Là, le garde n'avait **jamais** parlé, et personne n'attendait rien de lui. Ici, il
+a parlé, on l'a entendu, et son retour au vert **ressemble à une résolution**. Un instrument muet
+laisse le doute ; un instrument qui redevient vert le retire.
+
+C'est la parenté avec [ADR 0015](0015-frontieres-de-couches-inertes.md), et la différence.
+`boundaries` était inerte **de naissance** : jamais rouge, donc jamais crue. Ici l'instrument a
+fonctionné, puis s'est tu, **sans changer**. `CLAUDE.md` demande qu'un garde-fou ait été vu
+échouer ; celui-ci l'a été. La confrontation prouve qu'il **peut** parler, elle ne promet pas qu'il
+parlera à chaque fois que la phrase devient fausse.
+
+### Ce qu'on ne fait pas
+
+**Aucun garde supplémentaire.** On n'a pas de remède mesuré, et un garde qui promettrait de tenir
+la vérité d'une phrase serait précisément le genre d'instrument que cette page reproche aux
+numéros de ligne. Nommer la limite vaut mieux.
+
+Ce qui a effectivement rouvert `0027`, c'est sa ligne **`Portée`**, qui nomme
+`src/config/firebase.ts` : le lot a touché ce fichier, la relecture a suivi. Un déclencheur au
+**fichier** est plus grossier qu'un symbole — il se déclenche sur n'importe quelle modification, y
+compris celles qui ne concernent pas l'ADR — mais il n'est pas défait par le retour d'un mot. Aucun
+outil ne l'exploite aujourd'hui, et personne n'a mesuré ce que coûterait son bruit. C'est une piste,
+pas une décision.
+
+### La décision ne change pas
+
+Ancrer sur le symbole qui porte la conclusion reste la règle, et cet épisode la renforce plutôt
+qu'il ne l'entame : le lot 1 est exactement le rouge qu'aucun numéro de ligne n'aurait produit.
+Ce qui change est ce qu'on attend du vert. **Un garde vert ne dit pas qu'une ADR est vraie ; il dit
+que sa référence pointe quelque part.**

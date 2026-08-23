@@ -2,6 +2,7 @@
 
 - **Statut** : en vigueur
 - **Date** : 2026-08-22 (branche `iter-39-seuils-couverture`)
+- **Amendée le** : 2026-08-23 (branche `iter-53-observation`) — l'exclusion de `firebase.ts` levée
 - **Portée** : `vitest.config.ts`, `package.json`
 
 ## Contexte
@@ -297,7 +298,9 @@ Ce qui reste dans `src/config/firebase.ts` est **exclu**, et c'est le même crit
 qu'il l'interdisait avant l'extraction : _son pourcentage porte-t-il une information sur la
 discipline de test ?_ Avant, oui — le fichier portait un garde à 4 branches. Après, non : il ne
 reste qu'un objet de configuration et trois appels de câblage, **0 branche et 0 fonction**, et
-vitest le confirme quand on le réintègre.
+vitest le confirme quand on le réintègre. — _Le relevé était juste ce jour-là, et il a vieilli le
+2026-08-23 : `src/config/firebase.ts#db` est devenu un ternaire. Exclusion levée
+([amendement iter-53](#amendement-du-2026-08-23-branche-iter-53--firebasets-a-gagné-une-branche-son-exclusion-tombe))._
 
 ```
  config            |      50 |      100 |     100 |      50 |
@@ -312,7 +315,9 @@ l'[ADR 0028](0028-cliquet-de-complexite-au-maximum-atteint.md). — _L'analogie 
 d'appui le 2026-08-23 : `create-app-store.ts` se couvre sans exécuter Firebase, via un mock de
 `config/firebase`. L'exclusion de `firebase.ts`, elle, ne bouge pas — elle tient sur son critère
 premier, **0 branche et 0 fonction**, et le mock qui couvre la racine de composition est justement ce
-qui laisse `firebase.ts` hors de toute exécution ([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe))._
+qui laisse `firebase.ts` hors de toute exécution ([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe))._ —
+_Elle bouge le jour même, sur l'autre moitié du critère : le fichier a gagné une branche, et un test
+qui l'exerce derrière le même mock ([amendement iter-53](#amendement-du-2026-08-23-branche-iter-53--firebasets-a-gagné-une-branche-son-exclusion-tombe))._
 
 Le laisser dedans coûterait par ailleurs un plancher décoratif : `src/config/**` serait à **50 %**
 de statements, soit exactement le « 80 sur une couche mesurée à 99 » que cette ADR refuse.
@@ -401,7 +406,8 @@ EXIT=1
 
 Deux métriques seulement, et c'est le fait à retenir : `branches` et `functions` **restent vertes**,
 parce qu'après extraction `firebase.ts` n'en porte plus aucune. Une exclusion n'est jamais neutre
-sur les quatre métriques à la fois.
+sur les quatre métriques à la fois. — _La même contre-épreuve en donne **trois** le 2026-08-23, et la
+nouvelle est `branches` ([amendement iter-53](#amendement-du-2026-08-23-branche-iter-53--firebasets-a-gagné-une-branche-son-exclusion-tombe))._
 
 Aux valeurs retenues : `npm run test` **exit 0**, **0 ligne `ERROR`**, 93 fichiers, 1129 tests.
 
@@ -684,3 +690,104 @@ C'est le prix du plancher entier, déjà nommé là-bas, vu à l'œuvre ici.
 
 Aux valeurs retenues, exclusion levée : `npm run test` **exit 0**, **0 ligne `ERROR`**, 94 fichiers,
 1146 tests.
+
+## Amendement du 2026-08-23, branche iter-53 — `firebase.ts` a gagné une branche, son exclusion tombe
+
+Branche `iter-53-observation`. `src/config/firebase.ts` sort de l'`exclude` et rentre dans le
+dénominateur de `src/config/**`. **Le critère du point 4 ne bouge pas ; c'est sa réponse qui
+change** — pour la seconde fois en deux jours, sur cette page.
+
+### Le motif d'origine était un relevé, et un relevé se périme
+
+L'exclusion du 2026-08-22 tenait sur une phrase mesurable : il ne reste dans le fichier « qu'un objet
+de configuration et trois appels de câblage, **0 branche et 0 fonction** ». Elle était vraie ce
+jour-là, et vitest la confirmait.
+
+[ADR 0037](0037-sonder-indexeddb-avant-d-y-adosser-le-cache.md) l'a défaite. `src/config/firebase.ts#db`
+n'est plus un appel de câblage : c'est un ternaire sur
+`src/config/persistence-probe.ts#persistenceIsAvailable`, donc une **décision** — cache persistant
+d'un côté, repli mémoire de l'autre. Deux branches, que `src/config/firebase.test.ts` exerce en cinq
+tests, dont deux qui exigent qu'aucune des deux initialisations ne déborde sur l'autre.
+
+De la phrase d'origine, une moitié tient toujours : le fichier porte encore **0 fonction**. C'est
+l'autre moitié qui décide, et une moitié suffit.
+
+La troisième jambe du raisonnement de 2026-08-22 tombe pour la raison déjà écrite à
+l'[amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe)
+— « le couvrir demanderait d'exécuter `initializeApp` sur de vraies poignées Firebase ». Le test
+mocke `firebase/app`, `firebase/auth`, `firebase/firestore` et la sonde : rien de Firebase n'est
+exécuté, et le module réintégré est couvert par des assertions, pas par un import.
+
+### Ce qui ne l'a pas signalé, et ce que ça apprend
+
+**Une exclusion est la seule pièce d'un instrument de mesure qui ne peut pas être confrontée après
+coup.** Un seuil se monte d'un cran au-dessus du réel et on le voit mordre ; une exclusion, elle,
+retire le fichier du dénominateur, donc aucun seuil ne peut plus parler de lui. Ce qui la tient
+n'est pas un rouge, c'est une phrase — et une phrase ne tombe jamais en panne.
+
+C'est le motif que l'[amendement de l'ADR 0035](0035-une-adr-designe-un-symbole-pas-une-ligne.md#amendement-du-2026-08-23--lexemple-canonique-sest-vérifié-puis-sest-défait)
+vient de nommer sur un autre instrument, à un cran de plus : là-bas le garde avait parlé puis s'était
+tu ; ici il n'avait jamais rien à dire.
+
+La piste esquissée là-bas — **un déclencheur au fichier, via la ligne `Portée`** — n'aurait pas
+attrapé ce cas non plus, et c'est le fait le plus réutilisable de cet amendement. Le lot a modifié
+`src/config/firebase.ts`, qui figure dans la `Portée` de
+[ADR 0027](0027-le-cache-plutot-qu-un-faux-hors-ligne.md) et de
+[ADR 0037](0037-sonder-indexeddb-avant-d-y-adosser-le-cache.md) — pas dans celle de cette page-ci,
+qui nomme `vitest.config.ts` et `package.json`. **La prose qui meurt n'est pas toujours dans l'ADR
+dont la `Portée` nomme le fichier modifié** : celle-ci citait un relevé sur un fichier qu'elle
+n'avait aucune raison de déclarer. Un déclencheur au fichier devrait suivre le **sujet de
+l'affirmation**, pas le périmètre de la page.
+
+Aucun garde n'est ajouté pour autant, et pour la raison de `0035` : on n'a pas de remède mesuré.
+Ce qui a rouvert la page est une relecture, et la leçon de l'amendement iter-48 s'élargit d'un mot —
+_le critère du point 4 est une propriété du couple **fichier + tests**, à une **date**_. Une
+exclusion se relit le jour où le fichier gagne un test, et aussi le jour où il gagne une branche.
+
+### Ce que la mesure devient
+
+| glob            | avant (fichiers / stmts / branch / funcs / lines) | après                     |
+| --------------- | ------------------------------------------------- | ------------------------- |
+| `src/config/**` | 3 / 100 / 100 / 100 / 100                         | 4 / 100 / 100 / 100 / 100 |
+
+`domain/`, `data/` et `ui/` sont inchangés, au fichier près. Le dénominateur de `src/config/**`
+passe de 12 à 16 statements, de 8 à 10 branches, de 12 à 16 lignes ; **`functions` ne bouge pas**,
+le fichier n'en porte toujours aucune.
+
+**Le cliquet reste à 100 sur les quatre métriques, et la tolérance absolue reste nulle.** Un fichier
+réintégré à 100 % ne déplace aucun plancher — c'est le même constat qu'à l'amendement iter-48, sur
+un glob où il n'y avait de toute façon aucun entier à franchir.
+
+### Le glob touché, vu échouer par `npm run test`
+
+`src/config/**` est le seul glob dont le dénominateur change ; il est donc le seul reconfronté, d'un
+cran au-dessus du réel, puis restauré.
+
+```
+> vitest run --coverage
+ Test Files  103 passed (103)
+      Tests  1254 passed (1254)
+ERROR: Coverage for lines (100%) does not meet "src/config/**" threshold (100.01%)
+ERROR: Coverage for functions (100%) does not meet "src/config/**" threshold (100.01%)
+ERROR: Coverage for statements (100%) does not meet "src/config/**" threshold (100.01%)
+ERROR: Coverage for branches (100%) does not meet "src/config/**" threshold (100.01%)
+```
+
+**Contre-épreuve, et c'est elle qui fait de la réintégration une forme permanente** : fichier
+réintégré, cliquet aux valeurs retenues, `src/config/firebase.test.ts` retiré, `npm run test` sort
+en erreur.
+
+```
+ Test Files  102 passed (102)
+      Tests  1249 passed (1249)
+ERROR: Coverage for lines (75%) does not meet "src/config/**" threshold (100%)
+ERROR: Coverage for statements (75%) does not meet "src/config/**" threshold (100%)
+ERROR: Coverage for branches (80%) does not meet "src/config/**" threshold (100%)
+```
+
+**Trois métriques, là où la contre-épreuve du 2026-08-22 en donnait deux** — et la troisième est
+`branches`, exactement celle que la sonde a créée. Le motif disparu a une signature arithmétique, et
+elle est lisible dans le rouge. `functions` reste verte, pour la moitié du motif qui tient encore.
+
+Aux valeurs retenues, exclusion levée : `npm run test` **exit 0**, **0 ligne `ERROR`**, 103 fichiers,
+1254 tests.

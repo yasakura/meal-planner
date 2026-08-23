@@ -82,6 +82,7 @@ describe('removeConviveUseCase', () => {
       findAll: () => Promise.resolve([]),
       updateExisting: () => Promise.resolve(undefined),
       remove: () => Promise.reject(new Error('boom')),
+      observeAll: () => () => {},
     };
     const removeConvive = removeConviveUseCase({ conviveRepository });
 

@@ -128,3 +128,69 @@ describe('E2eMenuRepository', () => {
     expect(await repository.findAll()).toEqual([]);
   });
 });
+
+describe('E2eMenuRepository — observation', () => {
+  it("livre l'instantané courant dès l'abonnement, dans un ordre DIFFÉRENT de l'ordre d'insertion", async () => {
+    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const menuDu5Janvier = menuCommencantLe(LUNDI_5_JANVIER);
+    const menuDu19Janvier = menuCommencantLe(LUNDI_19_JANVIER);
+    await repository.save(menuDu5Janvier);
+    await repository.save(menuDu19Janvier);
+    const instantanes: (readonly Menu[])[] = [];
+
+    repository.observeAll(
+      (menus) => instantanes.push(menus),
+      () => {},
+    );
+
+    expect(instantanes).toEqual([[menuDu19Janvier, menuDu5Janvier]]);
+  });
+
+  it('réémet la liste entière à chaque enregistrement et à chaque retrait', async () => {
+    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const menuDu5Janvier = menuCommencantLe(LUNDI_5_JANVIER);
+    const instantanes: (readonly Menu[])[] = [];
+    repository.observeAll(
+      (menus) => instantanes.push(menus),
+      () => {},
+    );
+
+    await repository.save(menuDu5Janvier);
+    await repository.remove(LUNDI_5_JANVIER);
+
+    expect(instantanes).toEqual([[], [menuDu5Janvier], []]);
+  });
+
+  it("n'émet plus rien une fois le désabonnement appelé", async () => {
+    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const instantanes: (readonly Menu[])[] = [];
+    const stop = repository.observeAll(
+      (menus) => instantanes.push(menus),
+      () => {},
+    );
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
+    expect(instantanes).toHaveLength(2);
+
+    stop();
+    await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
+
+    expect(instantanes).toHaveLength(2);
+  });
+
+  it("signale l'indisponibilité sur le canal d'erreur quand les lectures sont en panne, au lieu de livrer un instantané", () => {
+    const failures = E2eFailureSwitch.create();
+    const repository = E2eMenuRepository.startingEmpty(failures);
+    const instantanes: (readonly Menu[])[] = [];
+    const echecs: unknown[] = [];
+
+    failures.failReads();
+    repository.observeAll(
+      (menus) => instantanes.push(menus),
+      (error) => echecs.push(error),
+    );
+
+    expect(echecs).toHaveLength(1);
+    expect(echecs[0]).toBeInstanceOf(RepositoryUnavailableError);
+    expect(instantanes).toEqual([]);
+  });
+});

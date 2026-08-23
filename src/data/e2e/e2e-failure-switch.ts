@@ -41,8 +41,12 @@ export class E2eFailureSwitch implements E2eControls {
     this.writesHang = false;
   }
 
+  readsAreDown(): boolean {
+    return this.readsFail;
+  }
+
   guardRead(): void {
-    if (this.readsFail) throw RepositoryUnavailableError.create();
+    if (this.readsAreDown()) throw RepositoryUnavailableError.create();
   }
 
   guardWrite(): void {

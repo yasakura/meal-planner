@@ -1,6 +1,16 @@
-import { type Firestore, collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import {
+  type Firestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  setDoc,
+} from 'firebase/firestore';
 
 import { type RecipeRepository } from '../domain/ports/recipe-repository';
+import { type Unsubscribe } from '../domain/ports/unsubscribe';
+import { asDomainFailure } from './firestore-failure';
 import { type Recipe } from '../domain/entities/recipe';
 import {
   DEFAULT_ACK_TIMEOUT_MS,
@@ -53,5 +63,22 @@ export class FirestoreRecipeRepository implements RecipeRepository {
       this.readTimeoutMs,
     );
     return snapshot.exists() ? documentToRecipe(snapshot.id, snapshot.data()) : undefined;
+  }
+
+  observeAll(
+    listener: (recipes: Recipe[]) => void,
+    onError: (error: unknown) => void,
+  ): Unsubscribe {
+    return onSnapshot(
+      collection(this.db, 'recipes'),
+      (snapshot) => {
+        listener(
+          snapshot.docs.map((snapshotDoc) => documentToRecipe(snapshotDoc.id, snapshotDoc.data())),
+        );
+      },
+      (error) => {
+        onError(asDomainFailure(error));
+      },
+    );
   }
 }

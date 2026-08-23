@@ -4,13 +4,16 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  onSnapshot,
   runTransaction,
   setDoc,
 } from 'firebase/firestore';
 
 import { type ConviveRepository } from '../domain/ports/convive-repository';
 import { type Convive } from '../domain/entities/convive';
+import { type Unsubscribe } from '../domain/ports/unsubscribe';
 import { conviveToDocument, documentToConvive } from './convive-mapper';
+import { asDomainFailure } from './firestore-failure';
 import {
   DEFAULT_ACK_TIMEOUT_MS,
   DEFAULT_READ_TIMEOUT_MS,
@@ -76,5 +79,22 @@ export class FirestoreConviveRepository implements ConviveRepository {
 
   async remove(id: string): Promise<void> {
     await withServerDeadline(deleteDoc(doc(this.db, 'convives', id)), this.ackTimeoutMs);
+  }
+
+  observeAll(
+    listener: (convives: Convive[]) => void,
+    onError: (error: unknown) => void,
+  ): Unsubscribe {
+    return onSnapshot(
+      collection(this.db, 'convives'),
+      (snapshot) => {
+        listener(
+          snapshot.docs.map((snapshotDoc) => documentToConvive(snapshotDoc.id, snapshotDoc.data())),
+        );
+      },
+      (error) => {
+        onError(asDomainFailure(error));
+      },
+    );
   }
 }
