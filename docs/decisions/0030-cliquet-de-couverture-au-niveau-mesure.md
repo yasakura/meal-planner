@@ -176,7 +176,11 @@ ERROR: Coverage for statements (98.72%) does not meet "src/ui/**" threshold (99%
 ```
 
 Trois métriques sur quatre passent au rouge, **branches reste vert** parce que le fichier n'en porte
-aucune. La tolérance nulle sur `functions` est donc mesurée, pas déduite.
+aucune. La tolérance nulle sur `functions` est donc mesurée, pas déduite. — _Relevé du 2026-08-22,
+non reproductible tel quel depuis : `create-app-store.ts` a un test et n'est plus exclu
+([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe)), et la tolérance sur `functions` est passée de 0 à 1 dès l'amendement
+du 2026-08-22. Le test retiré aujourd'hui, la réintégration ne fait plus rougir que **deux**
+métriques, `lines` et `statements`._
 
 ### Le critère d'exclusion, éprouvé sur les trois fichiers à 0 %
 
@@ -203,7 +207,9 @@ C'est le mode de défaillance nommé par l'[ADR 0028](0028-cliquet-de-complexite
 — « un garde-fou qui accuse du bon code se fait désactiver ». Le geste qui suit un faux rouge n'est
 jamais d'écrire un test pour une racine de composition ; c'est de baisser le seuil, et le cliquet est
 mort. L'exclure rend le plancher **à la fois plus haut et plus stable** : `src/ui/**` passe de 98.63
-à 99.17 en statements, et cesse de dériver à chaque feature.
+à 99.17 en statements, et cesse de dériver à chaque feature. — _Exclusion levée le 2026-08-23
+([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe)). Le raisonnement ci-dessus reste juste **pour une racine de
+composition sans test** — c'est cette hypothèse-là qui est tombée, pas le critère._
 
 **`src/config/firebase.ts` — non exclu.** Il avait été rangé dans la même famille que les deux
 autres, à tort. Il porte `requireEnv` (lignes 5 à 10), un garde qui **lève une erreur nommée** quand
@@ -221,13 +227,16 @@ poser le seuil. — _Chantier fait, voir l'amendement en fin de page._
 
 Les deux entrées sont des **chemins exacts**, pas des globs : rien ne peut s'y glisser. — _Les
 exclusions de l'[amendement du 2026-08-23](#amendement-du-2026-08-23--linfra-de-test-sort-du-dénominateur-et-cesse-dêtre-importable)
-sont, elles, des globs de répertoire ; ce qui tient leur contenu est un garde statique, pas la forme du chemin._ Recomptage
+sont, elles, des globs de répertoire ; ce qui tient leur contenu est un garde statique, pas la forme du chemin.
+Et il n'en reste qu'une des deux : celle de `create-app-store.ts` est levée le 2026-08-23
+([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe))._ Recomptage
 après exclusion : `src/ui/**` passe de **52 à 50** fichiers ; `domain/`, `data/` et `config/` sont
 inchangés, au fichier près. Les deux seuls fichiers retirés de la mesure sont ceux-là.
 
 Et l'exclusion ne règle rien de [#68](https://github.com/yasakura/meal-planner/issues/68), qui trace
 la racine de composition non testée. Ce qui change, c'est ce que le **pourcentage** mesure — pas ce
-que les tests couvrent.
+que les tests couvrent. — _#68 fermé le 2026-08-23 : la racine a désormais un test, et c'est lui qui
+rend l'exclusion caduque ([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe))._
 
 ### Le coût, et ce qui n'est pas touché
 
@@ -299,7 +308,11 @@ Le couvrir demanderait d'importer le module, donc d'exécuter `initializeApp` su
 Firebase : c'est mot pour mot la raison dynamique qui a fait exclure `create-app-store.ts`. Et le
 fichier **grossit d'une ligne par variable Firebase ajoutée**, donc il ferait dériver le plancher
 vers le bas sur du bon travail — le mode de défaillance de
-l'[ADR 0028](0028-cliquet-de-complexite-au-maximum-atteint.md).
+l'[ADR 0028](0028-cliquet-de-complexite-au-maximum-atteint.md). — _L'analogie a perdu son point
+d'appui le 2026-08-23 : `create-app-store.ts` se couvre sans exécuter Firebase, via un mock de
+`config/firebase`. L'exclusion de `firebase.ts`, elle, ne bouge pas — elle tient sur son critère
+premier, **0 branche et 0 fonction**, et le mock qui couvre la racine de composition est justement ce
+qui laisse `firebase.ts` hors de toute exécution ([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe))._
 
 Le laisser dedans coûterait par ailleurs un plancher décoratif : `src/config/**` serait à **50 %**
 de statements, soit exactement le « 80 sur une couche mesurée à 99 » que cette ADR refuse.
@@ -510,7 +523,8 @@ localisateur vu trouver quelque chose.
 | `src/ui/**`     | 49 / 99.26 / 97.39 / 98.46 / 99.38                | 48 / 99.25 / 97.39 / 98.45 / 99.38 |
 
 `data/` et `config/` sont inchangés, au fichier près. Le recomptage confirme que les seuls fichiers
-retirés sont les quatorze.
+retirés sont les quatorze. — _`src/ui/**` est repassé à 49 fichiers le 2026-08-23, la racine de
+composition réintégrée ([amendement iter-48](#amendement-du-2026-08-23-branche-iter-48--la-racine-de-composition-a-un-test-son-exclusion-tombe))._
 
 **Les deux cliquets ne bougent pas, et cette fois il faut le dire fort, car les deux sens du piège
 étaient ouverts.** Retirer des fichiers à 100 % fait baisser la valeur réelle ; ici la baisse est de
@@ -568,3 +582,105 @@ pourcentage **signifie**, pas ce qu'il autorise aujourd'hui.
 
 Aux valeurs retenues, exclusions en place : `npm run test` **exit 0**, **0 ligne `ERROR`**, 93
 fichiers, 1131 tests.
+
+## Amendement du 2026-08-23, branche iter-48 — la racine de composition a un test, son exclusion tombe
+
+Issue [#68](https://github.com/yasakura/meal-planner/issues/68), finding 2. `src/ui/store/create-app-store.ts`
+sort de l'`exclude` et rentre dans le dénominateur de `src/ui/**`. **Le critère du point 4 ne bouge
+pas ; c'est sa réponse qui change**, parce que le fichier a acquis un test.
+
+### Ce que l'argument d'origine supposait, et qui n'est plus vrai
+
+Le raisonnement de 2026-08-22 tenait sur deux jambes, et **les deux supposaient un fichier sans
+test** :
+
+**« Le couvrir demande d'appeler `createAppStore()`, qui construit les vraies poignées Firebase. »**
+Faux depuis qu'un mock existe. `src/ui/store/create-app-store.test.ts` mocke `../../config/firebase`
+en `{ auth: {}, db: {} }` : `initializeApp` n'est jamais appelé, aucune poignée n'est construite. Ce
+que l'[ADR 0016](0016-mode-e2e-embarque.md) documente — `config/firebase` lève **au chargement du
+module** quand la configuration manque — est précisément la raison pour laquelle le mock est
+nécessaire, et il suffit.
+
+**« Le fichier grossit d'une ligne par use case injecté, donc il ferait dériver le cliquet à chaque
+feature. »** La dérive n'existe que tant que la ligne ajoutée est **non couverte**. Un test appelant
+`createAppStore()`, chaque use case injecté ajoute une ligne **couverte** : numérateur et
+dénominateur montent ensemble et le pourcentage ne descend pas. Mesuré, le fichier réintégré et
+testé : `src/ui/**` passe de 99.25 à **99.26** en statements — il monte, là où la réintégration du
+même fichier non testé faisait tomber trois métriques sur quatre.
+
+Le mode de défaillance de l'[ADR 0028](0028-cliquet-de-complexite-au-maximum-atteint.md) — « un
+garde-fou qui accuse du bon code se fait désactiver » — n'est donc pas rouvert : le fichier n'est
+plus accusé, il est couvert.
+
+**Ce que le raisonnement d'origine garde de juste** : pour une racine de composition **sans test**,
+il reste exact mot pour mot, et le relevé de 2026-08-22 le prouve toujours. C'est l'hypothèse « sans
+test » qui est tombée, pas le critère qui la portait. La leçon générale vaut d'être écrite : _le
+critère du point 4 est une propriété du couple **fichier + tests**, pas du fichier._ Une exclusion
+justifiée un jour ne l'est pas pour toujours ; elle se relit le jour où le fichier gagne un test.
+
+### Le gage acquis, et pourquoi il n'est pas un achat de pourcentage
+
+Le test n'importe pas le module pour faire monter un chiffre, il asserte un comportement de la racine
+de composition, celui que [#68](https://github.com/yasakura/meal-planner/issues/68) nommait : **une
+seule horloge**. `SystemClock` est mocké par une fabrique qui rend une date différente **par
+instance** — pas par appel — et le test exige que le plancher de saisie et la date de début proposée
+décrivent la même semaine.
+
+Confronté par sabotage, `nextMondayUseCase({ clock })` remplacé par
+`nextMondayUseCase({ clock: SystemClock.create() })` :
+
+```
+AssertionError: expected '2026-08-31' to be '2026-08-24'
+```
+
+Trois horloges au lieu d'une sont désormais un rouge, ce qu'aucun test ne disait avant.
+
+### Ce que la mesure devient
+
+| glob        | avant (fichiers / stmts / branch / funcs / lines) | après                              |
+| ----------- | ------------------------------------------------- | ---------------------------------- |
+| `src/ui/**` | 48 / 99.25 / 97.39 / 98.45 / 99.38                | 49 / 99.26 / 97.39 / 98.45 / 99.38 |
+
+`domain/`, `data/` et `config/` sont inchangés, au fichier près. Le seul fichier ajouté au
+dénominateur est celui-là : 1083 statements contre 1080, 324 fonctions contre 323.
+
+**Le cliquet reste à 99 / 98 / 97 / 99, et les tolérances absolues ne bougent pas** — 2 statements,
+3 lignes, 1 branche, 1 fonction. Un fichier réintégré à 100 % ne déplace aucun entier.
+
+### Le glob touché, vu échouer par `npm run test`
+
+`src/ui/**` est le seul glob dont le dénominateur change ; il est donc le seul reconfronté, d'un cran
+au-dessus du réel, puis restauré.
+
+```
+> vitest run --coverage
+ Test Files  94 passed (94)
+      Tests  1146 passed (1146)
+ERROR: Coverage for lines (99.38%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for functions (98.45%) does not meet "src/ui/**" threshold (99%)
+ERROR: Coverage for statements (99.26%) does not meet "src/ui/**" threshold (100%)
+ERROR: Coverage for branches (97.39%) does not meet "src/ui/**" threshold (98%)
+```
+
+**Contre-épreuve, et c'est elle qui fait de la réintégration une forme permanente** : le fichier
+réintégré, cliquets aux valeurs retenues, le test de la racine de composition retiré, `npm run test`
+sort en erreur.
+
+```
+ Test Files  93 passed (93)
+      Tests  1145 passed (1145)
+ERROR: Coverage for lines (98.87%) does not meet "src/ui/**" threshold (99%)
+ERROR: Coverage for statements (98.79%) does not meet "src/ui/**" threshold (99%)
+```
+
+Contrairement aux exclusions de `global-style.ts` et des quatorze fichiers d'infra, celle-ci n'était
+donc pas arithmétiquement neutre : sa levée **arme** un plancher. La racine de composition ne peut
+plus redevenir silencieusement non testée.
+
+**Deux métriques au rouge, pas trois** : le relevé de 2026-08-22 en annonçait trois, `functions`
+comprise. L'écart ne vient pas du fichier mais de la tolérance sur `functions`, passée de 0 à 1 avec
+l'[amendement du 2026-08-22](#amendement-du-2026-08-22--le-seuil-de-srcconfig-et-la-sortie-de-linfra-de-test).
+C'est le prix du plancher entier, déjà nommé là-bas, vu à l'œuvre ici.
+
+Aux valeurs retenues, exclusion levée : `npm run test` **exit 0**, **0 ligne `ERROR`**, 94 fichiers,
+1146 tests.

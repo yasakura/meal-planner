@@ -1,4 +1,4 @@
-import { type Creneau } from './creneau';
+import { CRENEAUX, type Creneau } from './creneau';
 import { type Slot } from './slot';
 
 export type Repas = {
@@ -19,6 +19,9 @@ export function createRepas(props: RepasProps): Repas {
   }
   if (props.jour < 0) {
     throw new Error('Le jour du repas doit être positif ou nul');
+  }
+  if (!CRENEAUX.includes(props.creneau)) {
+    throw new Error('Créneau invalide');
   }
   if (props.slots.length === 0) {
     throw new Error('Un repas doit contenir au moins un créneau');

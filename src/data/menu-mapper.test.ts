@@ -149,6 +149,14 @@ describe('menu-mapper', () => {
       );
     });
 
+    it('créneau hors des créneaux du domaine → throw de la factory domaine (createRepas)', () => {
+      const data: unknown = {
+        repas: [{ jour: 0, creneau: 'brunch', slots: [{ recipeId: 'r' }] }],
+      };
+
+      expect(() => documentToMenu('2026-08-24', data)).toThrow('Créneau invalide');
+    });
+
     it('slots non-tableau → throw structurel', () => {
       const data: unknown = { repas: [{ jour: 0, creneau: 'midi', slots: 'r' }] };
 
