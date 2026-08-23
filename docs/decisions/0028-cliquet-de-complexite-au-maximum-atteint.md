@@ -53,17 +53,19 @@ npx eslint 'src/**/*.{ts,tsx}' --rule '{"complexity":["error",1]}' -f json
 
 | catégorie                         |   n | max | fonction au max                                          |
 | --------------------------------- | --: | --: | -------------------------------------------------------- |
-| production `.ts`                  | 108 |  10 | `createRecipe`, et l'arrow de `convives-slice.ts:300`    |
+| production `.ts`                  | 108 |  10 | `createRecipe`, et l'arrow de `conviveRowsOf`            |
 | production `.tsx`                 |  44 |   8 | `MenuContainer`                                          |
-| `*.test.*`                        | 153 |   9 | `featureEdges`, `src/test/architecture.test.ts:76`       |
+| `*.test.*`                        | 153 |   9 | `featureEdges`                                           |
 | infra de test (doubles, builders) |   7 |   3 | cinq fonctions à 3, dont trois de `stub-auth-gateway.ts` |
 
-`e2e/` est hors périmètre et le reste : 5 fonctions, max 5 (`e2e/support/atteignabilite.ts:11`).
+`e2e/` est hors périmètre et le reste : 5 fonctions, max 5
+(`e2e/support/atteignabilite.ts#atteignabilite`).
 
 La queue est courte et connue. Quatre fonctions seulement dépassent 8 : `createRecipe`
-(`src/domain/entities/recipe.ts:19`, 10), la projection de ligne de `conviveRowsOf`
-(`src/ui/features/convives/convives-slice.ts:300`, 10), `documentToRecipe`
-(`src/data/recipe-mapper.ts:24`, 9) et `featureEdges` (`src/test/architecture.test.ts:76`, 9).
+(`src/domain/entities/recipe.ts#createRecipe`, 10), la projection de ligne de `conviveRowsOf`
+(`src/ui/features/convives/convives-slice.ts#conviveRowsOf`, 10), `documentToRecipe`
+(`src/data/recipe-mapper.ts#documentToRecipe`, 9) et `featureEdges`
+(`src/test/architecture.test.ts#featureEdges`, 9).
 
 ### Pourquoi 10 et pas 8
 
@@ -103,8 +105,8 @@ attendu du cliquet, et ce sont des fonctions qu'on modifie rarement.
 
 `src/test/architecture.test.ts` est le cas différent, celui qui vaut d'être nommé : il porte les deux
 complexités les plus hautes de tous les fichiers de test — `featureEdges` à 9 et l'arrow `visit` de
-`findCycle` à 7 (ligne 97) — quand le fichier de test suivant plafonne à 6. C'est du code
-d'introspection de graphe, et ce code **grossit par ajout de cas**.
+`findCycle` à 7 (`src/test/architecture.test.ts#findCycle`) — quand le fichier de test suivant
+plafonne à 6. C'est du code d'introspection de graphe, et ce code **grossit par ajout de cas**.
 
 Quand il butera, la bonne réponse sera d'**extraire**, pas de relever le seuil. Ce n'est pas une
 préférence de style : relever le seuil pour laisser passer un test de graphe rendrait au même moment
@@ -115,8 +117,8 @@ onze branches légales à `createRecipe`, à `documentToRecipe` et à n'importe 
 `mutate` ne couvre que `src/ui/features/**/*.ts` : **containers et composants n'ont aucun filet de
 mutation** ([ADR 0011](0011-les-decisions-vivent-dans-des-fichiers-mutes.md)). Le cliquet est le seul
 instrument automatique qui y surveille l'explosion de branches. `MenuContainer` est à 8, et les deux
-composants `Body` qui aiguillent sur l'état — `MenuScreen.tsx:367` et
-`RecipeDetailScreen.tsx:155` — à 7.
+composants `Body` qui aiguillent sur l'état — `src/ui/features/menu/MenuScreen.tsx#Body` et
+`src/ui/features/recipe-detail/RecipeDetailScreen.tsx#Body` — à 7.
 
 Quand un `.tsx` franchira le seuil, la réponse est déjà écrite dans `CLAUDE.md` et dans l'ADR 0011 :
 pousser la décision dans le slice, qui est muté. Le franchissement est le signal qu'un container a
@@ -135,12 +137,12 @@ Le résultat décisif est ailleurs. **jscpd n'a pas trouvé la vraie violation d
 aucune ressemblance textuelle — l'un lève, l'autre rend un booléen :
 
 ```ts
-// src/domain/entities/ingredient.ts:19-27
+// src/domain/entities/ingredient.ts#createIngredient
 if (name === '') throw new Error("Le nom de l'ingrédient est obligatoire");
 if (!Number.isFinite(props.quantity)) throw new Error('La quantité doit être un nombre fini');
 if (props.quantity <= 0) throw new Error('La quantité doit être strictement positive');
 
-// src/ui/features/recipe/ingredient-rows.ts:15
+// src/ui/features/recipe/ingredient-rows.ts#isValidRow
 return row.name.trim() !== '' && Number.isFinite(quantity) && quantity > 0;
 ```
 

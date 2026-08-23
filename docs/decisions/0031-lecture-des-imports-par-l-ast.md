@@ -25,12 +25,13 @@ Deux défauts, mesurés le 2026-08-22 en posant chacun dans le dépôt.
 **Elle ne voyait pas l'import dynamique.** Le `\s+` exige une espace après `import` ; `import('…')`
 n'en a pas. Un `await import('firebase/firestore')` ajouté dans `src/domain/use-cases/` passait le
 garde **sans un mot**, de même qu'un `await import('styled-components')` dans `src/data/`. Le cas
-n'est pas théorique : `src/main.tsx:11-12` utilise déjà l'idiome, et le jour où les routes passent
-en chargement paresseux pour les Web Vitals, un `await import('../recipe/…')` depuis
+n'est pas théorique : `src/main.tsx#createE2eStore` utilise déjà l'idiome, et le jour où les routes
+passent en chargement paresseux pour les Web Vitals, un `await import('../recipe/…')` depuis
 `recipe-detail/` reconstituerait le cycle que la branche `iter-25` venait de casser.
 
 Elle ne voyait pas non plus `typeof import('…')`, forme employée dans le dépôt
-(`RecipeEditContainer.test.tsx:19`, `RecipeCreateContainer.test.tsx:17`) et qui crée une vraie
+(`src/ui/features/recipe/RecipeEditContainer.test.tsx#importOriginal`,
+`src/ui/features/recipe/RecipeCreateContainer.test.tsx#importOriginal`) et qui crée une vraie
 dépendance de types.
 
 **Elle criait sur ce qui n'était pas du code.** Les deux lignes suivantes, ajoutées à
