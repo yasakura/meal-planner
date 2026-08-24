@@ -13,11 +13,14 @@
 
 - **Tout garde-fou déclaré est confronté une fois, à son introduction** : introduire délibérément la violation qu'il annonce, **observer le rouge**, retirer. Un garde-fou ajouté sans ce rouge est à considérer comme **absent**.
 - **La règle vaut aussi pour les instruments de MESURE.** Toute commande dont on rapporte le résultat doit avoir été confrontée à un cas dont on connaît la réponse d'avance, et **re-confrontée à chaque modification de sa configuration**.
+- **Un banc d'essai jetable se confronte comme n'importe quel instrument.** **Motif mesuré** : un banc a mesuré un arbre de travail pollué parce que `git stash --keep-index` **ne met pas de côté les fichiers non suivis** — le résultat était faux, et a failli être rapporté.
+- **Rien ne se mesure pendant qu'un agent travaille.** Ce que la section mutation exige pour Stryker vaut pour **toute** mesure rapportée : la suite lancée pendant qu'un agent travaillait a sorti un flake, et un rouge inexistant a failli être annoncé.
 
 ## Flux de travail
 
 - L'agent principal **orchestre** : il ne développe pas, il ne révise pas. Chaque rôle a son agent, à contexte frais.
 - Un geste qui **produit un artefact** — code, test, configuration, documentation — part en **délégation**. Un geste qui **ne produit rien** reste à l'agent principal ; un script de reproduction jetable vit dans le scratchpad et n'est pas délégué.
+- **Une délégation brief le problème, pas la solution** : ce qui est cassé, et à quoi on reconnaît que c'est réparé. La forme appartient à celui qui mesure ; une solution qu'on croit connaître se propose comme hypothèse à vérifier, jamais comme consigne. **Motif mesuré** : trois formes prescrites dans une même journée, fausses les trois fois — « remonter le `z-index` » quand il fallait déplacer l'élément, sous peine de recouvrir le champ de saisie ; « atteignable → rétablir, sinon supprimer » quand supprimer verrouillait une ligne pour toute la session ; « chaque commit doit être vert isolément », affirmé puis vérifié faux. Les délégations qui donnaient les **mesures** et le **critère** ont rendu de meilleures solutions que celles imaginées.
 - Les deux seules choses que l'agent principal exécute lui-même sont la **vérif Chrome** (étape 4) et la **vérification des findings** (étape 5).
 - L'agent principal **vérifie** les findings puis **délègue** les corrections — y compris sur des fichiers de test, y compris quand elles paraissent triviales.
 
@@ -72,7 +75,7 @@ Pour un value object trivial (non-vide, borne, type, immuabilité), le cycle com
 
 - **TypeScript** strict + **Vite** + `vite-plugin-pwa` (mode `prompt`).
 - **React 19** + **React Router** + **Redux Toolkit** + **styled-components** dans `src/ui/`.
-- **Firebase** Auth email/password + **Firestore**, 2 projets (dev / prod) sélectionnés via `VITE_ENV`.
+- **Firebase** Auth email/password + **Firestore**, 2 projets (dev / prod) sélectionnés via `VITE_ENV`. Les déploiements de preview Vercel pointent sur le projet **dev**, jamais la prod : une manipulation de recette sur une preview ne touche aucune donnée réelle.
 - **Vitest** + **React Testing Library** ; **Stryker Mutator** pour mutation testing.
 - **cuid2** (IDs générés dans `domain/` via port `IdGenerator`), **date-fns** (timezone `Europe/Paris`) via port `Clock`. Pas de `new Date()` direct dans `domain/`.
 - Tests par couche :
@@ -195,6 +198,7 @@ Si le code rebouclé n'a changé que sur quelques points, la re-revue porte sur 
 - Quand la règle s'applique, **ne pas soumettre le choix à l'utilisateur comme une option ouverte** : annoncer que le finding est reporté, avec son motif, et le tracer. L'utilisateur reste libre de trancher l'inverse, sur une proposition et non sur un menu.
 - **« Tracer » veut dire OUVRIR UNE ISSUE GitHub, pas l'écrire dans un rapport.** Tout finding reporté part en issue, sans exception et sans attendre qu'on le demande. Un finding qui ne vit que dans un message de conversation, un corps de PR ou un message de commit est **perdu**.
 - L'issue porte le **scénario concret**, les références `fichier:ligne`, et le classement (introduit/pré-existant, bloquant/non bloquant) : elle doit être reprenable sans le contexte de la session qui l'a produite. Regrouper est permis et souvent préférable — plusieurs findings qui se referment dans la même passe font une seule issue.
+- **Un classement se périme.** Au démarrage d'un lot, lister les issues ouvertes qui nomment les fichiers qu'on va toucher — elles portent déjà leurs références `fichier:ligne`, c'est un `grep` — et relire leur classement. Un défaut latent devient bloquant quand le lot confie un **nouveau travail** au mécanisme qu'il concerne. **Motif mesuré** : l'issue #138 classait un défaut non bloquant ; quatre heures plus tard il était le seul bloquant de la journée, un bandeau recouvert par une modale étant devenu le seul endroit annonçant une donnée perdue.
 
 ## Quand consulter l'utilisateur, quand trancher
 
@@ -219,9 +223,9 @@ En cas de doute sur la catégorie : **trancher, et exposer la décision** avec c
 
 ### Avant de trancher, aller voir dehors
 
-- **Avant d'ajouter de la machinerie autour d'une bibliothèque tierce** — bornes d'attente, arbitrage de course, états de repli, files maison — aller voir ce qu'elle offre nativement. Un outil qui résiste indique souvent qu'on lui demande l'inverse de ce pour quoi il est fait.
+- **Avant d'ajouter de la machinerie autour d'un outil qu'on n'a pas écrit** — bibliothèque tierce, mais aussi skill, agent ou commande du harnais — bornes d'attente, arbitrage de course, états de repli, files maison, relecteur maison : aller voir ce qu'il offre nativement, et vérifier ce qui existe **avant** d'en construire un. Un outil qui résiste indique souvent qu'on lui demande l'inverse de ce pour quoi il est fait.
 - **Avant une décision de conception durable**, regarder l'état de l'art plutôt que de le réinventer. On l'adopte, ou on s'en écarte **sciemment** — jamais par ignorance. S'en écarter en le sachant est le résultat recherché : l'état de l'art veut un toast pour une écriture rejetée, on garde le bandeau persistant parce que notre refus est définitif là où le leur est rejoué (ADR 0038).
-- **Motif mesuré** : six chargeurs, quatre machines à cinq états et huit gardes anti-course sont nés d'avoir traité Firestore comme une API REST — supprimés en deux jours au profit de trois lignes d'abonnement natif (ADR 0037, ADR 0038, commit `7e8ba3a`). À l'inverse, « une écriture hors ligne doit-elle s'annoncer réussie ? » traînait depuis des semaines : tranchée en dix minutes, en lisant la doc de l'outil et l'état de l'art.
+- **Motif mesuré** : six chargeurs, quatre machines à cinq états et huit gardes anti-course sont nés d'avoir traité Firestore comme une API REST — supprimés en deux jours au profit de trois lignes d'abonnement natif (ADR 0037, ADR 0038, commit `7e8ba3a`). À l'inverse, « une écriture hors ligne doit-elle s'annoncer réussie ? » traînait depuis des semaines : tranchée en dix minutes, en lisant la doc de l'outil et l'état de l'art. **Second motif** : cette règle lue le matin, et un sous-agent envoyé le soir écrire un relecteur de code alors que le harnais fournit déjà le skill `/code-review`, maintenu, avec un mode multi-agent — six heures entre l'écriture de la règle et la faute qu'elle couvrait.
 - Aucun lint ne dira qu'on utilise une base de données à contresens : la seule trace vérifiable est la **source citée** par l'ADR (`docs/decisions/README.md`).
 
 ### Rester chirurgical
@@ -235,6 +239,8 @@ En cas de doute sur la catégorie : **trancher, et exposer la décision** avec c
 ## Commits
 
 Conventional Commits : `feat:`, `fix:`, `test:`, `refactor:`, `chore:`, `docs:`.
+
+**Jamais de `--squash` au merge d'une PR** : l'historique de la branche est perdu. Toujours `gh pr merge --merge`.
 
 ## Definition of Done (checklist par feature)
 
