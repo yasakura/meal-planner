@@ -16,8 +16,11 @@ import { CatalogueContainer } from './features/catalogue/CatalogueContainer';
 import { LinkBanner } from './LinkBanner';
 import { recipesObservationFailed, recipesObserved } from './features/catalogue/catalogue-slice';
 import { convivesObservationFailed, convivesObserved } from './features/convives/convives-slice';
+import { writeRejected } from './features/writes/write-rejections-slice';
 
 const LIEN_PERDU = 'Lien perdu — l’écran ne se met plus à jour.';
+
+const REFUS_ECRITURE = 'Une modification n’a pas pu être enregistrée.';
 
 function uneRecette() {
   return [RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()];
@@ -223,5 +226,70 @@ describe('LinkBanner', () => {
     });
 
     expect(screen.queryByText(LIEN_PERDU)).not.toBeInTheDocument();
+  });
+
+  it('un refus d’écriture définitif affiche le bandeau, et n’y met aucun bouton « Réessayer »', () => {
+    const store = createTestStore();
+    store.dispatch(writeRejected());
+
+    renderBandeauSeul(store);
+
+    expect(screen.queryByText(REFUS_ECRITURE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+  });
+
+  it('lien perdu et refus d’écriture ensemble : un seul bandeau porte les deux constats', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(uneRecette()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+    store.dispatch(writeRejected());
+
+    renderBandeauSeul(store);
+
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.queryByText(LIEN_PERDU)).toBeInTheDocument();
+    expect(screen.queryByText(REFUS_ECRITURE)).toBeInTheDocument();
+  });
+
+  it('« Réessayer » rouvre les flux sans faire taire le refus d’écriture', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.dispatch(recipesObserved(uneRecette()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+    store.dispatch(writeRejected());
+    renderBandeauSeul(store);
+    expect(screen.queryByText(LIEN_PERDU)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(screen.queryByText(LIEN_PERDU)).not.toBeInTheDocument();
+    expect(screen.queryByText(REFUS_ECRITURE)).toBeInTheDocument();
+  });
+
+  it('« Fermer » emporte le refus d’écriture et laisse le lien perdu', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    store.dispatch(recipesObserved(uneRecette()));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+    store.dispatch(writeRejected());
+    renderBandeauSeul(store);
+    expect(screen.queryByText(REFUS_ECRITURE)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /fermer/i }));
+
+    expect(screen.queryByText(REFUS_ECRITURE)).not.toBeInTheDocument();
+    expect(screen.queryByText(LIEN_PERDU)).toBeInTheDocument();
+  });
+
+  it('démonté puis remonté sur le MÊME store, le constat de refus d’écriture est toujours là', () => {
+    const store = createTestStore();
+    store.dispatch(writeRejected());
+    const { unmount } = renderBandeauSeul(store);
+    expect(screen.queryByText(REFUS_ECRITURE)).toBeInTheDocument();
+
+    unmount();
+    renderBandeauSeul(store);
+
+    expect(screen.queryByText(REFUS_ECRITURE)).toBeInTheDocument();
   });
 });

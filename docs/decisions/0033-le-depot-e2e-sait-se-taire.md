@@ -1,6 +1,6 @@
 # ADR 0033 — Le dépôt e2e sait se taire, et c'est la borne qui parle
 
-- **Statut** : en vigueur
+- **Statut** : remplacée par [ADR 0038](0038-une-ecriture-acceptee-localement-est-reussie.md)
 - **Date** : 2026-08-23
 - **Portée** : `src/data/e2e/e2e-failure-switch.ts`, les trois adapters de `src/data/e2e/`,
   `e2e/support/e2e-controls.ts`

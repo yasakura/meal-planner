@@ -28,7 +28,7 @@ Le container **orchestre** : il lit, il câble, il rapporte le geste. Il ne déc
 
 Modules nés de cette règle : `ingredient-rows.ts`, `recipe-form-submission.ts`,
 `recipe-for-route.ts`, `recipe-detail-states.ts`, `recipe-detail-origin.ts`, `menu-days.ts`,
-`menu-notice.ts`, `menu-day-label.ts`, `french-elision.ts`, ainsi que les projections et sélecteurs
+`menu-notice.ts`, `menu-day-label.ts`, ainsi que les projections et sélecteurs
 des slices (`conviveRowsOf`, `menuSaveNoticeOf`, `recipeCreateNoticeOf`, `selectIs…InFlight`).
 
 **Corollaire de conception** : quand une décision a besoin d'une donnée impure (le jour courant, un

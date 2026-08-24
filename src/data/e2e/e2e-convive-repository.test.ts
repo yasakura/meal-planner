@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { createConvive, type Convive } from '../../domain/entities/convive';
 import { RepositoryUnavailableError } from '../../domain/errors/repository-unavailable-error';
@@ -10,67 +10,43 @@ const alice = ConviveBuilder.aConvive().withId('c-1').withName('Alice').build();
 const bruno = ConviveBuilder.aConvive().withId('c-2').withName('Bruno').build();
 const chloe = ConviveBuilder.aConvive().withId('c-3').withName('Chloé').build();
 
+function sansPanne(): E2eFailureSwitch {
+  return E2eFailureSwitch.reporting(() => {});
+}
+
 describe('E2eConviveRepository', () => {
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
-    const repository = E2eConviveRepository.seededWith(
-      [alice, bruno, chloe],
-      E2eFailureSwitch.create(),
-    );
+    const repository = E2eConviveRepository.seededWith([alice, bruno, chloe], sansPanne());
 
     expect(await repository.findAll()).toEqual([chloe, bruno, alice]);
   });
 
   it('enregistre un convive, en UPSERT : même id, entrée remplacée', async () => {
-    const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
+    const repository = E2eConviveRepository.seededWith([alice], sansPanne());
 
     await repository.save(createConvive({ id: 'c-1', name: 'Alicia' }));
 
     expect(await repository.findAll()).toEqual([createConvive({ id: 'c-1', name: 'Alicia' })]);
   });
 
-  it('transforme et réécrit le convive existant, et rend le résultat', async () => {
-    const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
+  it('réécrit le convive existant sous son propre id', async () => {
+    const repository = E2eConviveRepository.seededWith([alice], sansPanne());
 
-    const updated = await repository.updateExisting('c-1', (existing) =>
-      createConvive({ id: existing.id, name: 'Alicia' }),
-    );
+    await repository.updateOnlyIfExists(createConvive({ id: 'c-1', name: 'Alicia' }));
 
-    expect(updated).toEqual(createConvive({ id: 'c-1', name: 'Alicia' }));
     expect(await repository.findAll()).toEqual([createConvive({ id: 'c-1', name: 'Alicia' })]);
   });
 
-  it('REJOUE transform : le port prévient qu’une transaction rejoue son corps', async () => {
-    const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
-    let appels = 0;
+  it('n’écrit rien quand l’id est inconnu : le port ne promet aucune création', async () => {
+    const repository = E2eConviveRepository.seededWith([alice], sansPanne());
 
-    await repository.updateExisting('c-1', (existing) => {
-      appels += 1;
-      return createConvive({ id: existing.id, name: 'Alicia' });
-    });
+    await repository.updateOnlyIfExists(createConvive({ id: 'inconnu', name: 'Alicia' }));
 
-    expect(appels).toBe(2);
-  });
-
-  it('écrit sous l’id DEMANDÉ, jamais sous celui rendu par transform', async () => {
-    const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
-
-    await repository.updateExisting('c-1', () => createConvive({ id: 'autre-id', name: 'Alicia' }));
-
-    expect(await repository.findAll()).toEqual([createConvive({ id: 'autre-id', name: 'Alicia' })]);
-    expect(await repository.updateExisting('autre-id', (existing) => existing)).toBeUndefined();
-  });
-
-  it('rend undefined et n’écrit rien quand l’id est inconnu', async () => {
-    const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
-
-    const updated = await repository.updateExisting('inconnu', (existing) => existing);
-
-    expect(updated).toBeUndefined();
     expect(await repository.findAll()).toEqual([alice]);
   });
 
   it('efface le convive demandé', async () => {
-    const repository = E2eConviveRepository.seededWith([alice, bruno], E2eFailureSwitch.create());
+    const repository = E2eConviveRepository.seededWith([alice, bruno], sansPanne());
 
     await repository.remove('c-1');
 
@@ -78,14 +54,14 @@ describe('E2eConviveRepository', () => {
   });
 
   it('efface un id inconnu en succès silencieux : le port est idempotent', async () => {
-    const repository = E2eConviveRepository.seededWith([alice], E2eFailureSwitch.create());
+    const repository = E2eConviveRepository.seededWith([alice], sansPanne());
 
     await expect(repository.remove('inconnu')).resolves.toBeUndefined();
     expect(await repository.findAll()).toEqual([alice]);
   });
 
   it('rejette findAll avec RepositoryUnavailableError quand les lectures sont en panne', async () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eConviveRepository.seededWith([alice], failures);
 
     failures.failReads();
@@ -93,58 +69,55 @@ describe('E2eConviveRepository', () => {
     await expect(repository.findAll()).rejects.toBeInstanceOf(RepositoryUnavailableError);
   });
 
-  it('rejette save quand les écritures sont en panne, et n’enregistre rien', async () => {
-    const failures = E2eFailureSwitch.create();
+  it('failWrites : save est pris tout de suite, puis annulé quand le serveur le refuse', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
     const repository = E2eConviveRepository.seededWith([], failures);
-
     failures.failWrites();
 
-    await expect(repository.save(alice)).rejects.toBeInstanceOf(RepositoryUnavailableError);
-    failures.restore();
-    expect(await repository.findAll()).toEqual([]);
-  });
-
-  it('rejette updateExisting quand les écritures sont en panne, et ne renomme rien', async () => {
-    const failures = E2eFailureSwitch.create();
-    const repository = E2eConviveRepository.seededWith([alice], failures);
-
-    failures.failWrites();
-
-    await expect(
-      repository.updateExisting('c-1', (existing) =>
-        createConvive({ id: existing.id, name: 'Alicia' }),
-      ),
-    ).rejects.toBeInstanceOf(RepositoryUnavailableError);
-    failures.restore();
+    await repository.save(alice);
     expect(await repository.findAll()).toEqual([alice]);
+
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
   });
 
-  it('rejette remove quand les écritures sont en panne, et n’efface rien', async () => {
-    const failures = E2eFailureSwitch.create();
+  it('failWrites : le renommage est pris tout de suite, puis annulé quand le serveur le refuse', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
     const repository = E2eConviveRepository.seededWith([alice], failures);
-
     failures.failWrites();
 
-    await expect(repository.remove('c-1')).rejects.toBeInstanceOf(RepositoryUnavailableError);
-    failures.restore();
-    expect(await repository.findAll()).toEqual([alice]);
+    await repository.updateOnlyIfExists(createConvive({ id: 'c-1', name: 'Alicia' }));
+    expect(await repository.findAll()).toEqual([createConvive({ id: 'c-1', name: 'Alicia' })]);
+
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([alice]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
   });
 
-  it('un dépôt muet ne refuse pas save : c’est la borne qui le déclare indisponible, et rien n’est enregistré', async () => {
-    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
-    const repository = E2eConviveRepository.seededWith([], failures);
+  it('failWrites : le retrait est pris tout de suite, puis annulé quand le serveur le refuse', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eConviveRepository.seededWith([alice], failures);
+    failures.failWrites();
 
-    failures.hangWrites();
-
-    await expect(repository.save(alice)).rejects.toBeInstanceOf(RepositoryUnavailableError);
-    failures.restore();
+    await repository.remove('c-1');
     expect(await repository.findAll()).toEqual([]);
+
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([alice]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('E2eConviveRepository — observation', () => {
   it("livre l'instantané courant dès l'abonnement, dans un ordre DIFFÉRENT de l'ordre d'insertion", () => {
-    const repository = E2eConviveRepository.seededWith([alice, bruno], E2eFailureSwitch.create());
+    const repository = E2eConviveRepository.seededWith([alice, bruno], sansPanne());
     const instantanes: (readonly Convive[])[] = [];
 
     repository.observeAll(
@@ -156,7 +129,7 @@ describe('E2eConviveRepository — observation', () => {
   });
 
   it('réémet la liste entière à chaque enregistrement, mise à jour et retrait', async () => {
-    const repository = E2eConviveRepository.seededWith([], E2eFailureSwitch.create());
+    const repository = E2eConviveRepository.seededWith([], sansPanne());
     const instantanes: (readonly Convive[])[] = [];
     repository.observeAll(
       (convives) => instantanes.push(convives),
@@ -165,14 +138,14 @@ describe('E2eConviveRepository — observation', () => {
 
     await repository.save(alice);
     const alicia = createConvive({ id: 'c-1', name: 'Alicia' });
-    await repository.updateExisting('c-1', () => alicia);
+    await repository.updateOnlyIfExists(alicia);
     await repository.remove('c-1');
 
     expect(instantanes).toEqual([[], [alice], [alicia], []]);
   });
 
   it("n'émet plus rien une fois le désabonnement appelé", async () => {
-    const repository = E2eConviveRepository.seededWith([], E2eFailureSwitch.create());
+    const repository = E2eConviveRepository.seededWith([], sansPanne());
     const instantanes: (readonly Convive[])[] = [];
     const stop = repository.observeAll(
       (convives) => instantanes.push(convives),
@@ -188,7 +161,7 @@ describe('E2eConviveRepository — observation', () => {
   });
 
   it("signale l'indisponibilité sur le canal d'erreur quand les lectures sont en panne, au lieu de livrer un instantané", () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eConviveRepository.seededWith([alice], failures);
     const instantanes: (readonly Convive[])[] = [];
     const echecs: unknown[] = [];

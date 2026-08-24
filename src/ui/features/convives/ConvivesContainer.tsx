@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { ConvivesSection, type AddNotice, type ConvivesSectionProps } from './ConvivesSection';
-import { elidedDe } from './french-elision';
 import {
   addConvive,
   conviveEditCancelled,
@@ -20,21 +19,15 @@ import {
   type ConviveAddStatus,
 } from './convives-slice';
 
-function addNoticeFor(addStatus: ConviveAddStatus, subjectName: string | null): AddNotice | null {
+function addNoticeFor(addStatus: ConviveAddStatus): AddNotice | null {
   if (addStatus === 'error') return { tone: 'error', message: 'Impossible d’ajouter le convive.' };
-  if (addStatus === 'unconfirmed' && subjectName !== null) {
-    return {
-      tone: 'unconfirmed',
-      message: `Aucune connexion — l’ajout ${elidedDe(subjectName)} n’a pas pu être confirmé.`,
-    };
-  }
   return null;
 }
 
 export function ConvivesContainer() {
   const [name, setName] = useState('');
   const convivesState = useAppSelector(selectConvives);
-  const { addStatus, addSubjectName, renameDraft } = convivesState;
+  const { addStatus, renameDraft } = convivesState;
   const isAddInFlight = useAppSelector(selectIsAddInFlight);
   const view = useMemo(() => convivesViewOf(convivesState), [convivesState]);
   const dispatch = useAppDispatch();
@@ -65,7 +58,7 @@ export function ConvivesContainer() {
     onSubmit: () => void handleSubmit(),
     submitDisabled: isAddInFlight || name.trim() === '',
     inputDisabled: isAddInFlight,
-    addNotice: addNoticeFor(addStatus, addSubjectName),
+    addNotice: addNoticeFor(addStatus),
   };
 
   let props: ConvivesSectionProps;

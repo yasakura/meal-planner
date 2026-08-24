@@ -10,12 +10,8 @@ export function renameConviveUseCase(deps: {
   conviveRepository: ConviveRepository;
 }): (input: RenameConviveInput) => Promise<Convive> {
   return async (input) => {
-    const renomme = await deps.conviveRepository.updateExisting(input.id, (existant) =>
-      createConvive({ id: existant.id, name: input.name }),
-    );
-    if (renomme === undefined) {
-      throw new Error("Le convive à renommer n'existe pas");
-    }
+    const renomme = createConvive({ id: input.id, name: input.name });
+    await deps.conviveRepository.updateOnlyIfExists(renomme);
     return renomme;
   };
 }

@@ -572,10 +572,6 @@ describe('menu slice — plancher de la date de début', () => {
 
 describe('menu slice — enregistrement du menu', () => {
   const SUCCES = { tone: 'success', message: 'Menu enregistré' };
-  const PANNE = {
-    tone: 'unconfirmed',
-    message: 'Aucune connexion — l’enregistrement du menu n’a pas pu être confirmé.',
-  };
   const ECHEC = { tone: 'error', message: 'Impossible d’enregistrer le menu.' };
 
   async function storeAvecMenuAffiche(overrides?: { saveMenu?: SaveMenu }) {
@@ -647,16 +643,6 @@ describe('menu slice — enregistrement du menu', () => {
     await enregistrement;
     expect(isSaveInFlight(selectMenu(store.getState()))).toBe(false);
     expect(constat(store)).toEqual(SUCCES);
-  });
-
-  it('le dépôt indisponible : l’enregistrement n’est pas confirmé, et le verrou retombe', async () => {
-    const save: SaveMenu = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = await storeAvecMenuAffiche({ saveMenu: save });
-
-    await store.dispatch(saveMenu());
-
-    expect(constat(store)).toEqual(PANNE);
-    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(false);
   });
 
   it('un échec franc du dépôt : l’écran dit que l’enregistrement a échoué', async () => {
@@ -736,7 +722,7 @@ describe('menu slice — enregistrement du menu', () => {
 
     const enregistrement = store.dispatch(saveMenu());
     await store.dispatch(generateMenu(7));
-    enVol.reject(RepositoryUnavailableError.create());
+    enVol.reject(new Error('Firestore refuse'));
     await enregistrement;
 
     expect(constat(store)).toBeNull();

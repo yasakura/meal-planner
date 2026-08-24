@@ -1,7 +1,6 @@
 import { RepositoryUnavailableError } from '../domain/errors/repository-unavailable-error';
 import { asDomainFailure } from './firestore-failure';
 
-export const DEFAULT_ACK_TIMEOUT_MS = 5000;
 export const DEFAULT_READ_TIMEOUT_MS = 10000;
 
 export function withServerDeadline<T>(roundTrip: Promise<T>, timeoutMs: number): Promise<T> {

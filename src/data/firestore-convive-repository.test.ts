@@ -7,7 +7,7 @@ import {
   getDocs,
   getDocsFromServer,
   onSnapshot,
-  runTransaction,
+  updateDoc,
   setDoc,
 } from 'firebase/firestore';
 import { FirestoreConviveRepository } from './firestore-convive-repository';
@@ -22,7 +22,7 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   getDocs: vi.fn(),
   getDocsFromServer: vi.fn(),
-  runTransaction: vi.fn(),
+  updateDoc: vi.fn(),
   onSnapshot: vi.fn(),
 }));
 
@@ -30,7 +30,7 @@ const mockedDoc = vi.mocked(doc);
 const mockedSetDoc = vi.mocked(setDoc);
 const mockedDeleteDoc = vi.mocked(deleteDoc);
 const mockedCollection = vi.mocked(collection);
-const mockedRunTransaction = vi.mocked(runTransaction);
+const mockedUpdateDoc = vi.mocked(updateDoc);
 const mockedGetDocs = vi.mocked(getDocs);
 const mockedGetDocsFromServer = vi.mocked(getDocsFromServer);
 const mockedOnSnapshot = vi.mocked(onSnapshot);
@@ -47,7 +47,7 @@ describe('FirestoreConviveRepository', () => {
     mockedSetDoc.mockReset();
     mockedDeleteDoc.mockReset();
     mockedCollection.mockReset();
-    mockedRunTransaction.mockReset();
+    mockedUpdateDoc.mockReset();
     mockedGetDocs.mockReset();
     mockedGetDocsFromServer.mockReset();
   });
@@ -63,15 +63,6 @@ describe('FirestoreConviveRepository', () => {
 
     expect(mockedDoc).toHaveBeenCalledWith(db, 'convives', 'convive-42');
     expect(mockedSetDoc).toHaveBeenCalledWith(docRef, conviveToDocument(convive));
-  });
-
-  it("save propage l'erreur Firestore sans l'avaler", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedSetDoc.mockRejectedValue(new Error('permission-denied'));
-    const convive = ConviveBuilder.aConvive().build();
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(repository.save(convive)).rejects.toThrow('permission-denied');
   });
 
   it("findAll lit la collection 'convives' et mappe chaque document via documentToConvive", async () => {
@@ -146,46 +137,6 @@ describe('FirestoreConviveRepository', () => {
     await expect(repository.findAll()).rejects.toBeNull();
   });
 
-  it("traduit un refus d'écriture faute de réseau en indisponibilité de dépôt", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedSetDoc.mockRejectedValue(firestoreError('unavailable'));
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(repository.save(ConviveBuilder.aConvive().build())).rejects.toSatisfy(
-      isRepositoryUnavailable,
-    );
-  });
-
-  it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
-    vi.useFakeTimers();
-    try {
-      mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockResolvedValue(undefined);
-      const repository = FirestoreConviveRepository.create(db);
-
-      await repository.save(ConviveBuilder.aConvive().build());
-      await Promise.resolve();
-
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it(
-    "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
-    { timeout: 1000 },
-    async () => {
-      mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
-      const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
-
-      await expect(repository.save(ConviveBuilder.aConvive().build())).rejects.toSatisfy(
-        isRepositoryUnavailable,
-      );
-    },
-  );
-
   it('remove efface le document convives/{id}', async () => {
     const docRef = { marker: 'doc-ref-sentinel' };
     mockedDoc.mockReturnValue(docRef as never);
@@ -198,164 +149,6 @@ describe('FirestoreConviveRepository', () => {
     expect(mockedDeleteDoc).toHaveBeenCalledWith(docRef);
   });
 
-  it('remove traduit un effacement impossible faute de réseau en indisponibilité de dépôt', async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedDeleteDoc.mockRejectedValue(firestoreError('unavailable'));
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(repository.remove('convive-42')).rejects.toSatisfy(isRepositoryUnavailable);
-  });
-
-  it("remove ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    const refus = firestoreError('permission-denied');
-    mockedDeleteDoc.mockRejectedValue(refus);
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(repository.remove('convive-42')).rejects.toBe(refus);
-  });
-
-  it(
-    "signale un effacement que le serveur n'a pas acquitté dans la borne d'attente",
-    { timeout: 1000 },
-    async () => {
-      mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}));
-      const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
-
-      await expect(repository.remove('convive-42')).rejects.toSatisfy(isRepositoryUnavailable);
-    },
-  );
-
-  it("ne laisse aucune borne en suspens une fois l'effacement acquitté", async () => {
-    vi.useFakeTimers();
-    try {
-      mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockResolvedValue(undefined);
-      const repository = FirestoreConviveRepository.create(db);
-
-      await repository.remove('convive-42');
-      await Promise.resolve();
-
-      expect(mockedDeleteDoc).toHaveBeenCalledTimes(1);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  function transactionLisant(snapshot: unknown) {
-    const tx = { get: vi.fn().mockResolvedValue(snapshot), set: vi.fn() };
-    mockedRunTransaction.mockImplementation((_db, updateFunction) =>
-      (updateFunction as (t: unknown) => Promise<unknown>)(tx),
-    );
-    return tx;
-  }
-
-  it('updateExisting lit et réécrit convives/{id} DANS la transaction, en appliquant la transformation', async () => {
-    const docRef = { marker: 'doc-ref-sentinel' };
-    mockedDoc.mockReturnValue(docRef as never);
-    const convive = ConviveBuilder.aConvive().withId('convive-42').withName('Aurélie').build();
-    const tx = transactionLisant({
-      id: 'convive-42',
-      exists: () => true,
-      data: () => conviveToDocument(convive),
-    });
-    const repository = FirestoreConviveRepository.create(db);
-
-    const renomme = await repository.updateExisting('convive-42', (existing) =>
-      ConviveBuilder.aConvive().withId(existing.id).withName('Alix').build(),
-    );
-
-    expect(mockedDoc).toHaveBeenCalledWith(db, 'convives', 'convive-42');
-    expect(tx.get).toHaveBeenCalledWith(docRef);
-    expect(tx.set).toHaveBeenCalledWith(docRef, conviveToDocument(renomme!));
-    expect(renomme).toEqual({ id: 'convive-42', name: 'Alix' });
-  });
-
-  it("updateExisting rend undefined et n'écrit rien quand le convive n'existe pas", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    const tx = transactionLisant({ exists: () => false });
-    const repository = FirestoreConviveRepository.create(db);
-
-    const renomme = await repository.updateExisting('inconnu', () => {
-      throw new Error('la transformation ne doit pas être appelée sur un convive absent');
-    });
-
-    expect(renomme).toBeUndefined();
-    expect(tx.set).not.toHaveBeenCalled();
-  });
-
-  it("updateExisting n'écrit rien et propage l'erreur quand la transformation refuse", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    const convive = ConviveBuilder.aConvive().withId('convive-42').build();
-    const tx = transactionLisant({
-      id: 'convive-42',
-      exists: () => true,
-      data: () => conviveToDocument(convive),
-    });
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(
-      repository.updateExisting('convive-42', () => {
-        throw new Error('Le nom du convive est obligatoire');
-      }),
-    ).rejects.toThrow('Le nom du convive est obligatoire');
-    expect(tx.set).not.toHaveBeenCalled();
-  });
-
-  it('updateExisting traduit une transaction impossible faute de réseau en indisponibilité de dépôt', async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedRunTransaction.mockRejectedValue(firestoreError('unavailable'));
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(repository.updateExisting('convive-42', (existing) => existing)).rejects.toSatisfy(
-      isRepositoryUnavailable,
-    );
-  });
-
-  it("updateExisting ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    const refus = firestoreError('permission-denied');
-    mockedRunTransaction.mockRejectedValue(refus);
-    const repository = FirestoreConviveRepository.create(db);
-
-    await expect(repository.updateExisting('convive-42', (existing) => existing)).rejects.toBe(
-      refus,
-    );
-  });
-
-  it(
-    "signale une transaction que le serveur n'a pas acquittée dans la borne d'attente",
-    { timeout: 1000 },
-    async () => {
-      mockedDoc.mockReturnValue({} as never);
-      mockedRunTransaction.mockReturnValue(new Promise(() => {}));
-      const repository = FirestoreConviveRepository.create(db, { ackTimeoutMs: 10 });
-
-      await expect(
-        repository.updateExisting('convive-42', (existing) => existing),
-      ).rejects.toSatisfy(isRepositoryUnavailable);
-    },
-  );
-
-  it('ne laisse aucune borne en suspens une fois la transaction acquittée', async () => {
-    vi.useFakeTimers();
-    try {
-      mockedDoc.mockReturnValue({} as never);
-      transactionLisant({ exists: () => false });
-      const repository = FirestoreConviveRepository.create(db);
-
-      await repository.updateExisting('convive-42', (existing) => existing);
-      await Promise.resolve();
-
-      expect(mockedRunTransaction).toHaveBeenCalledTimes(1);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it(
     "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
     { timeout: 1000 },
@@ -365,6 +158,81 @@ describe('FirestoreConviveRepository', () => {
       const repository = FirestoreConviveRepository.create(db, { readTimeoutMs: 10 });
 
       await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it("updateOnlyIfExists passe par updateDoc : le refus d'un convive absent revient du serveur, pas d'une lecture préalable", async () => {
+    const docRef = { marker: 'doc-ref-sentinel' };
+    mockedDoc.mockReturnValue(docRef as never);
+    mockedUpdateDoc.mockResolvedValue(undefined);
+    const convive = ConviveBuilder.aConvive().withId('convive-42').withName('Aurélie').build();
+    const repository = FirestoreConviveRepository.create(db);
+
+    await repository.updateOnlyIfExists(convive);
+
+    expect(mockedDoc).toHaveBeenCalledWith(db, 'convives', 'convive-42');
+    expect(mockedUpdateDoc).toHaveBeenCalledWith(docRef, conviveToDocument(convive));
+    expect(mockedSetDoc).not.toHaveBeenCalled();
+  });
+
+  it(
+    "updateOnlyIfExists rend la main dès que Firestore a pris la modification, sans attendre l'acquittement du serveur",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedUpdateDoc.mockReturnValue(new Promise<void>(() => {}));
+      const repository = FirestoreConviveRepository.create(db, { onWriteRejected: vi.fn() });
+
+      await expect(
+        repository.updateOnlyIfExists(ConviveBuilder.aConvive().build()),
+      ).resolves.toBeUndefined();
+    },
+  );
+
+  it(
+    "save rend la main dès que Firestore a pris l'écriture, sans attendre l'acquittement du serveur",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
+      const repository = FirestoreConviveRepository.create(db, { onWriteRejected: vi.fn() });
+
+      await expect(repository.save(ConviveBuilder.aConvive().build())).resolves.toBeUndefined();
+    },
+  );
+
+  it(
+    "remove rend la main dès que Firestore a pris le retrait, sans attendre l'acquittement du serveur",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}));
+      const repository = FirestoreConviveRepository.create(db, { onWriteRejected: vi.fn() });
+
+      await expect(repository.remove('convive-42')).resolves.toBeUndefined();
+    },
+  );
+
+  it(
+    'un retrait refusé par le serveur après coup ne reprend pas la main : il part au constat global',
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      let refuser: (raison: unknown) => void = () => {};
+      mockedDeleteDoc.mockReturnValue(
+        new Promise<void>((_resolve, reject) => {
+          refuser = reject;
+        }),
+      );
+      const onWriteRejected = vi.fn();
+      const repository = FirestoreConviveRepository.create(db, { onWriteRejected });
+
+      await expect(repository.remove('convive-42')).resolves.toBeUndefined();
+      refuser(firestoreError('permission-denied'));
+
+      await vi.waitFor(() => {
+        expect(onWriteRejected).toHaveBeenCalledTimes(1);
+      });
     },
   );
 });

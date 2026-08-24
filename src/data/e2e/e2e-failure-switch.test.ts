@@ -1,36 +1,29 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { RepositoryUnavailableError } from '../../domain/errors/repository-unavailable-error';
-import { E2E_ACK_TIMEOUT_MS, E2eFailureSwitch } from './e2e-failure-switch';
+import { E2eFailureSwitch } from './e2e-failure-switch';
+
+function apresLeTourCourant(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 5));
+}
 
 describe('E2eFailureSwitch', () => {
-  it('laisse passer lectures et écritures tant que rien n’est armé', () => {
-    const failures = E2eFailureSwitch.create();
+  it('laisse passer les lectures tant que rien n’est armé', () => {
+    const failures = E2eFailureSwitch.reporting(vi.fn());
 
     expect(() => failures.guardRead()).not.toThrow();
-    expect(() => failures.guardWrite()).not.toThrow();
   });
 
-  it('fait échouer les lectures, et elles seules, une fois failReads armé', () => {
-    const failures = E2eFailureSwitch.create();
+  it('fait échouer les lectures une fois failReads armé', () => {
+    const failures = E2eFailureSwitch.reporting(vi.fn());
 
     failures.failReads();
 
     expect(() => failures.guardRead()).toThrow(RepositoryUnavailableError);
-    expect(() => failures.guardWrite()).not.toThrow();
-  });
-
-  it('fait échouer les écritures, et elles seules, une fois failWrites armé', () => {
-    const failures = E2eFailureSwitch.create();
-
-    failures.failWrites();
-
-    expect(() => failures.guardWrite()).toThrow(RepositoryUnavailableError);
-    expect(() => failures.guardRead()).not.toThrow();
   });
 
   it('reste armé jusqu’à restore : la panne est un état, pas un coup unique', () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = E2eFailureSwitch.reporting(vi.fn());
 
     failures.failReads();
     expect(() => failures.guardRead()).toThrow(RepositoryUnavailableError);
@@ -38,69 +31,66 @@ describe('E2eFailureSwitch', () => {
     expect(() => failures.guardRead()).toThrow(RepositoryUnavailableError);
   });
 
-  it('rétablit les deux canaux d’un seul geste avec restore', () => {
-    const failures = E2eFailureSwitch.create();
+  it('n’annule aucune écriture et ne signale rien tant que failWrites n’est pas armé', async () => {
+    const onWriteRejected = vi.fn();
+    const annulation = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+
+    failures.refuseAfterwards(annulation);
+    await apresLeTourCourant();
+
+    expect(annulation).not.toHaveBeenCalled();
+    expect(onWriteRejected).not.toHaveBeenCalled();
+  });
+
+  it('failWrites armé : l’écriture est annulée après coup, et le refus part au constat global', async () => {
+    const onWriteRejected = vi.fn();
+    const annulation = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    failures.failWrites();
+
+    failures.refuseAfterwards(annulation);
+
+    await vi.waitFor(() => {
+      expect(annulation).toHaveBeenCalledTimes(1);
+      expect(onWriteRejected).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('le refus arrive APRÈS la main rendue : le tour courant n’annule rien', async () => {
+    const onWriteRejected = vi.fn();
+    const annulation = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    failures.failWrites();
+
+    failures.refuseAfterwards(annulation);
+    expect(annulation).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      expect(annulation).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('un dépôt qui refusera les écritures reste lisible : failWrites ne touche pas les lectures', () => {
+    const failures = E2eFailureSwitch.reporting(vi.fn());
+
+    failures.failWrites();
+
+    expect(() => failures.guardRead()).not.toThrow();
+  });
+
+  it('restore rétablit les deux canaux d’un seul geste', async () => {
+    const onWriteRejected = vi.fn();
+    const annulation = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
     failures.failReads();
     failures.failWrites();
 
     failures.restore();
 
     expect(() => failures.guardRead()).not.toThrow();
-    expect(() => failures.guardWrite()).not.toThrow();
-  });
-
-  it('acquitte les écritures sans attendre tant que hangWrites n’est pas armé', async () => {
-    const failures = E2eFailureSwitch.create();
-
-    await expect(failures.serverAck()).resolves.toBeUndefined();
-  });
-
-  it('ne rend jamais l’acquittement une fois hangWrites armé : c’est la borne qui déclare l’indisponibilité', async () => {
-    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
-
-    failures.hangWrites();
-
-    await expect(failures.serverAck()).rejects.toBeInstanceOf(RepositoryUnavailableError);
-  });
-
-  it('un dépôt muet reste lisible : hangWrites ne touche pas les lectures', () => {
-    const failures = E2eFailureSwitch.create();
-
-    failures.hangWrites();
-
-    expect(() => failures.guardRead()).not.toThrow();
-  });
-
-  it('rend l’acquittement immédiat à nouveau avec restore', async () => {
-    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
-    failures.hangWrites();
-
-    failures.restore();
-
-    await expect(failures.serverAck()).resolves.toBeUndefined();
-  });
-
-  it('sans borne fournie, le silence dure E2E_ACK_TIMEOUT_MS et pas une milliseconde de moins', async () => {
-    vi.useFakeTimers();
-    try {
-      const failures = E2eFailureSwitch.create();
-      failures.hangWrites();
-      const acquittement = failures.serverAck().then(
-        () => 'acquitté',
-        () => 'borne franchie',
-      );
-      let issue: string | undefined;
-      void acquittement.then((resultat) => {
-        issue = resultat;
-      });
-
-      await vi.advanceTimersByTimeAsync(E2E_ACK_TIMEOUT_MS - 1);
-      expect(issue).toBeUndefined();
-
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await acquittement).toBe('borne franchie');
-    } finally {
-      vi.useRealTimers();
-    }
+    failures.refuseAfterwards(annulation);
+    await apresLeTourCourant();
+    expect(annulation).not.toHaveBeenCalled();
   });
 });

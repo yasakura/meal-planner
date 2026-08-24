@@ -12,7 +12,7 @@ const Bar = styled.header`
   position: sticky;
   top: 0;
   z-index: 10;
-  height: 52px;
+  height: var(--topbar-h);
   background: ${colors.white};
   border-bottom: 1px solid ${colors.hairline};
   padding: 0 ${space.lg}px;

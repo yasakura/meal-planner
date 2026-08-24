@@ -82,56 +82,6 @@ describe('FirestoreMenuRepository', () => {
     expect(mockedSetDoc).toHaveBeenCalledWith(docRef, menuToDocument(menu));
   });
 
-  it('save traduit une écriture impossible faute de réseau en indisponibilité de dépôt', async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedSetDoc.mockRejectedValue(firestoreError('unavailable'));
-    const repository = FirestoreMenuRepository.create(db);
-
-    await expect(repository.save(menuCommencantLe24Aout())).rejects.toSatisfy(
-      isRepositoryUnavailable,
-    );
-  });
-
-  it("save ne traduit pas un refus de permission : l'erreur remonte telle quelle", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    const refus = firestoreError('permission-denied');
-    mockedSetDoc.mockRejectedValue(refus);
-    const repository = FirestoreMenuRepository.create(db);
-
-    await expect(repository.save(menuCommencantLe24Aout())).rejects.toBe(refus);
-  });
-
-  it(
-    "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
-    { timeout: 1000 },
-    async () => {
-      mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
-      const repository = FirestoreMenuRepository.create(db, { ackTimeoutMs: 10 });
-
-      await expect(repository.save(menuCommencantLe24Aout())).rejects.toSatisfy(
-        isRepositoryUnavailable,
-      );
-    },
-  );
-
-  it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
-    vi.useFakeTimers();
-    try {
-      mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockResolvedValue(undefined);
-      const repository = FirestoreMenuRepository.create(db);
-
-      await repository.save(menuCommencantLe24Aout());
-      await Promise.resolve();
-
-      expect(mockedSetDoc).toHaveBeenCalledTimes(1);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("findAll lit la collection 'menus' et rend le menu porté par chaque document", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
@@ -203,52 +153,6 @@ describe('FirestoreMenuRepository', () => {
     expect(mockedDeleteDoc).toHaveBeenCalledWith(docRef);
   });
 
-  it('remove traduit un effacement impossible faute de réseau en indisponibilité de dépôt', async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedDeleteDoc.mockRejectedValue(firestoreError('unavailable'));
-    const repository = FirestoreMenuRepository.create(db);
-
-    await expect(repository.remove(LUNDI_24_AOUT)).rejects.toSatisfy(isRepositoryUnavailable);
-  });
-
-  it("remove ne traduit pas un refus de permission : l'erreur remonte telle quelle", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    const refus = firestoreError('permission-denied');
-    mockedDeleteDoc.mockRejectedValue(refus);
-    const repository = FirestoreMenuRepository.create(db);
-
-    await expect(repository.remove(LUNDI_24_AOUT)).rejects.toBe(refus);
-  });
-
-  it(
-    "signale un effacement que le serveur n'a pas acquitté dans la borne d'attente",
-    { timeout: 1000 },
-    async () => {
-      mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}));
-      const repository = FirestoreMenuRepository.create(db, { ackTimeoutMs: 10 });
-
-      await expect(repository.remove(LUNDI_24_AOUT)).rejects.toSatisfy(isRepositoryUnavailable);
-    },
-  );
-
-  it("ne laisse aucune borne en suspens une fois l'effacement acquitté", async () => {
-    vi.useFakeTimers();
-    try {
-      mockedDoc.mockReturnValue({} as never);
-      mockedDeleteDoc.mockResolvedValue(undefined);
-      const repository = FirestoreMenuRepository.create(db);
-
-      await repository.remove(LUNDI_24_AOUT);
-      await Promise.resolve();
-
-      expect(mockedDeleteDoc).toHaveBeenCalledTimes(1);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it(
     "findAll signale une lecture que le serveur n'a pas rendue dans la borne d'attente",
     { timeout: 1000 },
@@ -281,6 +185,53 @@ describe('FirestoreMenuRepository', () => {
       vi.useRealTimers();
     }
   });
+
+  it(
+    "save rend la main dès que Firestore a pris l'écriture, sans attendre l'acquittement du serveur",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
+      const repository = FirestoreMenuRepository.create(db, { onWriteRejected: vi.fn() });
+
+      await expect(repository.save(menuCommencantLe24Aout())).resolves.toBeUndefined();
+    },
+  );
+
+  it(
+    "remove rend la main dès que Firestore a pris la suppression, sans attendre l'acquittement du serveur",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedDeleteDoc.mockReturnValue(new Promise<void>(() => {}));
+      const repository = FirestoreMenuRepository.create(db, { onWriteRejected: vi.fn() });
+
+      await expect(repository.remove(LUNDI_5_JANVIER)).resolves.toBeUndefined();
+    },
+  );
+
+  it(
+    'une suppression refusée par le serveur après coup ne reprend pas la main : elle part au constat global',
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      let refuser: (raison: unknown) => void = () => {};
+      mockedDeleteDoc.mockReturnValue(
+        new Promise<void>((_resolve, reject) => {
+          refuser = reject;
+        }),
+      );
+      const onWriteRejected = vi.fn();
+      const repository = FirestoreMenuRepository.create(db, { onWriteRejected });
+
+      await expect(repository.remove(LUNDI_5_JANVIER)).resolves.toBeUndefined();
+      refuser(firestoreError('permission-denied'));
+
+      await vi.waitFor(() => {
+        expect(onWriteRejected).toHaveBeenCalledTimes(1);
+      });
+    },
+  );
 });
 
 type ObservedSnapshot = { docs: { id: string; data: () => unknown }[] };

@@ -63,16 +63,16 @@ describe('Layout', () => {
     expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
   });
 
-  it('pose le bandeau de lien perdu juste au-dessus de la barre d’onglets, et rien tant que le lien tient', () => {
+  it('pose le bandeau de lien perdu en tête de contenu, sous la barre du haut, et rien tant que le lien tient', () => {
     const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
     store.dispatch(recipesObserved([RecipeBuilder.aRecipe().withId('r-1').build()]));
     renderLayout(store);
-    expect(screen.getByRole('navigation').previousElementSibling).toBeNull();
+    expect(screen.getByRole('main').previousElementSibling).toBe(screen.getByRole('banner'));
 
     act(() => {
       store.dispatch(recipesObservationFailed({ unavailable: true }));
     });
 
-    expect(screen.getByRole('navigation').previousElementSibling).toHaveTextContent(LIEN_PERDU);
+    expect(screen.getByRole('main').previousElementSibling).toHaveTextContent(LIEN_PERDU);
   });
 });

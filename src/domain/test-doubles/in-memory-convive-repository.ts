@@ -26,18 +26,12 @@ export class InMemoryConviveRepository implements ConviveRepository {
     return Promise.resolve(this.snapshot());
   }
 
-  updateExisting(
-    id: string,
-    transform: (existing: Convive) => Convive,
-  ): Promise<Convive | undefined> {
+  updateOnlyIfExists(convive: Convive): Promise<void> {
     this.updateCount += 1;
-    const existing = this.convives.get(id);
-    if (existing === undefined) return Promise.resolve(undefined);
-    transform(existing);
-    const updated = transform(existing);
-    this.convives.set(id, updated);
+    if (!this.convives.has(convive.id)) return Promise.resolve();
+    this.convives.set(convive.id, convive);
     this.emit();
-    return Promise.resolve(updated);
+    return Promise.resolve();
   }
 
   byId(id: string): Convive | undefined {

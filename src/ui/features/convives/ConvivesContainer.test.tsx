@@ -276,92 +276,22 @@ describe('ConvivesContainer', () => {
     expect(names).toEqual(['Aurélie']);
   });
 
-  it('une écriture non acquittée le dit sans prétendre que le convive est enregistré', async () => {
+  it('après un ajout refusé, « Ajouter » se réarme et le prénom saisi est conservé', async () => {
     const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({
-      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
-      addConvive: unacknowledged,
-    });
-    await screen.findByText('Aurélie');
-
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-
-    expect(
-      await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Impossible d’ajouter le convive.')).not.toBeInTheDocument();
-    expect(
-      screen
-        .getAllByRole('listitem')
-        .map((item) => within(item).getByTestId('convive-name').textContent),
-    ).toEqual(['Aurélie']);
-  });
-
-  it('le constat d’ajout non confirmé est annoncé poliment, jamais comme une alerte', async () => {
-    const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({
-      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
-      addConvive: unacknowledged,
-    });
-    await screen.findByText('Aurélie');
-
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.');
-
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.',
-    );
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('après une écriture non acquittée, « Ajouter » se réarme et le prénom saisi est conservé', async () => {
-    const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: AddConvive = () => Promise.reject(new Error('Firestore refuse'));
     renderWithStore({
       ...observing([]),
-      addConvive: unacknowledged,
+      addConvive: refuse,
     });
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
 
-    await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.');
+    await screen.findByText('Impossible d’ajouter le convive.');
     expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
     expect(screen.getByLabelText(/prénom/i)).toBeEnabled();
     expect(screen.getByLabelText(/prénom/i)).toHaveValue('Rory');
-  });
-
-  it('le constat d’ajout non confirmé nomme le convive, élidé quand le prénom l’exige', async () => {
-    const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ ...observing([]), addConvive: unacknowledged });
-    await screen.findByText('Personne dans le foyer pour le moment.');
-
-    await user.type(screen.getByLabelText(/prénom/i), 'Aurélie');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-
-    expect(
-      await screen.findByText('Aucune connexion — l’ajout d’Aurélie n’a pas pu être confirmé.'),
-    ).toBeInTheDocument();
-  });
-
-  it('le constat d’ajout non confirmé n’élide pas devant une consonne', async () => {
-    const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ ...observing([]), addConvive: unacknowledged });
-    await screen.findByText('Personne dans le foyer pour le moment.');
-
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-
-    expect(
-      await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.'),
-    ).toBeInTheDocument();
   });
 
   it('le champ prénom est verrouillé pendant un ajout en vol', async () => {
@@ -378,40 +308,38 @@ describe('ConvivesContainer', () => {
 
   it('rouvrir la sheet efface le constat d’ajout et rend le formulaire de nouveau utilisable', async () => {
     const user = userEvent.setup();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: AddConvive = () => Promise.reject(new Error('Firestore refuse'));
     const store = createTestStore({
       ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
-      addConvive: unacknowledged,
+      addConvive: refuse,
     });
     const sheet = renderSubscribed(store);
     await screen.findByText('Aurélie');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.');
+    await screen.findByText('Impossible d’ajouter le convive.');
 
     sheet.unmount();
     renderWith(store);
 
     expect(await screen.findByText('Aurélie')).toBeInTheDocument();
-    expect(
-      screen.queryByText('Aucune connexion — l’ajout de Rory n’a pas pu être confirmé.'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Impossible d’ajouter le convive.')).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
   });
 
-  it('un second appui après un ajout non confirmé réécrit le même convive, sans doublon', async () => {
+  it('un second appui après un ajout refusé réécrit le même convive, sans doublon', async () => {
     const user = userEvent.setup();
     const ids: string[] = [];
-    const unacknowledged: AddConvive = (input) => {
+    const refuse: AddConvive = (input) => {
       ids.push(input.id);
-      return Promise.reject(RepositoryUnavailableError.create());
+      return Promise.reject(new Error('Firestore refuse'));
     };
-    renderWithStore({ ...observing([]), addConvive: unacknowledged });
+    renderWithStore({ ...observing([]), addConvive: refuse });
     await screen.findByText('Personne dans le foyer pour le moment.');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText(/n’a pas pu être confirmé/);
+    await screen.findByText('Impossible d’ajouter le convive.');
 
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
 
@@ -422,21 +350,21 @@ describe('ConvivesContainer', () => {
   it('rouvrir la sheet vise un convive NEUF : la saisie suivante n’écrase pas la précédente', async () => {
     const user = userEvent.setup();
     const ids: string[] = [];
-    const unacknowledged: AddConvive = (input) => {
+    const refuse: AddConvive = (input) => {
       ids.push(input.id);
-      return Promise.reject(RepositoryUnavailableError.create());
+      return Promise.reject(new Error('Firestore refuse'));
     };
     let count = 0;
     const store = createTestStore({
       ...observing([]),
-      addConvive: unacknowledged,
+      addConvive: refuse,
       newConviveId: () => `draft-${(count += 1)}`,
     });
     const sheet = renderSubscribed(store);
     await screen.findByText('Personne dans le foyer pour le moment.');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText(/n’a pas pu être confirmé/);
+    await screen.findByText('Impossible d’ajouter le convive.');
 
     sheet.unmount();
     renderWith(store);
@@ -596,24 +524,21 @@ describe('ConvivesContainer', () => {
     expect(screen.getByText('Lionel')).toBeInTheDocument();
   });
 
-  it('hors ligne, dit que le retrait n’a pas pu être confirmé, et garde le convive affiché', async () => {
+  it('un retrait refusé s’annonce comme une alerte sur sa ligne, sans détail technique', async () => {
     const user = userEvent.setup();
-    const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
     renderWithStore({
       ...observing(twoConvives()),
-      removeConvive: offlineRemove,
+      removeConvive: refuse,
     });
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Retirer Lionel' }));
 
-    await user.click(screen.getByRole('button', { name: 'Retirer' }));
+    await user.click(screen.getByRole('button', { name: /^Retirer$/ }));
 
-    const notice = await screen.findByText(
-      'Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.',
-    );
-    expect(notice).toHaveAttribute('role', 'status');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de retirer le convive.');
+    expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
-    expect(screen.getByText('Retirer Lionel du foyer ?')).toBeInTheDocument();
   });
 
   it('un renommage refusé s’annonce comme une alerte, sans détail technique', async () => {
@@ -635,25 +560,22 @@ describe('ConvivesContainer', () => {
     expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
   });
 
-  it('rouvrir la sheet ne retrouve ni le constat de retrait ni la confirmation ouverte', async () => {
+  it('rouvrir la sheet ne retrouve pas la confirmation de retrait ouverte', async () => {
     const user = userEvent.setup();
-    const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RemoveConvive = () => Promise.reject(new Error('Firestore refuse'));
     const { store, unmount } = renderWithStore({
       ...observing(twoConvives()),
-      removeConvive: offlineRemove,
+      removeConvive: refuse,
     });
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Retirer Lionel' }));
     await user.click(screen.getByRole('button', { name: 'Retirer' }));
-    await screen.findByText('Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.');
+    await screen.findByText('Retirer Lionel du foyer ?');
 
     unmount();
     renderWith(store);
 
     expect(await screen.findByText('Lionel')).toBeInTheDocument();
-    expect(
-      screen.queryByText('Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.'),
-    ).not.toBeInTheDocument();
     expect(screen.queryByText('Retirer Lionel du foyer ?')).not.toBeInTheDocument();
   });
 
@@ -719,43 +641,22 @@ describe('ConvivesContainer', () => {
     expect(screen.getByRole('button', { name: 'Retirer Lionel' })).toBeDisabled();
   });
 
-  it('un constat de renommage ne retient plus l’utilisateur sur sa ligne', async () => {
+  it('le constat d’un renommage refusé ne retient plus l’utilisateur sur sa ligne', async () => {
     const user = userEvent.setup();
-    const offlineRename: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RenameConvive = () => Promise.reject(new Error('Firestore refuse'));
     renderWithStore({
       ...observing(twoConvives()),
-      renameConvive: offlineRename,
+      renameConvive: refuse,
     });
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Renommer Aurélie' }));
     await user.type(screen.getByLabelText('Nouveau prénom pour Aurélie'), 'x');
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
 
-    const constat = await screen.findByText(
-      'Aucune connexion — le renommage d’Aurélie n’a pas pu être confirmé.',
-    );
+    const constat = await screen.findByText('Impossible de renommer le convive.');
     expect(constat).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Renommer Lionel' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Retirer Lionel' })).toBeEnabled();
-  });
-
-  it('un constat de retrait ne retient plus non plus l’utilisateur sur sa ligne', async () => {
-    const user = userEvent.setup();
-    const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({
-      ...observing(twoConvives()),
-      removeConvive: offlineRemove,
-    });
-    await screen.findByText('Aurélie');
-    await user.click(screen.getByRole('button', { name: 'Retirer Lionel' }));
-    await user.click(screen.getByRole('button', { name: 'Retirer' }));
-    const constat = await screen.findByText(
-      'Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.',
-    );
-
-    expect(constat).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Renommer Aurélie' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Retirer Aurélie' })).toBeEnabled();
   });
 
   it('au repos, les actions de toutes les lignes sont disponibles', async () => {

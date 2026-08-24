@@ -17,27 +17,23 @@ describe('InMemoryConviveRepository', () => {
     expect(await repository.findAll()).toEqual([chloe, bruno, alice]);
   });
 
-  it('REJOUE transform : le port prévient qu’une transaction rejoue son corps', async () => {
+  it('updateOnlyIfExists remplace le convive visé quand il existe', async () => {
     const repository = InMemoryConviveRepository.create();
     await repository.save(alice);
-    let appels = 0;
 
-    await repository.updateExisting('c-1', (existing) => {
-      appels += 1;
-      return createConvive({ id: existing.id, name: 'Alicia' });
-    });
+    await repository.updateOnlyIfExists(createConvive({ id: 'c-1', name: 'Alicia' }));
 
-    expect(appels).toBe(2);
+    expect(repository.byId('c-1')).toEqual(createConvive({ id: 'c-1', name: 'Alicia' }));
   });
 
-  it('écrit sous l’id DEMANDÉ, jamais sous celui rendu par transform', async () => {
+  it('updateOnlyIfExists ne crée rien quand le convive visé n’existe pas : le port ne promet aucune création', async () => {
     const repository = InMemoryConviveRepository.create();
     await repository.save(alice);
 
-    await repository.updateExisting('c-1', () => createConvive({ id: 'autre-id', name: 'Alicia' }));
+    await repository.updateOnlyIfExists(createConvive({ id: 'inconnu', name: 'Alicia' }));
 
-    expect(repository.byId('c-1')).toEqual(createConvive({ id: 'autre-id', name: 'Alicia' }));
-    expect(repository.byId('autre-id')).toBeUndefined();
+    expect(repository.byId('inconnu')).toBeUndefined();
+    expect(repository.byId('c-1')).toEqual(alice);
   });
 });
 
@@ -60,7 +56,7 @@ describe('InMemoryConviveRepository — observation', () => {
 
     await repository.save(alice);
     const alicia = createConvive({ id: 'c-1', name: 'Alicia' });
-    await repository.updateExisting('c-1', () => alicia);
+    await repository.updateOnlyIfExists(alicia);
     await repository.remove('c-1');
 
     expect(instantanes).toEqual([[], [alice], [alicia], []]);

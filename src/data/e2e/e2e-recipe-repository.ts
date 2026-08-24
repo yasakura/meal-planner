@@ -5,7 +5,7 @@ import { type Unsubscribe } from '../../domain/ports/unsubscribe';
 import { type E2eFailureSwitch } from './e2e-failure-switch';
 
 export class E2eRecipeRepository implements RecipeRepository {
-  private readonly recipes: Map<string, Recipe>;
+  private recipes: Map<string, Recipe>;
 
   private readonly listeners = new Set<(recipes: Recipe[]) => void>();
 
@@ -20,11 +20,14 @@ export class E2eRecipeRepository implements RecipeRepository {
     return new E2eRecipeRepository(recipes, failures);
   }
 
-  async save(recipe: Recipe): Promise<void> {
-    this.failures.guardWrite();
-    await this.failures.serverAck();
+  save(recipe: Recipe): Promise<void> {
+    const avantEcriture = new Map(this.recipes);
     this.recipes.set(recipe.id, recipe);
     this.emit();
+    this.failures.refuseAfterwards(() => {
+      this.rollbackTo(avantEcriture);
+    });
+    return Promise.resolve();
   }
 
   async findAll(): Promise<Recipe[]> {
@@ -47,6 +50,11 @@ export class E2eRecipeRepository implements RecipeRepository {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  private rollbackTo(avantEcriture: Map<string, Recipe>): void {
+    this.recipes = avantEcriture;
+    this.emit();
   }
 
   private snapshot(): Recipe[] {

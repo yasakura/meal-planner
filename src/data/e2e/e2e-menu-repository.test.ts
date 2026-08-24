@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { createCalendarDate, type CalendarDate } from '../../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../../domain/entities/menu';
@@ -19,15 +19,19 @@ function menuCommencantLe(dateDebut: CalendarDate, recipeId = 'recipe-curry'): M
   });
 }
 
+function sansPanne(): E2eFailureSwitch {
+  return E2eFailureSwitch.reporting(() => {});
+}
+
 describe('E2eMenuRepository', () => {
   it('démarre sans aucun menu enregistré', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
 
     expect(await repository.findAll()).toEqual([]);
   });
 
   it('enregistre un menu et le rend', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
 
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
 
@@ -35,7 +39,7 @@ describe('E2eMenuRepository', () => {
   });
 
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
 
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
     await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
@@ -49,7 +53,7 @@ describe('E2eMenuRepository', () => {
   });
 
   it('enregistre en UPSERT sur la période : même date de début, une seule entrée', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
 
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-curry'));
     await repository.save(
@@ -62,7 +66,7 @@ describe('E2eMenuRepository', () => {
   });
 
   it('efface la période demandée, et elle seule', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
     await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
 
@@ -72,7 +76,7 @@ describe('E2eMenuRepository', () => {
   });
 
   it('efface une période vide en succès silencieux : le port est idempotent', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
 
     await expect(repository.remove(LUNDI_2_FEVRIER)).resolves.toBeUndefined();
@@ -80,7 +84,7 @@ describe('E2eMenuRepository', () => {
   });
 
   it('rejette findAll avec RepositoryUnavailableError quand les lectures sont en panne', async () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eMenuRepository.startingEmpty(failures);
 
     failures.failReads();
@@ -88,50 +92,41 @@ describe('E2eMenuRepository', () => {
     await expect(repository.findAll()).rejects.toBeInstanceOf(RepositoryUnavailableError);
   });
 
-  it('rejette save quand les écritures sont en panne, et n’enregistre rien', async () => {
-    const failures = E2eFailureSwitch.create();
+  it('failWrites : save est pris tout de suite, puis annulé quand le serveur le refuse', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
     const repository = E2eMenuRepository.startingEmpty(failures);
-
     failures.failWrites();
 
-    await expect(repository.save(menuCommencantLe(LUNDI_5_JANVIER))).rejects.toBeInstanceOf(
-      RepositoryUnavailableError,
-    );
-    failures.restore();
-    expect(await repository.findAll()).toEqual([]);
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
+
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
   });
 
-  it('rejette remove quand les écritures sont en panne, et n’efface rien', async () => {
-    const failures = E2eFailureSwitch.create();
+  it('failWrites : le retrait est pris tout de suite, puis annulé quand le serveur le refuse', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
     const repository = E2eMenuRepository.startingEmpty(failures);
     await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
-
     failures.failWrites();
 
-    await expect(repository.remove(LUNDI_5_JANVIER)).rejects.toBeInstanceOf(
-      RepositoryUnavailableError,
-    );
-    failures.restore();
-    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
-  });
-
-  it('un dépôt muet ne refuse pas save : c’est la borne qui le déclare indisponible, et rien n’est enregistré', async () => {
-    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
-    const repository = E2eMenuRepository.startingEmpty(failures);
-
-    failures.hangWrites();
-
-    await expect(repository.save(menuCommencantLe(LUNDI_5_JANVIER))).rejects.toBeInstanceOf(
-      RepositoryUnavailableError,
-    );
-    failures.restore();
+    await repository.remove(LUNDI_5_JANVIER);
     expect(await repository.findAll()).toEqual([]);
+
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('E2eMenuRepository — observation', () => {
   it("livre l'instantané courant dès l'abonnement, dans un ordre DIFFÉRENT de l'ordre d'insertion", async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
     const menuDu5Janvier = menuCommencantLe(LUNDI_5_JANVIER);
     const menuDu19Janvier = menuCommencantLe(LUNDI_19_JANVIER);
     await repository.save(menuDu5Janvier);
@@ -147,7 +142,7 @@ describe('E2eMenuRepository — observation', () => {
   });
 
   it('réémet la liste entière à chaque enregistrement et à chaque retrait', async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
     const menuDu5Janvier = menuCommencantLe(LUNDI_5_JANVIER);
     const instantanes: (readonly Menu[])[] = [];
     repository.observeAll(
@@ -162,7 +157,7 @@ describe('E2eMenuRepository — observation', () => {
   });
 
   it("n'émet plus rien une fois le désabonnement appelé", async () => {
-    const repository = E2eMenuRepository.startingEmpty(E2eFailureSwitch.create());
+    const repository = E2eMenuRepository.startingEmpty(sansPanne());
     const instantanes: (readonly Menu[])[] = [];
     const stop = repository.observeAll(
       (menus) => instantanes.push(menus),
@@ -178,7 +173,7 @@ describe('E2eMenuRepository — observation', () => {
   });
 
   it("signale l'indisponibilité sur le canal d'erreur quand les lectures sont en panne, au lieu de livrer un instantané", () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eMenuRepository.startingEmpty(failures);
     const instantanes: (readonly Menu[])[] = [];
     const echecs: unknown[] = [];

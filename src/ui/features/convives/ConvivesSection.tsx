@@ -16,7 +16,7 @@ export type ConviveRowActions = {
   onRemoveCancel: () => void;
 };
 
-export type AddNotice = { tone: 'error' | 'unconfirmed'; message: string };
+export type AddNotice = { tone: 'error'; message: string };
 
 export type ConvivesSectionProps = {
   name: string;
@@ -180,18 +180,14 @@ function AddForm(props: ConvivesSectionProps) {
           Ajouter
         </SubmitButton>
       </FieldRow>
-      {props.addNotice !== null && (
-        <Note role={props.addNotice.tone === 'error' ? 'alert' : 'status'}>
-          {props.addNotice.message}
-        </Note>
-      )}
+      {props.addNotice !== null && <Note role="alert">{props.addNotice.message}</Note>}
     </Form>
   );
 }
 
 function RowNoticeView({ notice }: { notice: ConviveRow['notice'] }) {
   if (notice === null) return null;
-  return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
+  return <Note role="alert">{notice.message}</Note>;
 }
 
 function ConviveRowView({ row, actions }: { row: ConviveRow; actions: ConviveRowActions }) {
@@ -267,7 +263,6 @@ function ConviveRowView({ row, actions }: { row: ConviveRow; actions: ConviveRow
           Retirer
         </RowButton>
       </RowLine>
-      <RowNoticeView notice={row.notice} />
     </Row>
   );
 }

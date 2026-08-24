@@ -1,11 +1,10 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import { type Recipe } from '../../../domain/entities/recipe';
-import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
 import { type AppThunk, type AppThunkApiConfig, type RootState } from '../../store/store';
 
-export type RecipeCreationStatus = 'idle' | 'saving' | 'success' | 'error' | 'unconfirmed';
+export type RecipeCreationStatus = 'idle' | 'saving' | 'success' | 'error';
 
 export type RecipeState = {
   status: RecipeCreationStatus;
@@ -13,10 +12,8 @@ export type RecipeState = {
   latestCreateRequestId: string | null;
 };
 
-export type RecipeFormNotice = { tone: 'success' | 'error' | 'unconfirmed'; message: string };
+export type RecipeFormNotice = { tone: 'success' | 'error'; message: string };
 
-export const RECIPE_SAVE_UNCONFIRMED =
-  'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
 export const RECIPE_SAVE_FAILED = 'Impossible d’enregistrer la recette.';
 
 export type RecipeDraft = Omit<CreateRecipeInput, 'id'>;
@@ -74,7 +71,7 @@ const recipeSlice = createSlice({
       })
       .addCase(createRecipe.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestCreateRequestId) return;
-        state.status = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
+        state.status = 'error';
       });
   },
 });
@@ -93,9 +90,6 @@ export const selectRecipeCreation = (state: RootState): RecipeState => state.rec
 
 export function recipeCreateNoticeOf(state: RecipeState): RecipeFormNotice | null {
   if (state.status === 'success') return { tone: 'success', message: 'Recette enregistrée.' };
-  if (state.status === 'unconfirmed') {
-    return { tone: 'unconfirmed', message: RECIPE_SAVE_UNCONFIRMED };
-  }
   if (state.status === 'error') return { tone: 'error', message: RECIPE_SAVE_FAILED };
   return null;
 }

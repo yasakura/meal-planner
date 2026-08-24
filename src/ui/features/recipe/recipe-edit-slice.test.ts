@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
-import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type UpdateRecipe, type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
@@ -96,32 +95,11 @@ describe('recipe edit slice', () => {
       latestCreateRequestId: null,
     });
   });
-  it('le dépôt qui n’a pas répondu : la modification n’est pas confirmée, elle n’a pas échoué', async () => {
-    const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ updateRecipe: nonAcquitte });
-
-    await store.dispatch(updateRecipe(anInput()));
-
-    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'unconfirmed' });
-  });
-  const PANNE = {
-    tone: 'unconfirmed',
-    message: 'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
-  };
   const ECHEC = { tone: 'error', message: 'Impossible d’enregistrer la recette.' };
 
   function constat(store: ReturnType<typeof createTestStore>) {
     return recipeEditNoticeOf(selectRecipeEdition(store.getState()));
   }
-
-  it('une modification non acquittée se constate poliment', async () => {
-    const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ updateRecipe: nonAcquitte });
-
-    await store.dispatch(updateRecipe(anInput()));
-
-    expect(constat(store)).toEqual(PANNE);
-  });
 
   it('un échec franc du dépôt : l’écran dit que l’enregistrement a échoué', async () => {
     const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
@@ -141,9 +119,9 @@ describe('recipe edit slice', () => {
     expect(constat(store)).toBeNull();
   });
 
-  it('l’ouverture d’un formulaire efface un constat non acquitté', () => {
-    const nonConfirme: RecipeEditState = { status: 'unconfirmed' };
+  it('l’ouverture d’un formulaire efface un constat de refus', () => {
+    const refuse: RecipeEditState = { status: 'error' };
 
-    expect(recipeEditReducer(nonConfirme, recipeEditFormOpened())).toEqual({ status: 'idle' });
+    expect(recipeEditReducer(refuse, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 });

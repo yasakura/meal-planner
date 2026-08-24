@@ -1,26 +1,22 @@
 import { RepositoryUnavailableError } from '../../domain/errors/repository-unavailable-error';
-import { withServerDeadline } from '../firestore-server-deadline';
+import { type WriteRejectionReporter } from '../../domain/ports/write-rejection-reporter';
 
-export const E2E_ACK_TIMEOUT_MS = 1500;
+export const E2E_SERVER_VERDICT_MS = 400;
 
 export type E2eControls = {
   failReads(): void;
   failWrites(): void;
-  hangWrites(): void;
   restore(): void;
 };
-
-export type E2eFailureSwitchOptions = { ackTimeoutMs?: number };
 
 export class E2eFailureSwitch implements E2eControls {
   private readsFail = false;
   private writesFail = false;
-  private writesHang = false;
 
-  private constructor(private readonly ackTimeoutMs: number) {}
+  private constructor(private readonly onWriteRejected: WriteRejectionReporter) {}
 
-  static create(options?: E2eFailureSwitchOptions): E2eFailureSwitch {
-    return new E2eFailureSwitch(options?.ackTimeoutMs ?? E2E_ACK_TIMEOUT_MS);
+  static reporting(onWriteRejected: WriteRejectionReporter): E2eFailureSwitch {
+    return new E2eFailureSwitch(onWriteRejected);
   }
 
   failReads(): void {
@@ -31,14 +27,9 @@ export class E2eFailureSwitch implements E2eControls {
     this.writesFail = true;
   }
 
-  hangWrites(): void {
-    this.writesHang = true;
-  }
-
   restore(): void {
     this.readsFail = false;
     this.writesFail = false;
-    this.writesHang = false;
   }
 
   readsAreDown(): boolean {
@@ -49,12 +40,11 @@ export class E2eFailureSwitch implements E2eControls {
     if (this.readsAreDown()) throw RepositoryUnavailableError.create();
   }
 
-  guardWrite(): void {
-    if (this.writesFail) throw RepositoryUnavailableError.create();
-  }
-
-  serverAck(): Promise<void> {
-    const acquittement = this.writesHang ? new Promise<void>(() => {}) : Promise.resolve();
-    return withServerDeadline(acquittement, this.ackTimeoutMs);
+  refuseAfterwards(rollback: () => void): void {
+    if (!this.writesFail) return;
+    setTimeout(() => {
+      rollback();
+      this.onWriteRejected();
+    }, E2E_SERVER_VERDICT_MS);
   }
 }

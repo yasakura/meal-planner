@@ -9,26 +9,24 @@ import {
 } from 'firebase/firestore';
 
 import { type RecipeRepository } from '../domain/ports/recipe-repository';
+import { type WriteRejectionReporter } from '../domain/ports/write-rejection-reporter';
 import { type Unsubscribe } from '../domain/ports/unsubscribe';
 import { asDomainFailure } from './firestore-failure';
+import { acceptedLocally } from './firestore-local-acceptance';
 import { type Recipe } from '../domain/entities/recipe';
-import {
-  DEFAULT_ACK_TIMEOUT_MS,
-  DEFAULT_READ_TIMEOUT_MS,
-  withServerDeadline,
-} from './firestore-server-deadline';
+import { DEFAULT_READ_TIMEOUT_MS, withServerDeadline } from './firestore-server-deadline';
 import { documentToRecipe, recipeToDocument } from './recipe-mapper';
 
 export type FirestoreRecipeRepositoryOptions = {
-  ackTimeoutMs?: number;
   readTimeoutMs?: number;
+  onWriteRejected?: WriteRejectionReporter;
 };
 
 export class FirestoreRecipeRepository implements RecipeRepository {
   private constructor(
     private readonly db: Firestore,
-    private readonly ackTimeoutMs: number,
     private readonly readTimeoutMs: number,
+    private readonly onWriteRejected: WriteRejectionReporter | undefined,
   ) {}
 
   static create(
@@ -37,15 +35,15 @@ export class FirestoreRecipeRepository implements RecipeRepository {
   ): FirestoreRecipeRepository {
     return new FirestoreRecipeRepository(
       db,
-      options?.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS,
       options?.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS,
+      options?.onWriteRejected,
     );
   }
 
-  async save(recipe: Recipe): Promise<void> {
-    await withServerDeadline(
+  save(recipe: Recipe): Promise<void> {
+    return acceptedLocally(
       setDoc(doc(this.db, 'recipes', recipe.id), recipeToDocument(recipe)),
-      this.ackTimeoutMs,
+      this.onWriteRejected,
     );
   }
 
