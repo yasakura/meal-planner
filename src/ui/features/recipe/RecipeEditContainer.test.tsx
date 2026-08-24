@@ -10,7 +10,7 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { type UpdateRecipe, type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { RecipesSubscription } from '../../RecipesSubscription';
+import { DataSubscription } from '../../DataSubscription';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { createTestStore } from '../../../test/create-test-store';
 import { RecipeEditContainer } from './RecipeEditContainer';
@@ -56,12 +56,12 @@ function renderRouteAt(store: TestStore, path: string, avant?: ReactNode) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
-        <RecipesSubscription>
+        <DataSubscription>
           {avant}
           <Routes>
             <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
           </Routes>
-        </RecipesSubscription>
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );

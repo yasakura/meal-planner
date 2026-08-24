@@ -10,7 +10,7 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { RecipesSubscription } from '../../RecipesSubscription';
+import { DataSubscription } from '../../DataSubscription';
 import { useAppSelector } from '../../store/hooks';
 import { selectCatalogue } from '../catalogue/catalogue-slice';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
@@ -26,11 +26,11 @@ function renderAtPathWith(store: ReturnType<typeof createTestStore>, path: strin
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
-        <RecipesSubscription>
+        <DataSubscription>
           <Routes>
             <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
           </Routes>
-        </RecipesSubscription>
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );
@@ -168,12 +168,12 @@ describe('RecipeDetailContainer', () => {
     render(
       <Provider store={store}>
         <MemoryRouter initialEntries={['/catalogue/r-1']}>
-          <RecipesSubscription>
+          <DataSubscription>
             <Nav />
             <Routes>
               <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
             </Routes>
-          </RecipesSubscription>
+          </DataSubscription>
         </MemoryRouter>
       </Provider>,
     );
@@ -271,13 +271,13 @@ describe('RecipeDetailContainer', () => {
     render(
       <Provider store={store}>
         <MemoryRouter initialEntries={['/catalogue/r-1']}>
-          <RecipesSubscription>
+          <DataSubscription>
             <Link to="/catalogue/r-2">aller-ailleurs</Link>
             <Routes>
               <Route path="/catalogue/:id" element={<RecipeDetailContainer />} />
             </Routes>
             <SondeDeFrames frames={frames} />
-          </RecipesSubscription>
+          </DataSubscription>
         </MemoryRouter>
       </Provider>,
     );

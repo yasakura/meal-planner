@@ -10,9 +10,9 @@ import { addConviveUseCase } from '../../domain/use-cases/add-convive';
 import { browseMenusUseCase } from '../../domain/use-cases/browse-menus';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
 import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
-import { listConvivesUseCase } from '../../domain/use-cases/list-convives';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { newConviveIdUseCase } from '../../domain/use-cases/new-convive-id';
+import { observeConvivesUseCase } from '../../domain/use-cases/observe-convives';
 import { observeRecipesUseCase } from '../../domain/use-cases/observe-recipes';
 import { newRecipeIdUseCase } from '../../domain/use-cases/new-recipe-id';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
@@ -42,7 +42,7 @@ export function createAppStore() {
     browseMenus: browseMenusUseCase({ menuRepository, clock }),
     nextMonday: nextMondayUseCase({ clock }),
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
-    listConvives: listConvivesUseCase({ conviveRepository }),
+    observeConvives: observeConvivesUseCase({ conviveRepository }),
     addConvive: addConviveUseCase({ conviveRepository }),
     newConviveId: newConviveIdUseCase({ idGenerator: IdGeneratorCuid2.create() }),
     renameConvive: renameConviveUseCase({ conviveRepository }),

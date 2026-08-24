@@ -19,7 +19,7 @@ import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { DriftingClock } from '../../../domain/test-doubles/drifting-clock';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { RecipesSubscription } from '../../RecipesSubscription';
+import { DataSubscription } from '../../DataSubscription';
 import { deferred } from '../../test-utils/deferred';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { MenuCreateContainer } from './MenuCreateContainer';
@@ -502,9 +502,9 @@ describe('MenuCreateContainer', () => {
     render(
       <Provider store={store}>
         <MemoryRouter>
-          <RecipesSubscription>
+          <DataSubscription>
             <MenuCreateContainer />
-          </RecipesSubscription>
+          </DataSubscription>
         </MemoryRouter>
       </Provider>,
     );

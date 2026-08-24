@@ -10,7 +10,7 @@ export type RecipeListItem = { id: string; title: string; meta: string; href: st
 export type RecipeListScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  | { status: 'unavailable'; message: string }
+  | { status: 'unavailable'; message: string; onRetry: () => void }
   | { status: 'empty' }
   | { status: 'loaded'; recipes: RecipeListItem[] };
 
@@ -190,6 +190,9 @@ function Body(props: RecipeListScreenProps) {
       return (
         <CenteredState>
           <StateText role="status">{props.message}</StateText>
+          <RetryButton type="button" onClick={props.onRetry}>
+            Réessayer
+          </RetryButton>
         </CenteredState>
       );
     case 'empty':

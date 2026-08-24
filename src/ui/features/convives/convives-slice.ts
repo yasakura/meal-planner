@@ -2,13 +2,21 @@ import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/tool
 
 import { compareConvivesByName, type Convive } from '../../../domain/entities/convive';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
+import { type Unsubscribe } from '../../../domain/ports/unsubscribe';
 import { type AddConviveInput } from '../../../domain/use-cases/add-convive';
 import { type RemoveConviveInput } from '../../../domain/use-cases/remove-convive';
 import { type RenameConviveInput } from '../../../domain/use-cases/rename-convive';
-import { type AppThunk, type AppThunkApiConfig, type RootState } from '../../store/store';
+import {
+  type AppDependencies,
+  type AppDispatch,
+  type AppThunk,
+  type AppThunkApiConfig,
+  type RootState,
+} from '../../store/store';
+import { authStateChanged } from '../auth/auth-slice';
 import { elidedDe } from './french-elision';
 
-export type ConvivesStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
+export type ConvivesFailure = 'unreadable' | 'unavailable';
 
 export type ConviveAddStatus = 'idle' | 'adding' | 'error' | 'unconfirmed';
 
@@ -29,10 +37,10 @@ export type ConviveRow = {
 };
 
 export type ConvivesState = {
-  status: ConvivesStatus;
   convives: Convive[];
-  error: string | null;
-  latestLoadRequestId: string | null;
+  received: boolean;
+  failure: ConvivesFailure | null;
+  attempt: number;
   addStatus: ConviveAddStatus;
   addError: string | null;
   addSubjectName: string | null;
@@ -48,10 +56,10 @@ export type ConvivesState = {
 };
 
 const initialState: ConvivesState = {
-  status: 'idle',
   convives: [],
-  error: null,
-  latestLoadRequestId: null,
+  received: false,
+  failure: null,
+  attempt: 0,
   addStatus: 'idle',
   addError: null,
   addSubjectName: null,
@@ -74,27 +82,19 @@ function draftIdOf(state: ConvivesState): string {
   return state.draftConviveId as string;
 }
 
-export const loadConvives = createAsyncThunk<Convive[], void, AppThunkApiConfig>(
-  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
-  'convives/loadConvives',
-  async (_, thunkApi) => {
-    return await thunkApi.extra.listConvives();
-  },
-);
-
 export type ConviveDraft = Omit<AddConviveInput, 'id'>;
 
-export type ConviveAdded = { convive: Convive; nextDraftId: string };
+export type ConviveAdded = { nextDraftId: string };
 
 export const addConvive = createAsyncThunk<ConviveAdded, ConviveDraft, AppThunkApiConfig>(
   // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
   'convives/addConvive',
   async (draft, thunkApi) => {
-    const convive = await thunkApi.extra.addConvive({
+    await thunkApi.extra.addConvive({
       id: draftIdOf(thunkApi.getState().convives),
       ...draft,
     });
-    return { convive, nextDraftId: thunkApi.extra.newConviveId() };
+    return { nextDraftId: thunkApi.extra.newConviveId() };
   },
 );
 
@@ -137,9 +137,25 @@ const convivesSlice = createSlice({
   name: 'convives',
   initialState,
   reducers: {
+    convivesObserved(state, action: PayloadAction<Convive[]>) {
+      state.convives = action.payload;
+      state.received = true;
+      state.failure = null;
+    },
+    convivesObservationFailed(state, action: PayloadAction<{ unavailable: boolean }>) {
+      state.failure = action.payload.unavailable ? 'unavailable' : 'unreadable';
+    },
+    convivesRetried(state) {
+      state.failure = null;
+      state.attempt += 1;
+    },
     conviveFormOpened(state, action: PayloadAction<string>) {
-      if (state.addStatus === 'adding') return;
-      state.draftConviveId = action.payload;
+      if (state.addStatus !== 'adding') {
+        state.draftConviveId = action.payload;
+        restAddLifecycle(state);
+      }
+      if (state.renameStatus !== 'renaming') restRenameLifecycle(state);
+      if (state.removeStatus !== 'removing') restRemoveLifecycle(state);
     },
     conviveEditRequested(state, action: PayloadAction<string>) {
       if (state.renameStatus === 'renaming') return;
@@ -167,29 +183,12 @@ const convivesSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loadConvives.pending, (state, action) => {
-        state.latestLoadRequestId = action.meta.requestId;
-        state.status = 'loading';
-        state.error = null;
-        if (state.addStatus !== 'adding') restAddLifecycle(state);
-        if (state.renameStatus !== 'renaming') restRenameLifecycle(state);
-        if (state.removeStatus !== 'removing') restRemoveLifecycle(state);
-      })
-      .addCase(loadConvives.fulfilled, (state, action) => {
-        if (action.meta.requestId !== state.latestLoadRequestId) return;
-        state.status = 'success';
-        state.convives = action.payload;
-        state.error = null;
-      })
-      .addCase(loadConvives.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestLoadRequestId) return;
-        if (isRepositoryUnavailable(action.error)) {
-          state.status = 'unavailable';
-          state.error = null;
-          return;
-        }
-        state.status = 'error';
-        state.error = action.error.message ?? null;
+      .addCase(authStateChanged, (state, action) => {
+        if (action.payload !== null) return;
+        state.convives = [];
+        state.received = false;
+        state.failure = null;
+        state.attempt = 0;
       })
       .addCase(addConvive.pending, (state, action) => {
         state.latestAddRequestId = action.meta.requestId;
@@ -198,8 +197,6 @@ const convivesSlice = createSlice({
       })
       .addCase(addConvive.fulfilled, (state, action) => {
         if (action.meta.requestId !== state.latestAddRequestId) return;
-        state.convives.push(action.payload.convive);
-        state.convives.sort(compareConvivesByName);
         state.draftConviveId = action.payload.nextDraftId;
         restAddLifecycle(state);
       })
@@ -247,6 +244,18 @@ const convivesSlice = createSlice({
 
 const { conviveFormOpened } = convivesSlice.actions;
 
+export const { convivesObservationFailed, convivesObserved, convivesRetried } =
+  convivesSlice.actions;
+
+export const observeConvives =
+  () =>
+  (dispatch: AppDispatch, _getState: () => RootState, extra: AppDependencies): Unsubscribe =>
+    extra.observeConvives(
+      (convives) => dispatch(convivesObserved(convives)),
+      (error) =>
+        dispatch(convivesObservationFailed({ unavailable: isRepositoryUnavailable(error) })),
+    );
+
 export function conviveFormScreenOpened(): AppThunk {
   return (dispatch, _getState, extra) => {
     dispatch(conviveFormOpened(extra.newConviveId()));
@@ -264,6 +273,29 @@ export const {
 export const convivesReducer = convivesSlice.reducer;
 
 export const selectConvives = (state: RootState): ConvivesState => state.convives;
+
+export const selectConvivesAttempt = (state: RootState): number => state.convives.attempt;
+
+export const selectConvivesLinkLost = (state: RootState): boolean =>
+  state.convives.received && state.convives.failure !== null;
+
+export type ConvivesView =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'unavailable' }
+  | { status: 'empty' }
+  | { status: 'loaded'; convives: ConviveRow[] };
+
+export function convivesViewOf(state: ConvivesState): ConvivesView {
+  if (state.received) {
+    return state.convives.length === 0
+      ? { status: 'empty' }
+      : { status: 'loaded', convives: conviveRowsOf(state) };
+  }
+  if (state.failure === 'unavailable') return { status: 'unavailable' };
+  if (state.failure === 'unreadable') return { status: 'error' };
+  return { status: 'loading' };
+}
 
 export const selectIsAddInFlight = (state: RootState): boolean =>
   state.convives.addStatus === 'adding';

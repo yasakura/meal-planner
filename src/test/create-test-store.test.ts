@@ -7,7 +7,11 @@ import { createSlot } from '../domain/entities/slot';
 import { IngredientBuilder } from '../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { observeRecipes, selectCatalogue } from '../ui/features/catalogue/catalogue-slice';
-import { addConvive, loadConvives, selectConvives } from '../ui/features/convives/convives-slice';
+import {
+  addConvive,
+  observeConvives,
+  selectConvives,
+} from '../ui/features/convives/convives-slice';
 import { recipeOfRoute } from '../ui/features/recipe-detail/recipe-detail-states';
 import { generateMenu, saveMenu } from '../ui/features/menu/menu-slice';
 import { loadSavedMenus, selectSavedMenus } from '../ui/features/menu/saved-menus-slice';
@@ -16,11 +20,11 @@ import { updateRecipe } from '../ui/features/recipe/recipe-edit-slice';
 import { createTestStore } from './create-test-store';
 
 describe('createTestStore', () => {
-  it('câble les use-cases convives sur un même repository : un convive ajouté est retrouvé au rechargement', async () => {
+  it('câble les use-cases convives sur un même repository : un convive ajouté est retrouvé à la relecture', async () => {
     const store = createTestStore();
 
     await store.dispatch(addConvive({ name: 'Rory' }));
-    await store.dispatch(loadConvives());
+    store.dispatch(observeConvives());
 
     expect(selectConvives(store.getState()).convives.map((convive) => convive.name)).toEqual([
       'Rory',

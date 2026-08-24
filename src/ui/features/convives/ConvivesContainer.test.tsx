@@ -4,8 +4,13 @@ import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
 import { type Convive } from '../../../domain/entities/convive';
-import { type AddConvive, type AddConviveInput } from '../../../domain/use-cases/add-convive';
-import { type ListConvives } from '../../../domain/use-cases/list-convives';
+import {
+  addConviveUseCase,
+  type AddConvive,
+  type AddConviveInput,
+} from '../../../domain/use-cases/add-convive';
+import { observeConvivesUseCase } from '../../../domain/use-cases/observe-convives';
+import { InMemoryConviveRepository } from '../../../domain/test-doubles/in-memory-convive-repository';
 import {
   type RemoveConvive,
   type RemoveConviveInput,
@@ -18,11 +23,23 @@ import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type AppDependencies } from '../../store/store';
 import { createTestStore } from '../../../test/create-test-store';
+import { DataSubscription } from '../../DataSubscription';
+import { ConviveChannel } from '../../test-utils/convive-channel';
 import { ConvivesContainer } from './ConvivesContainer';
 
 function renderWithStore(overrides?: Partial<AppDependencies>) {
   const store = createTestStore(overrides);
-  return { store, ...renderWith(store) };
+  return { store, ...renderSubscribed(store) };
+}
+
+function renderSubscribed(store: ReturnType<typeof createTestStore>) {
+  return render(
+    <Provider store={store}>
+      <DataSubscription>
+        <ConvivesContainer />
+      </DataSubscription>
+    </Provider>,
+  );
 }
 
 function renderWith(store: ReturnType<typeof createTestStore>) {
@@ -33,22 +50,28 @@ function renderWith(store: ReturnType<typeof createTestStore>) {
   );
 }
 
-function spyReturning(convives: Convive[]): { fn: ListConvives; callCount: () => number } {
-  let count = 0;
-  const fn: ListConvives = async () => {
-    count += 1;
-    return convives;
-  };
-  return { fn, callCount: () => count };
+function observing(convives: Convive[]): Partial<AppDependencies> {
+  return { observeConvives: ConviveChannel.seededWith(convives).observeConvives };
 }
 
-function capturingAdd(): { fn: AddConvive; captured: () => AddConviveInput | undefined } {
+function writingToAnObservedRepository(seeded: Convive[]): {
+  deps: Partial<AppDependencies>;
+  captured: () => AddConviveInput | undefined;
+} {
+  const conviveRepository = InMemoryConviveRepository.create();
+  for (const convive of seeded) void conviveRepository.save(convive);
+  const add = addConviveUseCase({ conviveRepository });
   let captured: AddConviveInput | undefined;
-  const fn: AddConvive = async (input) => {
-    captured = input;
-    return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+  return {
+    captured: () => captured,
+    deps: {
+      observeConvives: observeConvivesUseCase({ conviveRepository }),
+      addConvive: (input) => {
+        captured = input;
+        return add(input);
+      },
+    },
   };
-  return { fn, captured: () => captured };
 }
 
 function twoConvives(): Convive[] {
@@ -59,15 +82,15 @@ function twoConvives(): Convive[] {
 }
 
 describe('ConvivesContainer', () => {
-  it('charge les convives au montage et affiche les prénoms dans l’ordre renvoyé par le use case', async () => {
-    const spy = spyReturning([
+  it('affiche au montage les convives émis, dans l’ordre émis, sur un seul abonnement', async () => {
+    const channel = ConviveChannel.seededWith([
       ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
       ConviveBuilder.aConvive().withId('c-2').withName('Lionel').build(),
     ]);
-    renderWithStore({ listConvives: spy.fn });
+    renderWithStore({ observeConvives: channel.observeConvives });
 
     expect(await screen.findByText('Aurélie')).toBeInTheDocument();
-    expect(spy.callCount()).toBe(1);
+    expect(channel.subscriptions).toBe(1);
 
     const names = screen
       .getAllByRole('listitem')
@@ -75,45 +98,43 @@ describe('ConvivesContainer', () => {
     expect(names).toEqual(['Aurélie', 'Lionel']);
   });
 
-  it('affiche un indicateur de chargement tant que le use case n’a pas résolu', () => {
-    const pending: ListConvives = () => new Promise<Convive[]>(() => {});
-    renderWithStore({ listConvives: pending });
+  it('affiche un indicateur de chargement tant que le canal n’a rien émis', () => {
+    renderWithStore({ observeConvives: ConviveChannel.silent().observeConvives });
 
     expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
   });
 
   it('affiche un constat quand le foyer ne compte encore aucun convive', async () => {
-    renderWithStore({ listConvives: spyReturning([]).fn });
+    renderWithStore({ ...observing([]) });
 
     expect(await screen.findByText('Personne dans le foyer pour le moment.')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('affiche un message sobre en erreur, sans le détail technique, et recharge au réessai', async () => {
+  it('affiche un message sobre en erreur, sans le détail technique, et se réabonne au réessai', async () => {
     const user = userEvent.setup();
-    let count = 0;
-    const failThenSucceed: ListConvives = async () => {
-      count += 1;
-      if (count === 1) throw new Error('Firestore indisponible');
-      return [ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()];
-    };
-    renderWithStore({ listConvives: failThenSucceed });
+    const channel = ConviveChannel.refusingWith(new Error('Firestore indisponible'));
+    renderWithStore({ observeConvives: channel.observeConvives });
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Impossible de charger les convives.',
     );
     expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
 
+    channel.willEmit([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]);
     await user.click(screen.getByRole('button', { name: /réessayer/i }));
 
     expect(await screen.findByText('Aurélie')).toBeInTheDocument();
-    expect(count).toBe(2);
+    expect(channel.subscriptions).toBe(2);
+    expect(channel.live).toBe(1);
   });
 
   it('hors ligne, l’app dit qu’elle n’a pas pu charger le foyer — jamais qu’il est vide', async () => {
-    const offline: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: offline });
+    renderWithStore({
+      observeConvives: ConviveChannel.refusingWith(RepositoryUnavailableError.create())
+        .observeConvives,
+    });
 
     expect(
       await screen.findByText('Aucune connexion — le foyer n’a pas pu être chargé.'),
@@ -122,17 +143,28 @@ describe('ConvivesContainer', () => {
     expect(screen.queryByText('Impossible de charger les convives.')).not.toBeInTheDocument();
   });
 
-  it('le constat hors-ligne ne propose pas « Réessayer », contrairement à l’échec de chargement', async () => {
-    const offline: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: offline });
+  it('le constat hors-ligne propose « Réessayer », qui rouvre un abonnement neuf et ramène le foyer', async () => {
+    const user = userEvent.setup();
+    const channel = ConviveChannel.refusingWith(RepositoryUnavailableError.create());
+    renderWithStore({ observeConvives: channel.observeConvives });
     await screen.findByText('Aucune connexion — le foyer n’a pas pu être chargé.');
 
-    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    channel.willEmit([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]);
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(await screen.findByText('Aurélie')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Aucune connexion — le foyer n’a pas pu être chargé.'),
+    ).not.toBeInTheDocument();
+    expect(channel.subscriptions).toBe(2);
+    expect(channel.live).toBe(1);
   });
 
   it('le constat hors-ligne est annoncé poliment, jamais comme une alerte', async () => {
-    const offline: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: offline });
+    renderWithStore({
+      observeConvives: ConviveChannel.refusingWith(RepositoryUnavailableError.create())
+        .observeConvives,
+    });
     await screen.findByText('Aucune connexion — le foyer n’a pas pu être chargé.');
 
     expect(screen.getByRole('status')).toHaveTextContent(
@@ -142,8 +174,10 @@ describe('ConvivesContainer', () => {
   });
 
   it('l’état hors-ligne n’expose pas le formulaire d’ajout', async () => {
-    const offline: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: offline });
+    renderWithStore({
+      observeConvives: ConviveChannel.refusingWith(RepositoryUnavailableError.create())
+        .observeConvives,
+    });
     await screen.findByText('Aucune connexion — le foyer n’a pas pu être chargé.');
 
     expect(screen.queryByLabelText(/prénom/i)).not.toBeInTheDocument();
@@ -152,20 +186,17 @@ describe('ConvivesContainer', () => {
 
   it('ajoute le prénom saisi : le use case reçoit ce prénom et le convive rejoint la liste affichée', async () => {
     const user = userEvent.setup();
-    const add = capturingAdd();
-    renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
-      ]).fn,
-      addConvive: add.fn,
-    });
+    const wiring = writingToAnObservedRepository([
+      ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
+    ]);
+    renderWithStore(wiring.deps);
     await screen.findByText('Aurélie');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
 
     expect(await screen.findByText('Rory')).toBeInTheDocument();
-    expect(add.captured()).toEqual({ id: 'generated-id-1', name: 'Rory' });
+    expect(wiring.captured()).toEqual({ id: 'generated-id-1', name: 'Rory' });
     const names = screen
       .getAllByRole('listitem')
       .map((item) => within(item).getByTestId('convive-name').textContent);
@@ -174,13 +205,12 @@ describe('ConvivesContainer', () => {
 
   it('affiche le convive ajouté à sa place alphabétique dans la liste rendue, pas en fin de liste', async () => {
     const user = userEvent.setup();
-    renderWithStore({
-      listConvives: spyReturning([
+    renderWithStore(
+      writingToAnObservedRepository([
         ConviveBuilder.aConvive().withId('c-1').withName('Emma').build(),
         ConviveBuilder.aConvive().withId('c-2').withName('Zoé').build(),
-      ]).fn,
-      addConvive: capturingAdd().fn,
-    });
+      ]).deps,
+    );
     await screen.findByText('Emma');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Élise');
@@ -195,7 +225,7 @@ describe('ConvivesContainer', () => {
   });
 
   it('désactive « Ajouter » tant que le champ prénom est vide, sans message d’erreur', async () => {
-    renderWithStore({ listConvives: spyReturning([]).fn });
+    renderWithStore({ ...observing([]) });
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     expect(screen.getByRole('button', { name: /ajouter/i })).toBeDisabled();
@@ -204,7 +234,7 @@ describe('ConvivesContainer', () => {
 
   it('garde « Ajouter » désactivé quand le champ ne contient que des espaces', async () => {
     const user = userEvent.setup();
-    renderWithStore({ listConvives: spyReturning([]).fn });
+    renderWithStore({ ...observing([]) });
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     await user.type(screen.getByLabelText(/prénom/i), '   ');
@@ -215,10 +245,7 @@ describe('ConvivesContainer', () => {
 
   it('vide le champ prénom après un ajout réussi', async () => {
     const user = userEvent.setup();
-    renderWithStore({
-      listConvives: spyReturning([]).fn,
-      addConvive: capturingAdd().fn,
-    });
+    renderWithStore(writingToAnObservedRepository([]).deps);
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
@@ -232,9 +259,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const failingAdd: AddConvive = () => Promise.reject(new Error('Firestore indisponible'));
     renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
-      ]).fn,
+      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
       addConvive: failingAdd,
     });
     await screen.findByText('Aurélie');
@@ -255,9 +280,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
-      ]).fn,
+      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
       addConvive: unacknowledged,
     });
     await screen.findByText('Aurélie');
@@ -280,9 +303,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
-      ]).fn,
+      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
       addConvive: unacknowledged,
     });
     await screen.findByText('Aurélie');
@@ -301,7 +322,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
-      listConvives: spyReturning([]).fn,
+      ...observing([]),
       addConvive: unacknowledged,
     });
     await screen.findByText('Personne dans le foyer pour le moment.');
@@ -318,7 +339,7 @@ describe('ConvivesContainer', () => {
   it('le constat d’ajout non confirmé nomme le convive, élidé quand le prénom l’exige', async () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: spyReturning([]).fn, addConvive: unacknowledged });
+    renderWithStore({ ...observing([]), addConvive: unacknowledged });
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Aurélie');
@@ -332,7 +353,7 @@ describe('ConvivesContainer', () => {
   it('le constat d’ajout non confirmé n’élide pas devant une consonne', async () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ listConvives: spyReturning([]).fn, addConvive: unacknowledged });
+    renderWithStore({ ...observing([]), addConvive: unacknowledged });
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
@@ -346,7 +367,7 @@ describe('ConvivesContainer', () => {
   it('le champ prénom est verrouillé pendant un ajout en vol', async () => {
     const user = userEvent.setup();
     const neverResolvingAdd: AddConvive = () => new Promise<Convive>(() => {});
-    renderWithStore({ listConvives: spyReturning([]).fn, addConvive: neverResolvingAdd });
+    renderWithStore({ ...observing([]), addConvive: neverResolvingAdd });
     await screen.findByText('Personne dans le foyer pour le moment.');
 
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
@@ -359,12 +380,10 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
-      ]).fn,
+      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
       addConvive: unacknowledged,
     });
-    const sheet = renderWith(store);
+    const sheet = renderSubscribed(store);
     await screen.findByText('Aurélie');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
@@ -388,7 +407,7 @@ describe('ConvivesContainer', () => {
       ids.push(input.id);
       return Promise.reject(RepositoryUnavailableError.create());
     };
-    renderWithStore({ listConvives: spyReturning([]).fn, addConvive: unacknowledged });
+    renderWithStore({ ...observing([]), addConvive: unacknowledged });
     await screen.findByText('Personne dans le foyer pour le moment.');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
@@ -409,11 +428,11 @@ describe('ConvivesContainer', () => {
     };
     let count = 0;
     const store = createTestStore({
-      listConvives: spyReturning([]).fn,
+      ...observing([]),
       addConvive: unacknowledged,
       newConviveId: () => `draft-${(count += 1)}`,
     });
-    const sheet = renderWith(store);
+    const sheet = renderSubscribed(store);
     await screen.findByText('Personne dans le foyer pour le moment.');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
@@ -437,7 +456,7 @@ describe('ConvivesContainer', () => {
       return new Promise<Convive>(() => {});
     };
     renderWithStore({
-      listConvives: spyReturning([]).fn,
+      ...observing([]),
       addConvive: neverResolvingAdd,
     });
     await screen.findByText('Personne dans le foyer pour le moment.');
@@ -453,7 +472,7 @@ describe('ConvivesContainer', () => {
   });
 
   it('offre à chaque convive de quoi le renommer et de quoi le retirer', async () => {
-    renderWithStore({ listConvives: spyReturning(twoConvives()).fn });
+    renderWithStore({ ...observing(twoConvives()) });
     await screen.findByText('Aurélie');
 
     expect(screen.getByRole('button', { name: 'Renommer Aurélie' })).toBeInTheDocument();
@@ -464,7 +483,7 @@ describe('ConvivesContainer', () => {
 
   it('renommer ouvre un champ pré-rempli avec le prénom actuel, sur cette ligne seulement', async () => {
     const user = userEvent.setup();
-    renderWithStore({ listConvives: spyReturning(twoConvives()).fn });
+    renderWithStore({ ...observing(twoConvives()) });
     await screen.findByText('Aurélie');
 
     await user.click(screen.getByRole('button', { name: 'Renommer Lionel' }));
@@ -481,7 +500,7 @@ describe('ConvivesContainer', () => {
       return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
     };
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: renameConviveUseCase,
     });
     await screen.findByText('Aurélie');
@@ -505,7 +524,7 @@ describe('ConvivesContainer', () => {
       return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
     };
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: renameConviveUseCase,
     });
     await screen.findByText('Aurélie');
@@ -525,7 +544,7 @@ describe('ConvivesContainer', () => {
       called += 1;
     };
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       removeConvive: removeConviveUseCase,
     });
     await screen.findByText('Aurélie');
@@ -544,7 +563,7 @@ describe('ConvivesContainer', () => {
       captured.input = input;
     };
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       removeConvive: removeConviveUseCase,
     });
     await screen.findByText('Aurélie');
@@ -564,7 +583,7 @@ describe('ConvivesContainer', () => {
       called += 1;
     };
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       removeConvive: removeConviveUseCase,
     });
     await screen.findByText('Aurélie');
@@ -581,7 +600,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       removeConvive: offlineRemove,
     });
     await screen.findByText('Aurélie');
@@ -601,7 +620,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const failingRename: RenameConvive = () => Promise.reject(new Error('Firestore indisponible'));
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: failingRename,
     });
     await screen.findByText('Aurélie');
@@ -620,7 +639,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const { store, unmount } = renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       removeConvive: offlineRemove,
     });
     await screen.findByText('Aurélie');
@@ -640,7 +659,7 @@ describe('ConvivesContainer', () => {
 
   it('rouvrir la sheet ne retrouve aucune ligne ouverte en édition', async () => {
     const user = userEvent.setup();
-    const { store, unmount } = renderWithStore({ listConvives: spyReturning(twoConvives()).fn });
+    const { store, unmount } = renderWithStore({ ...observing(twoConvives()) });
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Renommer Lionel' }));
     expect(screen.getByLabelText('Nouveau prénom pour Lionel')).toBeInTheDocument();
@@ -654,7 +673,7 @@ describe('ConvivesContainer', () => {
 
   it('n’autorise pas à enregistrer un prénom identique à celui déjà porté', async () => {
     const user = userEvent.setup();
-    renderWithStore({ listConvives: spyReturning(twoConvives()).fn });
+    renderWithStore({ ...observing(twoConvives()) });
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Renommer Lionel' }));
 
@@ -669,7 +688,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: pendingRename,
     });
     await screen.findByText('Aurélie');
@@ -688,7 +707,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: pendingRename,
     });
     await screen.findByText('Aurélie');
@@ -704,7 +723,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const offlineRename: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: offlineRename,
     });
     await screen.findByText('Aurélie');
@@ -724,7 +743,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const offlineRemove: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       removeConvive: offlineRemove,
     });
     await screen.findByText('Aurélie');
@@ -740,7 +759,7 @@ describe('ConvivesContainer', () => {
   });
 
   it('au repos, les actions de toutes les lignes sont disponibles', async () => {
-    renderWithStore({ listConvives: spyReturning(twoConvives()).fn });
+    renderWithStore({ ...observing(twoConvives()) });
     await screen.findByText('Aurélie');
 
     expect(screen.getByRole('button', { name: 'Renommer Aurélie' })).toBeEnabled();
@@ -751,7 +770,7 @@ describe('ConvivesContainer', () => {
     const user = userEvent.setup();
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const { store, unmount } = renderWithStore({
-      listConvives: spyReturning(twoConvives()).fn,
+      ...observing(twoConvives()),
       renameConvive: pendingRename,
     });
     await screen.findByText('Aurélie');
@@ -768,9 +787,7 @@ describe('ConvivesContainer', () => {
 
   it('garde des libellés de boutons de longueur fixe, quel que soit le prénom', async () => {
     renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Christophe').build(),
-      ]).fn,
+      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Christophe').build()]),
     });
     await screen.findByText('Christophe');
 
@@ -782,9 +799,7 @@ describe('ConvivesContainer', () => {
 
   it('affiche le prénom long en entier, sans le tronquer', async () => {
     renderWithStore({
-      listConvives: spyReturning([
-        ConviveBuilder.aConvive().withId('c-1').withName('Bénédicte').build(),
-      ]).fn,
+      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Bénédicte').build()]),
     });
     await screen.findByText('Bénédicte');
 

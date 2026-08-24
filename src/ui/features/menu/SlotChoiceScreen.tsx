@@ -176,6 +176,9 @@ function Body(props: SlotChoiceScreenProps) {
       return (
         <CenteredState>
           <StateText role="status">{view.message}</StateText>
+          <RetryButton type="button" onClick={props.onRetry}>
+            Réessayer
+          </RetryButton>
         </CenteredState>
       );
     case 'empty':
