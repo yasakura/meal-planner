@@ -28,6 +28,13 @@ Une ADR n'est pas un commentaire déplacé : le commentaire dit « pourquoi cett
 Quand un fait n'a pas pu être re-vérifié au moment de la rédaction, l'ADR le dit à l'endroit où il
 est cité. Un chiffre repris d'un commentaire est attribué à sa source.
 
+Une décision qui porte sur un **outil externe** cite sa source là où elle l'affirme : l'**URL** de sa
+documentation, ou la **mesure** qu'on a faite. Les deux valent, les confondre non —
+[ADR 0038](0038-une-ecriture-acceptee-localement-est-reussie.md) sépare le mécanisme prouvé au banc
+du code d'erreur lu dans la documentation, et
+[ADR 0037](0037-sonder-indexeddb-avant-d-y-adosser-le-cache.md) le cas mesuré du multi-onglets
+seulement documenté. Une source citée se vérifie en revue ; « as-tu lu la doc ? » ne se vérifie pas.
+
 ## Convention de nommage
 
 `NNNN-titre-en-kebab.md`, numéro sur 4 chiffres, **attribué dans l'ordre de création** et jamais
