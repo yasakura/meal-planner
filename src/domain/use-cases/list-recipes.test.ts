@@ -49,6 +49,7 @@ describe('listRecipesUseCase', () => {
       save: () => Promise.resolve(),
       findAll: () => Promise.resolve(source),
       findById: () => Promise.resolve(undefined),
+      observeAll: () => () => {},
     };
     const listRecipes = listRecipesUseCase({ recipeRepository: repo });
 

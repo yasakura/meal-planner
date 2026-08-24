@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -6,11 +7,11 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type Recipe } from '../../../domain/entities/recipe';
-import { type GetRecipe } from '../../../domain/use-cases/get-recipe';
 import { type UpdateRecipe, type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { loadRecipeDetail } from '../recipe-detail/recipe-detail-slice';
+import { RecipesSubscription } from '../../RecipesSubscription';
+import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { createTestStore } from '../../../test/create-test-store';
 import { RecipeEditContainer } from './RecipeEditContainer';
 
@@ -41,61 +42,50 @@ const GRATIN: Recipe = RecipeBuilder.aRecipe()
   .withInstructions('Émincer, napper, cuire.')
   .build();
 
-function renderOn(store: TestStore, id = 'r-1') {
+type Overrides = { channel?: RecipeChannel; updateRecipe?: UpdateRecipe };
+
+function storePour(overrides?: Overrides): TestStore {
+  const channel = overrides?.channel ?? RecipeChannel.seededWith([GRATIN]);
+  return createTestStore({
+    observeRecipes: channel.observeRecipes,
+    ...(overrides?.updateRecipe ? { updateRecipe: overrides.updateRecipe } : {}),
+  });
+}
+
+function renderRouteAt(store: TestStore, path: string, avant?: ReactNode) {
   return render(
     <Provider store={store}>
-      <MemoryRouter initialEntries={[`/catalogue/${id}/modifier`]}>
-        <Routes>
-          <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
-        </Routes>
+      <MemoryRouter initialEntries={[path]}>
+        <RecipesSubscription>
+          {avant}
+          <Routes>
+            <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
+          </Routes>
+        </RecipesSubscription>
       </MemoryRouter>
     </Provider>,
   );
 }
 
-function renderWithStore(
-  overrides?: { getRecipe?: GetRecipe; updateRecipe?: UpdateRecipe },
-  id = 'r-1',
-) {
-  const store = createTestStore({
-    getRecipe: overrides?.getRecipe ?? (async () => GRATIN),
-    ...(overrides?.updateRecipe ? { updateRecipe: overrides.updateRecipe } : {}),
-  });
+function renderOn(store: TestStore, id = 'r-1') {
+  return renderRouteAt(store, `/catalogue/${id}/modifier`);
+}
+
+function renderWithStore(overrides?: Overrides, id = 'r-1') {
+  const store = storePour(overrides);
   return { store, ...renderOn(store, id) };
 }
 
-function renderAtPath(
-  path: string,
-  overrides?: { getRecipe?: GetRecipe; updateRecipe?: UpdateRecipe },
-) {
-  const store = createTestStore({
-    getRecipe: overrides?.getRecipe ?? (async () => GRATIN),
-    ...(overrides?.updateRecipe ? { updateRecipe: overrides.updateRecipe } : {}),
-  });
-  return {
-    store,
-    ...render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>,
-    ),
-  };
+function renderAtPath(path: string, overrides?: Overrides) {
+  const store = storePour(overrides);
+  return { store, ...renderRouteAt(store, path) };
 }
 
 function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
-  return render(
-    <Provider store={store}>
-      <MemoryRouter initialEntries={[`/catalogue/${depuis}/modifier`]}>
-        <Link to={`/catalogue/${cible}/modifier`}>Autre recette</Link>
-        <Routes>
-          <Route path="/catalogue/:id/modifier" element={<RecipeEditContainer />} />
-        </Routes>
-      </MemoryRouter>
-    </Provider>,
+  return renderRouteAt(
+    store,
+    `/catalogue/${depuis}/modifier`,
+    <Link to={`/catalogue/${cible}/modifier`}>Autre recette</Link>,
   );
 }
 
@@ -140,7 +130,7 @@ describe('RecipeEditContainer', () => {
 
   it('ouvre un champ préparation vide quand la recette n’en a pas', async () => {
     const sansPreparation = RecipeBuilder.aRecipe().withId('r-1').withoutInstructions().build();
-    renderWithStore({ getRecipe: async () => sansPreparation });
+    renderWithStore({ channel: RecipeChannel.seededWith([sansPreparation]) });
 
     expect(await screen.findByRole('textbox', { name: /préparation/i })).toHaveValue('');
   });
@@ -382,22 +372,20 @@ describe('RecipeEditContainer', () => {
   });
 
   it('affiche « Recette introuvable » et aucun formulaire pour un identifiant inconnu', async () => {
-    renderWithStore({ getRecipe: async () => undefined }, 'r-inconnue');
+    renderWithStore(undefined, 'r-inconnue');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Recette introuvable');
     expect(screen.queryByLabelText(/titre/i)).not.toBeInTheDocument();
   });
 
   it('affiche un indicateur de chargement tant que la recette n’est pas lue', () => {
-    const jamais: GetRecipe = () => new Promise<Recipe>(() => {});
-    renderWithStore({ getRecipe: jamais });
+    renderWithStore({ channel: RecipeChannel.silent() });
 
     expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
   });
 
   it('hors ligne, dit qu’il n’a pas pu charger la recette — jamais qu’elle est introuvable', async () => {
-    const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
-    renderWithStore({ getRecipe: horsLigne });
+    renderWithStore({ channel: RecipeChannel.refusingWith(RepositoryUnavailableError.create()) });
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Aucune connexion — la recette n’a pas pu être chargée.',
@@ -406,8 +394,9 @@ describe('RecipeEditContainer', () => {
   });
 
   it('venu du menu, l’écran sans recette ramène au MENU', async () => {
-    const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
-    renderAtPath('/catalogue/r-1/modifier?depuis=menu', { getRecipe: horsLigne });
+    renderAtPath('/catalogue/r-1/modifier?depuis=menu', {
+      channel: RecipeChannel.refusingWith(RepositoryUnavailableError.create()),
+    });
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Aucune connexion — la recette n’a pas pu être chargée.',
@@ -417,8 +406,9 @@ describe('RecipeEditContainer', () => {
   });
 
   it('sans provenance, l’écran sans recette ramène au CATALOGUE', async () => {
-    const horsLigne: GetRecipe = () => Promise.reject(RepositoryUnavailableError.create());
-    renderAtPath('/catalogue/r-1/modifier', { getRecipe: horsLigne });
+    renderAtPath('/catalogue/r-1/modifier', {
+      channel: RecipeChannel.refusingWith(RepositoryUnavailableError.create()),
+    });
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Aucune connexion — la recette n’a pas pu être chargée.',
@@ -492,30 +482,6 @@ describe('RecipeEditContainer', () => {
     expect(store.getState().recipeEdit.status).toBe('idle');
   });
 
-  it('ne préremplit jamais avec la recette précédemment consultée', async () => {
-    const autre = RecipeBuilder.aRecipe().withId('r-2').withTitle('Omelette aux herbes').build();
-    let resoudre: ((recipe: Recipe) => void) | undefined;
-    const getRecipe: GetRecipe = (id) =>
-      id === 'r-2'
-        ? Promise.resolve(autre)
-        : new Promise<Recipe>((resolve) => {
-            resoudre = resolve;
-          });
-    const store = createTestStore({ getRecipe });
-
-    await store.dispatch(loadRecipeDetail('r-2'));
-    expect(store.getState().recipeDetail.recipe?.title).toBe('Omelette aux herbes');
-
-    renderOn(store, 'r-1');
-
-    expect(screen.queryByDisplayValue('Omelette aux herbes')).not.toBeInTheDocument();
-
-    if (!resoudre) throw new Error('la lecture de r-1 n’a pas été déclenchée');
-    resoudre(GRATIN);
-    expect(await screen.findByDisplayValue('Gratin dauphinois')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('Omelette aux herbes')).not.toBeInTheDocument();
-  });
-
   it('une modification qui aboutit après le départ de l’utilisateur ne le ramène pas au détail', async () => {
     const user = userEvent.setup();
     let resoudre: ((recipe: Recipe) => void) | undefined;
@@ -540,7 +506,7 @@ describe('RecipeEditContainer', () => {
     const user = userEvent.setup();
     const omelette = RecipeBuilder.aRecipe().withId('r-2').withTitle('Omelette aux herbes').build();
     const store = createTestStore({
-      getRecipe: async (id) => (id === 'r-2' ? omelette : GRATIN),
+      observeRecipes: RecipeChannel.seededWith([GRATIN, omelette]).observeRecipes,
       updateRecipe: () => Promise.reject(new Error('Firestore indisponible')),
     });
     renderOnWithLinkTo(store, 'r-2');

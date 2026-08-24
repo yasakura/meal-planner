@@ -44,3 +44,7 @@ export function createRecipe(props: RecipeProps): Recipe {
     ...(instructions !== undefined && instructions !== '' ? { instructions } : {}),
   });
 }
+
+export function sortRecipesByTitle(recipes: readonly Recipe[]): Recipe[] {
+  return [...recipes].sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+}

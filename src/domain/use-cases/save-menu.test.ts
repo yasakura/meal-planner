@@ -181,6 +181,7 @@ describe('saveMenuUseCase', () => {
       save: (menu) => depot.save(menu),
       findAll: () => depot.findAll(),
       remove: () => Promise.reject(new Error('purge indisponible')),
+      observeAll: () => () => {},
     };
     const saveMenu = saveMenuUseCase({ menuRepository, clock: horlogeSurAujourdHui() });
 
@@ -194,6 +195,7 @@ describe('saveMenuUseCase', () => {
       save: (menu) => depot.save(menu),
       findAll: () => Promise.reject(new Error('lecture indisponible')),
       remove: (dateDebut) => depot.remove(dateDebut),
+      observeAll: () => () => {},
     };
     const saveMenu = saveMenuUseCase({ menuRepository, clock: horlogeSurAujourdHui() });
 
@@ -219,6 +221,7 @@ describe('saveMenuUseCase', () => {
       save: () => Promise.reject(new Error('boom')),
       findAll: () => Promise.resolve([]),
       remove: () => Promise.resolve(),
+      observeAll: () => () => {},
     };
     const saveMenu = saveMenuUseCase({ menuRepository, clock: horlogeSurAujourdHui() });
 

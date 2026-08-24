@@ -6,7 +6,7 @@ import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
-import { FROM_MENU, FROM_MENU_DRAFT } from '../recipe-detail/recipe-detail-origin';
+import { FROM_MENU, FROM_MENU_DRAFT } from '../catalogue/recipe-detail-origin';
 import { menuDays } from './menu-days';
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });

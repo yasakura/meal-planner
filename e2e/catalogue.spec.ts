@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { attendreAtteignable } from './support/atteignabilite';
-import { failReads, failWrites, restore } from './support/e2e-controls';
+import { failWrites } from './support/e2e-controls';
 
 const TITRES_TRIES = ['Curry de pois chiches', 'Gratin dauphinois', 'Omelette aux herbes'];
 
@@ -50,6 +50,13 @@ test.describe('Catalogue', () => {
     await page.getByRole('link', { name: '← Recettes' }).click();
     await expect(page).toHaveURL('/catalogue');
     await expect(titresDuCatalogue(page)).toHaveText(TITRES_TRIES);
+  });
+
+  test('une recette qui n’existe pas le dit, sans piéger l’utilisateur', async ({ page }) => {
+    await page.goto('/catalogue/recette-qui-nexiste-pas');
+
+    await expect(page.getByRole('alert')).toHaveText('Recette introuvable');
+    await expect(page.getByRole('link', { name: '← Recettes' })).toBeVisible();
   });
 
   test('une recette créée se retrouve au catalogue, avec son contenu', async ({ page }) => {
@@ -150,72 +157,6 @@ test.describe('Catalogue', () => {
       'Soupe de courge',
       'Tarte aux poireaux',
     ]);
-  });
-});
-
-test.describe('Catalogue hors ligne', () => {
-  test('dit qu’il n’y a pas de connexion, jamais qu’il n’y a pas de recette, et laisse ajouter', async ({
-    page,
-  }) => {
-    await page.goto('/menu');
-    await failReads(page);
-    await page.click('nav a[href="/catalogue"]');
-
-    await expect(page.getByRole('status')).toHaveText(
-      'Aucune connexion — le catalogue n’a pas pu être chargé.',
-    );
-
-    await expect(page.getByText('Aucune recette')).toHaveCount(0);
-    await expect(page.getByText('Crée ta première recette pour la retrouver ici')).toHaveCount(0);
-
-    await expect(page.getByRole('link', { name: 'Ajouter une recette' })).toBeVisible();
-  });
-
-  test('au retour du réseau, la liste revient et ne garde aucune trace du constat', async ({
-    page,
-  }) => {
-    await page.goto('/menu');
-    await failReads(page);
-    await page.click('nav a[href="/catalogue"]');
-    await expect(page.getByRole('status')).toHaveText(
-      'Aucune connexion — le catalogue n’a pas pu être chargé.',
-    );
-    await expect(page.getByText('Aucune connexion')).toHaveCount(1);
-
-    await restore(page);
-    await page.click('nav a[href="/menu"]');
-    await page.click('nav a[href="/catalogue"]');
-
-    await expect(titresDuCatalogue(page)).toHaveText(TITRES_TRIES);
-    await expect(page.getByText('Aucune connexion')).toHaveCount(0);
-  });
-
-  test('une recette qui n’existe pas le dit, sans piéger l’utilisateur', async ({ page }) => {
-    await page.goto('/catalogue/recette-qui-nexiste-pas');
-
-    await expect(page.getByRole('alert')).toHaveText('Recette introuvable');
-    await expect(page.getByRole('link', { name: '← Recettes' })).toBeVisible();
-  });
-
-  test('sur le détail d’une recette, le lien retour reste accessible', async ({ page }) => {
-    await page.goto('/catalogue');
-    await expect(titresDuCatalogue(page)).toHaveText(TITRES_TRIES);
-
-    await failReads(page);
-    await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
-
-    await expect(page.getByRole('status')).toHaveText(
-      'Aucune connexion — la recette n’a pas pu être chargée.',
-    );
-    await expect(page.getByText('Recette introuvable')).toHaveCount(0);
-
-    const retour = page.getByRole('link', { name: '← Recettes' });
-    await expect(retour).toBeVisible();
-
-    await restore(page);
-    await retour.click();
-    await expect(page).toHaveURL('/catalogue');
-    await expect(titresDuCatalogue(page)).toHaveText(TITRES_TRIES);
   });
 });
 

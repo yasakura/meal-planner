@@ -8,6 +8,7 @@ import { BottomTabBar } from './BottomTabBar';
 import { ScrollToTop } from './ScrollToTop';
 import { TopBar } from './TopBar';
 import { LogoutButton } from './features/auth/LogoutButton';
+import { CatalogueLinkBanner } from './features/catalogue/CatalogueLinkBanner';
 import { ConvivesContainer } from './features/convives/ConvivesContainer';
 import { tokens } from './theme/tokens';
 
@@ -45,6 +46,7 @@ export function Layout() {
         <Outlet />
       </Content>
       <StickyTabBar>
+        <CatalogueLinkBanner />
         <BottomTabBar />
       </StickyTabBar>
       <AccountSheet

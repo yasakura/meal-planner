@@ -20,7 +20,8 @@ import {
   type AppThunkAsync,
   type RootState,
 } from '../../store/store';
-import { FROM_MENU_DRAFT } from '../recipe-detail/recipe-detail-origin';
+import { recipesObserved } from '../catalogue/catalogue-slice';
+import { FROM_MENU_DRAFT } from '../catalogue/recipe-detail-origin';
 import { menuDays, type MenuDay } from './menu-days';
 import { MENU_SAVED_MESSAGE, MENU_UNAVAILABLE_NOTICE, type MenuSaveNotice } from './menu-notice';
 import { withSlotChoice } from './slot-choice';
@@ -38,7 +39,6 @@ export type MenuState = {
   startDate: CalendarDate | null;
   startDateFloor: CalendarDate | null;
   startDateRefused: boolean;
-  latestRecipesRequestId: string | null;
   saveStatus: MenuSaveStatus;
   latestSaveRequestId: string | null;
 };
@@ -54,7 +54,6 @@ const initialState: MenuState = {
   startDate: null,
   startDateFloor: null,
   startDateRefused: false,
-  latestRecipesRequestId: null,
   saveStatus: 'idle',
   latestSaveRequestId: null,
 };
@@ -69,6 +68,10 @@ function startDateOf(state: MenuState): CalendarDate {
 
 function displayedMenuOf(state: MenuState): Menu {
   return state.menu as Menu;
+}
+
+function recipesOf(state: MenuState): Recipe[] {
+  return state.recipes as Recipe[];
 }
 
 function startDateFloorOf(state: MenuState): CalendarDate {
@@ -100,15 +103,6 @@ export const generateMenu = createAsyncThunk<
     const dateDebut = startDateOf(thunkApi.getState().menu);
     const menu = await thunkApi.extra.generateMenu({ days, dateDebut });
     return { menu, recipes };
-  },
-);
-
-export const refreshMenuRecipes = createAsyncThunk<Recipe[], void, AppThunkApiConfig>(
-  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
-  'menu/refreshMenuRecipes',
-  async (_arg, thunkApi) => thunkApi.extra.listRecipes(),
-  {
-    condition: (_arg, { getState }) => getState().menu.menu !== null,
   },
 );
 
@@ -165,14 +159,13 @@ const menuSlice = createSlice({
     menuOpened(state, action: PayloadAction<CalendarDate>) {
       state.startDateFloor = action.payload;
       state.startDateRefused = false;
-      if (state.status === 'unavailable' && state.menu === null) state.status = 'idle';
+      if (state.status === 'unavailable') state.status = 'idle';
       forgetSettledSave(state);
     },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(generateMenu.pending, (state, action) => {
-        state.latestRecipesRequestId = action.meta.requestId;
+      .addCase(generateMenu.pending, (state) => {
         state.status = 'loading';
         state.menu = null;
         state.recipes = null;
@@ -194,17 +187,9 @@ const menuSlice = createSlice({
         state.status = 'error';
         state.error = action.payload ?? action.error.message ?? null;
       })
-      .addCase(refreshMenuRecipes.pending, (state, action) => {
-        state.latestRecipesRequestId = action.meta.requestId;
-      })
-      .addCase(refreshMenuRecipes.fulfilled, (state, action) => {
-        if (action.meta.requestId !== state.latestRecipesRequestId) return;
-        state.status = 'success';
+      .addCase(recipesObserved, (state, action) => {
+        if (state.menu === null) return;
         state.recipes = action.payload as typeof state.recipes;
-      })
-      .addCase(refreshMenuRecipes.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestRecipesRequestId) return;
-        state.status = isRepositoryUnavailable(action.error) ? 'unavailable' : 'error';
       })
       .addCase(saveMenu.pending, (state, action) => {
         state.saveStatus = 'saving';
@@ -242,10 +227,9 @@ export function menuStartDateSelected(iso: string): AppThunk {
   };
 }
 
-export function menuCreateScreenOpened(): AppThunkAsync {
-  return async (dispatch, _getState, extra) => {
+export function menuCreateScreenOpened(): AppThunk {
+  return (dispatch, _getState, extra) => {
     dispatch(menuOpened(extra.clock.today()));
-    await dispatch(refreshMenuRecipes());
   };
 }
 
@@ -295,10 +279,10 @@ export type MenuCreationView =
   | { status: 'draft'; days: MenuDay[]; saveNotice: MenuSaveNotice | null; saveDisabled: boolean };
 
 export function menuCreationViewOf(state: MenuState): MenuCreationView {
-  if (state.menu !== null && state.recipes !== null) {
+  if (state.menu !== null) {
     return {
       status: 'draft',
-      days: withSlotChoice(menuDays(state.menu, state.recipes, FROM_MENU_DRAFT)),
+      days: withSlotChoice(menuDays(state.menu, recipesOf(state), FROM_MENU_DRAFT)),
       saveNotice: menuSaveNoticeOf(state),
       saveDisabled: isSaveInFlight(state),
     };

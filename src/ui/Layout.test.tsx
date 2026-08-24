@@ -1,15 +1,18 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { Layout } from './Layout';
 import { createTestStore } from '../test/create-test-store';
+import { recipesObservationFailed, recipesObserved } from './features/catalogue/catalogue-slice';
 
-function renderLayout() {
-  const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
+const LIEN_PERDU = 'Lien perdu — l’écran ne se met plus à jour.';
+
+function renderLayout(store = createTestStore({ authGateway: StubAuthGateway.withoutSession() })) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={['/catalogue']}>
@@ -55,5 +58,18 @@ describe('Layout', () => {
     expect(screen.getByText('Compte')).toBeInTheDocument();
     expect(screen.getByText(/Environnement : dev/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /se déconnecter/i })).toBeInTheDocument();
+  });
+
+  it('pose le bandeau de lien perdu juste au-dessus de la barre d’onglets, et rien tant que le lien tient', () => {
+    const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
+    store.dispatch(recipesObserved([RecipeBuilder.aRecipe().withId('r-1').build()]));
+    renderLayout(store);
+    expect(screen.getByRole('navigation').previousElementSibling).toBeNull();
+
+    act(() => {
+      store.dispatch(recipesObservationFailed({ unavailable: true }));
+    });
+
+    expect(screen.getByRole('navigation').previousElementSibling).toHaveTextContent(LIEN_PERDU);
   });
 });

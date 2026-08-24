@@ -24,7 +24,6 @@ export default defineConfig({
         'src/ui/test-utils/**',
         'src/**/*.d.ts',
         'src/main.tsx',
-        'src/config/firebase.ts',
         'src/ui/theme/global-style.ts',
       ],
       thresholds: {

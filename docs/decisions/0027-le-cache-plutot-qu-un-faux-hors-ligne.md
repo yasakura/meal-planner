@@ -2,6 +2,7 @@
 
 - **Statut** : en vigueur — remplace [ADR 0003](0003-lectures-serveur-plutot-que-cache.md)
 - **Date** : 2026-08-21
+- **Amendée le** : 2026-08-23 (conséquences 1 et 2 : le cache est devenu persistant)
 - **Portée** : `src/data/firestore-recipe-repository.ts`, `src/data/firestore-menu-repository.ts`,
   `src/data/firestore-convive-repository.ts`, `src/config/firebase.ts`
 
@@ -88,12 +89,13 @@ un comportement qu'on vient d'écrire.
   initialise par `getFirestore(app)`, donc un cache **mémoire**, sans persistance IndexedDB. Après un
   rechargement de page ou à froid, le cache est vide et `getDocs` doit joindre le serveur. Le
   symptôme rapporté (Recettes → Menu → Recettes) est couvert ; le **démarrage hors ligne ne l'est
-  pas**.
+  pas**. — _Renversé par l'[amendement du 2026-08-23](#amendement-du-2026-08-23--le-cache-est-devenu-persistant-et-cette-page-a-cessé-dêtre-vraie)._
 - Couvrir aussi le démarrage à froid demanderait
   `initializeFirestore(app, { localCache: persistentLocalCache() })`. C'est une **alternative
   écartée pour l'instant**, pas un travail en cours : personne ne l'a mesurée, et elle rouvre la
   question d'interface qu'[ADR 0003](0003-lectures-serveur-plutot-que-cache.md) refusait déjà de
-  trancher — distinguer à l'écran une donnée fraîche d'une donnée de cache.
+  trancher — distinguer à l'écran une donnée fraîche d'une donnée de cache. — _Prise, mesurée et
+  retenue par l'[amendement du 2026-08-23](#amendement-du-2026-08-23--le-cache-est-devenu-persistant-et-cette-page-a-cessé-dêtre-vraie)._
 - **Hors ligne avec un cache rempli, l'application montre désormais les données de la session** au
   lieu du message « Aucune connexion ». C'est un changement de comportement assumé, décidé par
   l'utilisateur.
@@ -101,3 +103,26 @@ un comportement qu'on vient d'écrire.
   écritures, [ADR 0002](0002-borne-d-acquittement-des-ecritures.md)) **reste en place** et n'est pas
   concerné : il traite une lecture qui rampe, pas un abandon en 2 ms. Il n'a été ni remplacé, ni
   déplacé par cette décision.
+
+## Amendement du 2026-08-23 — le cache est devenu persistant, et cette page a cessé d'être vraie
+
+Branche `iter-53-observation`. Le dépôt initialise désormais Firestore par `initializeFirestore`
+avec `persistentLocalCache`, derrière une sonde synchrone, avec repli mémoire — c'est
+[ADR 0037](0037-sonder-indexeddb-avant-d-y-adosser-le-cache.md), qui porte la mesure.
+
+**Ce qui est devenu faux ci-dessus**, et l'était pendant tout un lot avant qu'on le voie :
+
+- « initialise par `getFirestore(app)`, donc un cache **mémoire**, sans persistance IndexedDB » —
+  vrai de la seule **branche de repli**, celle que la sonde emprunte quand IndexedDB est refusée ;
+- « le **démarrage hors ligne ne l'est pas** » — couvert, sur un cache rempli ;
+- « **alternative écartée pour l'instant** … personne ne l'a mesurée » — mesurée, et prise.
+
+**Ce qui ne bouge pas : la décision.** Les lectures passent toujours par `getDocs` et `getDoc`, et
+la mesure des 2 ms qui l'a produite n'est infirmée par rien. La page reste **en vigueur**, et n'est
+pas « remplacée par 0037 » : le sort réservé à [ADR 0003](0003-lectures-serveur-plutot-que-cache.md),
+dont la `Décision` avait été révoquée en entier. Ici seules deux **conséquences** ont tourné.
+Écrire « remplacée » dirait au lecteur pressé qu'on est revenu à `getDocsFromServer`, ce qui est le
+contraire de la vérité.
+
+Un cache persistant renforce même l'argument central de cette page : le repli sur le cache, qu'elle
+a rendu acceptable, a maintenant quelque chose à quoi se replier après un rechargement.

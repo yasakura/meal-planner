@@ -2,7 +2,7 @@ import { styled } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
-import { type BackLink } from '../recipe-detail/recipe-detail-origin';
+import { type BackLink } from '../catalogue/recipe-detail-origin';
 import { MenuSpinner } from './MenuScreen';
 import { type SlotChoiceItem, type SlotChoiceView } from './slot-choice';
 

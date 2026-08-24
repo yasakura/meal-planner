@@ -1,9 +1,8 @@
-import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { loadCatalogue, selectCatalogue } from '../catalogue/catalogue-slice';
-import { FROM_MENU_DRAFT } from '../recipe-detail/recipe-detail-origin';
+import { catalogueRetried, selectCatalogue } from '../catalogue/catalogue-slice';
+import { FROM_MENU_DRAFT } from '../catalogue/recipe-detail-origin';
 import { selectMenu, slotRecipeChosen } from './menu-slice';
 import { slotChoiceViewOf } from './slot-choice';
 import { slotAddressOf } from './slot-choice-route';
@@ -16,10 +15,6 @@ export function SlotChoiceContainer() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    dispatch(loadCatalogue());
-  }, [dispatch]);
-
   const choisir = (recipeId: string) => {
     dispatch(slotRecipeChosen({ address, recipeId }));
     void navigate(FROM_MENU_DRAFT.backLink.href);
@@ -30,7 +25,7 @@ export function SlotChoiceContainer() {
       view={slotChoiceViewOf(brouillon, catalogue, address)}
       back={FROM_MENU_DRAFT.backLink}
       onChoose={choisir}
-      onRetry={() => dispatch(loadCatalogue())}
+      onRetry={() => dispatch(catalogueRetried())}
     />
   );
 }

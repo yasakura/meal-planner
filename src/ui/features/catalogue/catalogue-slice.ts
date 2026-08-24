@@ -1,71 +1,73 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import { type Recipe } from '../../../domain/entities/recipe';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
-import { type AppThunkApiConfig, type RootState } from '../../store/store';
+import { type Unsubscribe } from '../../../domain/ports/unsubscribe';
+import { type AppDependencies, type AppDispatch, type RootState } from '../../store/store';
+import { authStateChanged } from '../auth/auth-slice';
 
-export type CatalogueStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
+export type CatalogueFailure = 'unreadable' | 'unavailable';
 
 export type CatalogueState = {
-  status: CatalogueStatus;
-  recipes: Recipe[];
-  error: string | null;
-  latestRequestId: string | null;
-  hasLoadedOnce: boolean;
+  recipes: Recipe[] | null;
+  failure: CatalogueFailure | null;
+  attempt: number;
 };
 
 const initialState: CatalogueState = {
-  status: 'idle',
-  recipes: [],
-  error: null,
-  latestRequestId: null,
-  hasLoadedOnce: false,
+  recipes: null,
+  failure: null,
+  attempt: 0,
 };
-
-export const loadCatalogue = createAsyncThunk<Recipe[], void, AppThunkApiConfig>(
-  // Stryker disable next-line StringLiteral : préfixe de type d'action, boilerplate RTK.
-  'catalogue/loadCatalogue',
-  async (_, thunkApi) => {
-    return await thunkApi.extra.listRecipes();
-  },
-);
 
 // Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
 const catalogueSlice = createSlice({
   // Stryker disable next-line StringLiteral : nom de slice, boilerplate RTK — mutant équivalent.
   name: 'catalogue',
   initialState,
-  reducers: {},
+  reducers: {
+    recipesObserved(state, action: PayloadAction<Recipe[]>) {
+      state.recipes = action.payload as typeof state.recipes;
+      state.failure = null;
+    },
+    recipesObservationFailed(state, action: PayloadAction<{ unavailable: boolean }>) {
+      state.failure = action.payload.unavailable ? 'unavailable' : 'unreadable';
+    },
+    catalogueRetried(state) {
+      state.failure = null;
+      state.attempt += 1;
+    },
+  },
   extraReducers: (builder) => {
-    builder
-      .addCase(loadCatalogue.pending, (state, action) => {
-        state.latestRequestId = action.meta.requestId;
-        state.status = 'loading';
-        state.error = null;
-      })
-      .addCase(loadCatalogue.fulfilled, (state, action) => {
-        if (action.meta.requestId !== state.latestRequestId) return;
-        state.status = 'success';
-        state.recipes = action.payload as typeof state.recipes;
-        state.error = null;
-        state.hasLoadedOnce = true;
-      })
-      .addCase(loadCatalogue.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestRequestId) return;
-        if (isRepositoryUnavailable(action.error)) {
-          state.status = 'unavailable';
-          state.error = null;
-          return;
-        }
-        state.status = 'error';
-        state.error = action.error.message ?? null;
-      });
+    builder.addCase(authStateChanged, (state, action) => {
+      if (action.payload !== null) return;
+      state.recipes = null;
+      state.failure = null;
+      state.attempt = 0;
+    });
   },
 });
 
 export const catalogueReducer = catalogueSlice.reducer;
 
+export const { catalogueRetried, recipesObservationFailed, recipesObserved } =
+  catalogueSlice.actions;
+
+export const observeRecipes =
+  () =>
+  (dispatch: AppDispatch, _getState: () => RootState, extra: AppDependencies): Unsubscribe =>
+    extra.observeRecipes(
+      (recipes) => dispatch(recipesObserved(recipes)),
+      (error) =>
+        dispatch(recipesObservationFailed({ unavailable: isRepositoryUnavailable(error) })),
+    );
+
 export const selectCatalogue = (state: RootState): CatalogueState => state.catalogue;
+
+export const selectCatalogueAttempt = (state: RootState): number => state.catalogue.attempt;
+
+export const selectCatalogueLinkLost = (state: RootState): boolean =>
+  state.catalogue.recipes !== null && state.catalogue.failure !== null;
 
 export type CatalogueView =
   | { status: 'loading' }
@@ -75,12 +77,12 @@ export type CatalogueView =
   | { status: 'loaded'; recipes: Recipe[] };
 
 export function catalogueViewOf(state: CatalogueState): CatalogueView {
-  if (state.hasLoadedOnce) {
+  if (state.recipes !== null) {
     return state.recipes.length === 0
       ? { status: 'empty' }
       : { status: 'loaded', recipes: state.recipes };
   }
-  if (state.status === 'unavailable') return { status: 'unavailable' };
-  if (state.status === 'error') return { status: 'error' };
+  if (state.failure === 'unavailable') return { status: 'unavailable' };
+  if (state.failure === 'unreadable') return { status: 'error' };
   return { status: 'loading' };
 }

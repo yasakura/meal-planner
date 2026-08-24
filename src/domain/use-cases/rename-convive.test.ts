@@ -132,6 +132,7 @@ describe('renameConviveUseCase', () => {
       findAll: () => Promise.resolve([]),
       updateExisting: () => Promise.reject(RepositoryUnavailableError.create()),
       remove: () => Promise.resolve(),
+      observeAll: () => () => {},
     };
     const renameConvive = renameConviveUseCase({ conviveRepository });
 
@@ -146,6 +147,7 @@ describe('renameConviveUseCase', () => {
       findAll: () => Promise.resolve([]),
       updateExisting: () => Promise.reject(new Error('boom')),
       remove: () => Promise.resolve(),
+      observeAll: () => () => {},
     };
     const renameConvive = renameConviveUseCase({ conviveRepository });
 

@@ -12,17 +12,21 @@ import { createSlot } from '../domain/entities/slot';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { App } from './App';
+import { RecipesSubscription } from './RecipesSubscription';
 import { generateMenu, saveMenu } from './features/menu/menu-slice';
 import { MENU_APRES_ENREGISTREMENT } from './features/menu/menu-return';
 import { type AppDependencies } from './store/store';
 import { createTestStore } from '../test/create-test-store';
+import { emitting } from './test-utils/recipe-channel';
 
 function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession(), ...overrides });
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
-        <App />
+        <RecipesSubscription>
+          <App />
+        </RecipesSubscription>
       </MemoryRouter>
     </Provider>,
   );
@@ -95,14 +99,14 @@ describe('App', () => {
 
   it('rend le formulaire de modification sur /catalogue/:id/modifier', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
-    renderAppAt('/catalogue/r-1/modifier', { getRecipe: async () => recipe });
+    renderAppAt('/catalogue/r-1/modifier', { observeRecipes: emitting([recipe]) });
 
     expect(await screen.findByRole('heading', { name: 'Modifier la recette' })).toBeInTheDocument();
   });
 
   it('/catalogue/:id rend le détail, pas le formulaire de modification', async () => {
     const recipe = RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build();
-    renderAppAt('/catalogue/r-1', { getRecipe: async () => recipe });
+    renderAppAt('/catalogue/r-1', { observeRecipes: emitting([recipe]) });
 
     expect(await screen.findByRole('heading', { name: 'Ratatouille' })).toBeInTheDocument();
     expect(screen.queryByText('Modifier la recette')).not.toBeInTheDocument();

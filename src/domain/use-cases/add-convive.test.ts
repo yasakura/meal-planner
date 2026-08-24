@@ -49,6 +49,7 @@ describe('addConviveUseCase', () => {
       findAll: () => Promise.resolve([]),
       updateExisting: () => Promise.resolve(undefined),
       remove: () => Promise.resolve(),
+      observeAll: () => () => {},
     };
     const addConvive = addConviveUseCase({ conviveRepository });
 

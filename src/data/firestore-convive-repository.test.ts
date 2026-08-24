@@ -6,6 +6,7 @@ import {
   doc,
   getDocs,
   getDocsFromServer,
+  onSnapshot,
   runTransaction,
   setDoc,
 } from 'firebase/firestore';
@@ -22,6 +23,7 @@ vi.mock('firebase/firestore', () => ({
   getDocs: vi.fn(),
   getDocsFromServer: vi.fn(),
   runTransaction: vi.fn(),
+  onSnapshot: vi.fn(),
 }));
 
 const mockedDoc = vi.mocked(doc);
@@ -31,6 +33,7 @@ const mockedCollection = vi.mocked(collection);
 const mockedRunTransaction = vi.mocked(runTransaction);
 const mockedGetDocs = vi.mocked(getDocs);
 const mockedGetDocsFromServer = vi.mocked(getDocsFromServer);
+const mockedOnSnapshot = vi.mocked(onSnapshot);
 
 function firestoreError(code: string): Error {
   return Object.assign(new Error(`firestore: ${code}`), { code, name: 'FirebaseError' });
@@ -364,4 +367,101 @@ describe('FirestoreConviveRepository', () => {
       await expect(repository.findAll()).rejects.toSatisfy(isRepositoryUnavailable);
     },
   );
+});
+
+type ObservedSnapshot = { docs: { id: string; data: () => unknown }[] };
+
+function abonnementCourant(): {
+  reference: unknown;
+  emettre: (snapshot: ObservedSnapshot) => void;
+  echouer: (error: unknown) => void;
+} {
+  const [reference, emettre, echouer] = mockedOnSnapshot.mock.calls[0] as unknown as [
+    unknown,
+    (snapshot: ObservedSnapshot) => void,
+    (error: unknown) => void,
+  ];
+  return { reference, emettre, echouer };
+}
+
+describe("FirestoreConviveRepository — observation de la collection 'convives'", () => {
+  const db = { marker: 'db-sentinel' } as unknown as Firestore;
+  const aurelie = ConviveBuilder.aConvive().withId('convive-a').withName('Aurélie').build();
+  const benoit = ConviveBuilder.aConvive().withId('convive-b').withName('Benoît').build();
+  const documentDe = (convive: typeof aurelie) => ({
+    id: convive.id,
+    data: () => conviveToDocument(convive),
+  });
+
+  beforeEach(() => {
+    mockedCollection.mockReset();
+    mockedOnSnapshot.mockReset();
+    mockedOnSnapshot.mockReturnValue(vi.fn() as never);
+  });
+
+  it("observeAll s'abonne à la collection 'convives' et livre chaque instantané mappé, à chaque émission", () => {
+    const collectionRef = { marker: 'collection-ref-sentinel' };
+    mockedCollection.mockReturnValue(collectionRef as never);
+    const listener = vi.fn();
+
+    FirestoreConviveRepository.create(db).observeAll(listener, vi.fn());
+    const { reference, emettre } = abonnementCourant();
+    emettre({ docs: [documentDe(aurelie)] });
+    emettre({ docs: [documentDe(aurelie), documentDe(benoit)] });
+
+    expect(mockedCollection).toHaveBeenCalledWith(db, 'convives');
+    expect(reference).toBe(collectionRef);
+    expect(listener).toHaveBeenNthCalledWith(1, [aurelie]);
+    expect(listener).toHaveBeenNthCalledWith(2, [aurelie, benoit]);
+  });
+
+  it('observeAll traduit une écoute impossible faute de réseau en indisponibilité de dépôt', () => {
+    mockedCollection.mockReturnValue({} as never);
+    const echecs: unknown[] = [];
+
+    FirestoreConviveRepository.create(db).observeAll(vi.fn(), (error) => echecs.push(error));
+    abonnementCourant().echouer(firestoreError('unavailable'));
+
+    expect(echecs).toHaveLength(1);
+    expect(echecs[0]).toSatisfy(isRepositoryUnavailable);
+  });
+
+  it("observeAll ne traduit pas un refus de permission en indisponibilité : l'erreur remonte telle quelle", () => {
+    mockedCollection.mockReturnValue({} as never);
+    const refus = firestoreError('permission-denied');
+    const echecs: unknown[] = [];
+
+    FirestoreConviveRepository.create(db).observeAll(vi.fn(), (error) => echecs.push(error));
+    abonnementCourant().echouer(refus);
+
+    expect(echecs).toEqual([refus]);
+  });
+
+  it('observeAll rend le désabonnement Firestore, et ne le déclenche pas de lui-même', () => {
+    mockedCollection.mockReturnValue({} as never);
+    const desabonnement = vi.fn();
+    mockedOnSnapshot.mockReturnValue(desabonnement as never);
+
+    const stop = FirestoreConviveRepository.create(db).observeAll(vi.fn(), vi.fn());
+
+    expect(desabonnement).not.toHaveBeenCalled();
+    stop();
+    expect(desabonnement).toHaveBeenCalledTimes(1);
+  });
+
+  it("observeAll ne pose aucune borne d'attente : un abonnement muet ne devient jamais une indisponibilité", () => {
+    vi.useFakeTimers();
+    try {
+      mockedCollection.mockReturnValue({} as never);
+      const onError = vi.fn();
+
+      FirestoreConviveRepository.create(db, { readTimeoutMs: 10 }).observeAll(vi.fn(), onError);
+      vi.advanceTimersByTime(60_000);
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

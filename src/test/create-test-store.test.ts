@@ -6,12 +6,9 @@ import { createRepas } from '../domain/entities/repas';
 import { createSlot } from '../domain/entities/slot';
 import { IngredientBuilder } from '../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
-import { loadCatalogue, selectCatalogue } from '../ui/features/catalogue/catalogue-slice';
+import { observeRecipes, selectCatalogue } from '../ui/features/catalogue/catalogue-slice';
 import { addConvive, loadConvives, selectConvives } from '../ui/features/convives/convives-slice';
-import {
-  loadRecipeDetail,
-  selectRecipeDetail,
-} from '../ui/features/recipe-detail/recipe-detail-slice';
+import { recipeOfRoute } from '../ui/features/recipe-detail/recipe-detail-states';
 import { generateMenu, saveMenu } from '../ui/features/menu/menu-slice';
 import { loadSavedMenus, selectSavedMenus } from '../ui/features/menu/saved-menus-slice';
 import { createRecipe } from '../ui/features/recipe/recipe-slice';
@@ -58,9 +55,11 @@ describe('createTestStore', () => {
         convivesReference: 6,
       }),
     );
-    await store.dispatch(loadRecipeDetail('r-1'));
+    store.dispatch(observeRecipes());
 
-    expect(selectRecipeDetail(store.getState()).recipe?.title).toBe('Gratin dauphinois');
+    expect(recipeOfRoute(selectCatalogue(store.getState()), 'r-1')?.title).toBe(
+      'Gratin dauphinois',
+    );
   });
 
   it('câble les use-cases recettes sur un même repository : une recette créée apparaît dans le catalogue', async () => {
@@ -72,9 +71,9 @@ describe('createTestStore', () => {
         ingredients: [IngredientBuilder.anIngredient().build()],
       }),
     );
-    await store.dispatch(loadCatalogue());
+    store.dispatch(observeRecipes());
 
-    expect(selectCatalogue(store.getState()).recipes.map((recipe) => recipe.title)).toEqual([
+    expect(selectCatalogue(store.getState()).recipes?.map((recipe) => recipe.title)).toEqual([
       'Tarte tatin',
     ]);
   });

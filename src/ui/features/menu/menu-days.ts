@@ -1,7 +1,7 @@
 import { type Creneau } from '../../../domain/entities/creneau';
 import { type Menu, type SlotAddress } from '../../../domain/entities/menu';
 import { type Recipe } from '../../../domain/entities/recipe';
-import { type Origin } from '../recipe-detail/recipe-detail-origin';
+import { type Origin } from '../catalogue/recipe-detail-origin';
 import { menuDayLabel } from './menu-day-label';
 
 export type SlotChoiceLink = { href: string; label: string };
