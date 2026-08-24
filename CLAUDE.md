@@ -217,6 +217,13 @@ Le critère n'est ni l'importance ni l'irréversibilité : c'est **est-ce que la
 
 En cas de doute sur la catégorie : **trancher, et exposer la décision** avec ce qu'elle écarte.
 
+### Avant de trancher, aller voir dehors
+
+- **Avant d'ajouter de la machinerie autour d'une bibliothèque tierce** — bornes d'attente, arbitrage de course, états de repli, files maison — aller voir ce qu'elle offre nativement. Un outil qui résiste indique souvent qu'on lui demande l'inverse de ce pour quoi il est fait.
+- **Avant une décision de conception durable**, regarder l'état de l'art plutôt que de le réinventer. On l'adopte, ou on s'en écarte **sciemment** — jamais par ignorance. S'en écarter en le sachant est le résultat recherché : l'état de l'art veut un toast pour une écriture rejetée, on garde le bandeau persistant parce que notre refus est définitif là où le leur est rejoué (ADR 0038).
+- **Motif mesuré** : six chargeurs, quatre machines à cinq états et huit gardes anti-course sont nés d'avoir traité Firestore comme une API REST — supprimés en deux jours au profit de trois lignes d'abonnement natif (ADR 0037, ADR 0038, commit `7e8ba3a`). À l'inverse, « une écriture hors ligne doit-elle s'annoncer réussie ? » traînait depuis des semaines : tranchée en dix minutes, en lisant la doc de l'outil et l'état de l'art.
+- Aucun lint ne dira qu'on utilise une base de données à contresens : la seule trace vérifiable est la **source citée** par l'ADR (`docs/decisions/README.md`).
+
 ### Rester chirurgical
 
 - Chaque ligne modifiée doit se rattacher à la demande.
