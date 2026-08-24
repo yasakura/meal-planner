@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { renameConviveUseCase } from './rename-convive';
 import { InMemoryConviveRepository } from '../test-doubles/in-memory-convive-repository';
 import { ConviveBuilder } from '../test-builders/convive.builder';
+import { type Convive } from '../entities/convive';
 import { type ConviveRepository } from '../ports/convive-repository';
-import { RepositoryUnavailableError } from '../errors/repository-unavailable-error';
 
 async function foyerSeedeAvecRoryEtAurelie(): Promise<InMemoryConviveRepository> {
   const conviveRepository = InMemoryConviveRepository.create();
@@ -93,22 +93,23 @@ describe('renameConviveUseCase', () => {
     expect(conviveRepository.byId('c2')?.name).toBe('Aurélie');
   });
 
-  it('refuse de renommer un convive qui n’existe pas', async () => {
+  it('renommer un convive inconnu ne le crée pas : c’est le serveur qui refusera l’écriture', async () => {
     const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
     const renameConvive = renameConviveUseCase({ conviveRepository });
 
-    await expect(renameConvive({ id: 'inconnu', name: 'Aurélia' })).rejects.toThrow(
-      "Le convive à renommer n'existe pas",
-    );
+    await renameConvive({ id: 'inconnu', name: 'Aurélia' });
+
+    expect(conviveRepository.byId('inconnu')).toBeUndefined();
+    expect((await conviveRepository.findAll()).map((c) => c.id).sort()).toEqual(['c1', 'c2']);
   });
 
-  it('ne ressuscite pas un convive supprimé entre-temps', async () => {
+  it('ne ressuscite pas un convive supprimé entre-temps : rien n’est recréé', async () => {
     const conviveRepository = await foyerSeedeAvecRoryEtAurelie();
     await conviveRepository.remove('c2');
     const saveCountAvant = conviveRepository.saveCount;
     const renameConvive = renameConviveUseCase({ conviveRepository });
 
-    await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow();
+    await renameConvive({ id: 'c2', name: 'Aurélia' });
 
     expect(conviveRepository.saveCount).toBe(saveCountAvant);
     const foyer = await conviveRepository.findAll();
@@ -126,31 +127,37 @@ describe('renameConviveUseCase', () => {
     expect(conviveRepository.saveCount).toBe(saveCountAvant);
   });
 
-  it('propage la panne du dépôt, sans la traduire en absence', async () => {
-    const conviveRepository: ConviveRepository = {
-      save: () => Promise.resolve(),
-      findAll: () => Promise.resolve([]),
-      updateExisting: () => Promise.reject(RepositoryUnavailableError.create()),
-      remove: () => Promise.resolve(),
-      observeAll: () => () => {},
-    };
-    const renameConvive = renameConviveUseCase({ conviveRepository });
-
-    await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow(
-      "Le dépôt n'a pas répondu.",
-    );
-  });
-
   it('propage une erreur quelconque du dépôt', async () => {
     const conviveRepository: ConviveRepository = {
       save: () => Promise.resolve(),
       findAll: () => Promise.resolve([]),
-      updateExisting: () => Promise.reject(new Error('boom')),
+      updateOnlyIfExists: () => Promise.reject(new Error('boom')),
       remove: () => Promise.resolve(),
       observeAll: () => () => {},
     };
     const renameConvive = renameConviveUseCase({ conviveRepository });
 
     await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).rejects.toThrow('boom');
+  });
+
+  it("le renommage n'interroge pas le dépôt : il écrit le nom voulu, sans lecture préalable", async () => {
+    const ecritures: Convive[] = [];
+    const conviveRepository: ConviveRepository = {
+      save: () => Promise.reject(new Error('un renommage n’est pas une création')),
+      findAll: () => Promise.reject(new Error('aucune lecture ne doit être demandée')),
+      updateOnlyIfExists: (convive) => {
+        ecritures.push(convive);
+        return Promise.resolve();
+      },
+      remove: () => Promise.resolve(),
+      observeAll: () => () => {},
+    };
+    const renameConvive = renameConviveUseCase({ conviveRepository });
+
+    await expect(renameConvive({ id: 'c2', name: 'Aurélia' })).resolves.toEqual({
+      id: 'c2',
+      name: 'Aurélia',
+    });
+    expect(ecritures).toEqual([{ id: 'c2', name: 'Aurélia' }]);
   });
 });

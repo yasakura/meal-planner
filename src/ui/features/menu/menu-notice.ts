@@ -2,4 +2,4 @@ export const MENU_UNAVAILABLE_NOTICE = 'Aucune connexion — le menu n’a pas p
 
 export const MENU_SAVED_MESSAGE = 'Menu enregistré';
 
-export type MenuSaveNotice = { tone: 'success' | 'error' | 'unconfirmed'; message: string };
+export type MenuSaveNotice = { tone: 'success' | 'error'; message: string };

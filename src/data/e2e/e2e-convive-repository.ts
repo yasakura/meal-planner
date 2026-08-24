@@ -5,7 +5,7 @@ import { type Unsubscribe } from '../../domain/ports/unsubscribe';
 import { type E2eFailureSwitch } from './e2e-failure-switch';
 
 export class E2eConviveRepository implements ConviveRepository {
-  private readonly convives: Map<string, Convive>;
+  private convives: Map<string, Convive>;
 
   private readonly listeners = new Set<(convives: Convive[]) => void>();
 
@@ -23,11 +23,10 @@ export class E2eConviveRepository implements ConviveRepository {
     return new E2eConviveRepository(convives, failures);
   }
 
-  async save(convive: Convive): Promise<void> {
-    this.failures.guardWrite();
-    await this.failures.serverAck();
-    this.convives.set(convive.id, convive);
-    this.emit();
+  save(convive: Convive): Promise<void> {
+    return this.accepteLocalement(() => {
+      this.convives.set(convive.id, convive);
+    });
   }
 
   async findAll(): Promise<Convive[]> {
@@ -35,26 +34,17 @@ export class E2eConviveRepository implements ConviveRepository {
     return this.snapshot();
   }
 
-  async updateExisting(
-    id: string,
-    transform: (existing: Convive) => Convive,
-  ): Promise<Convive | undefined> {
-    this.failures.guardWrite();
-    await this.failures.serverAck();
-    const existing = this.convives.get(id);
-    if (existing === undefined) return undefined;
-    transform(existing);
-    const updated = transform(existing);
-    this.convives.set(id, updated);
-    this.emit();
-    return updated;
+  updateOnlyIfExists(convive: Convive): Promise<void> {
+    return this.accepteLocalement(() => {
+      if (!this.convives.has(convive.id)) return;
+      this.convives.set(convive.id, convive);
+    });
   }
 
-  async remove(id: string): Promise<void> {
-    this.failures.guardWrite();
-    await this.failures.serverAck();
-    this.convives.delete(id);
-    this.emit();
+  remove(id: string): Promise<void> {
+    return this.accepteLocalement(() => {
+      this.convives.delete(id);
+    });
   }
 
   observeAll(
@@ -67,6 +57,17 @@ export class E2eConviveRepository implements ConviveRepository {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  private accepteLocalement(ecriture: () => void): Promise<void> {
+    const avantEcriture = new Map(this.convives);
+    ecriture();
+    this.emit();
+    this.failures.refuseAfterwards(() => {
+      this.convives = avantEcriture;
+      this.emit();
+    });
+    return Promise.resolve();
   }
 
   private snapshot(): Convive[] {

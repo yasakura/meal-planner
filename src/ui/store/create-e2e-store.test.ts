@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { createCalendarDate } from '../../domain/entities/calendar-date';
 import { IngredientBuilder } from '../../domain/test-builders/ingredient.builder';
@@ -11,6 +11,7 @@ import { generateMenu, saveMenu, selectMenu } from '../features/menu/menu-slice'
 import { recipeOfRoute } from '../features/recipe-detail/recipe-detail-states';
 import { updateRecipe } from '../features/recipe/recipe-edit-slice';
 import { createRecipe } from '../features/recipe/recipe-slice';
+import { selectWriteRejected } from '../features/writes/write-rejections-slice';
 import { createE2eStore, type E2eHost } from './create-e2e-store';
 
 type TestHost = E2eHost & { __e2e?: E2eControls };
@@ -180,28 +181,32 @@ describe('createE2eStore', () => {
     expect(selectConvives(store.getState()).convives).toHaveLength(4);
   });
 
-  it('enregistre le menu sur son dépôt e2e, et fait échouer l’écriture à la demande', async () => {
+  it('enregistre le menu sur son dépôt e2e : accepté tout de suite, même quand le serveur refusera', async () => {
     const host = hostAt('');
     const store = createE2eStore(host);
     await store.dispatch(generateMenu(3));
 
     controlsOf(host).failWrites();
     await store.dispatch(saveMenu());
-    expect(selectMenu(store.getState()).saveStatus).toBe('unconfirmed');
 
-    controlsOf(host).restore();
-    await store.dispatch(saveMenu());
     expect(selectMenu(store.getState()).saveStatus).toBe('saved');
+    expect(selectWriteRejected(store.getState())).toBe(false);
+    await vi.waitFor(() => {
+      expect(selectWriteRejected(store.getState())).toBe(true);
+    });
   });
 
-  it('fait échouer les écritures à la demande, sans toucher aux lectures', async () => {
+  it('un refus d’écriture arrivé après coup lève le constat global, sans toucher aux lectures', async () => {
     const host = hostAt('');
     const store = createE2eStore(host);
 
     controlsOf(host).failWrites();
     await store.dispatch(addConvive({ name: 'Zoé' }));
 
-    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).addStatus).toBe('idle');
+    await vi.waitFor(() => {
+      expect(selectWriteRejected(store.getState())).toBe(true);
+    });
 
     store.dispatch(observeConvives());
     expect(selectConvives(store.getState()).received).toBe(true);

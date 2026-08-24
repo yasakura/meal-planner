@@ -1,6 +1,6 @@
 # ADR 0001 — Une écriture a trois issues : faite, refusée, non acquittée
 
-- **Statut** : en vigueur
+- **Statut** : en vigueur, amendée le 2026-08-24 par [ADR 0038](0038-une-ecriture-acceptee-localement-est-reussie.md) — l’écriture n’a plus que DEUX issues, `unconfirmed` a disparu ; la symétrie en lecture et l’absence de verrou restent en vigueur
 - **Date** : 2026-08-12 (`bbc9f0f`, étendu au catalogue le 2026-08-13 `8e79f41`, au menu et aux
   recettes le 2026-08-20 `aa305fb` / `0f954f4`)
 - **Portée** : `src/ui/features/**`, `src/domain/errors/`, `src/domain/ports/convive-repository.ts`,

@@ -5,7 +5,6 @@ import { Provider } from 'react-redux';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
-import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type CreateRecipe, type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
@@ -49,12 +48,9 @@ function capturingSpy() {
   return { fn, state };
 }
 
-const CONSTAT_NON_ACQUITTE =
-  'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
-
 const CONSTAT_ECHEC = 'Impossible d’enregistrer la recette.';
 
-const nonAcquitte: CreateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+const refuse: CreateRecipe = () => Promise.reject(new Error('Firestore refuse'));
 
 const ID_DU_FORMULAIRE = 'generated-id-1';
 
@@ -506,52 +502,51 @@ describe('RecipeCreateContainer', () => {
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
-  it('hors ligne, l’enregistrement n’est pas confirmé : le constat est poli et n’accuse aucun échec', async () => {
+  it('un enregistrement refusé alerte et ne quitte pas le formulaire', async () => {
     const user = userEvent.setup();
-    renderWithStore(nonAcquitte);
+    renderWithStore(refuse);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_NON_ACQUITTE);
-    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(CONSTAT_ECHEC);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('après un enregistrement non acquitté, « Enregistrer » se réarme et la saisie est conservée', async () => {
+  it('après un enregistrement refusé, « Enregistrer » se réarme et la saisie est conservée', async () => {
     const user = userEvent.setup();
-    renderWithStore(nonAcquitte);
+    renderWithStore(refuse);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_NON_ACQUITTE);
+    await screen.findByText(CONSTAT_ECHEC);
 
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
     expect(screen.getByLabelText(/titre/i)).toHaveValue('Poulet rôti');
     expect(screen.getByLabelText(/nom/i)).toHaveValue('Poulet');
   });
 
-  it('le réseau revenu, réenvoyer réécrit le même document et solde le constat', async () => {
+  it('le refus levé, réenvoyer réécrit le même document et solde le constat', async () => {
     const user = userEvent.setup();
     const ids: string[] = [];
     let enPanne = true;
     const depot: CreateRecipe = async (input) => {
       ids.push(input.id);
-      if (enPanne) throw RepositoryUnavailableError.create();
+      if (enPanne) throw new Error('Firestore refuse');
       return RecipeBuilder.aRecipe().build();
     };
     renderWithStore(depot);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_NON_ACQUITTE);
+    await screen.findByText(CONSTAT_ECHEC);
 
     enPanne = false;
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Recette enregistrée.');
-    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
     expect(ids).toEqual([ID_DU_FORMULAIRE, ID_DU_FORMULAIRE]);
   });
 
@@ -607,18 +602,18 @@ describe('RecipeCreateContainer', () => {
     await vi.waitFor(() => expect(ids).toEqual(['id-2', 'id-4']));
   });
 
-  it('remonté sur le MÊME store après un enregistrement non acquitté, rouvre un formulaire neuf', async () => {
+  it('remonté sur le MÊME store après un enregistrement refusé, rouvre un formulaire neuf', async () => {
     const user = userEvent.setup();
-    const { store, unmount } = renderWithStore(nonAcquitte);
+    const { store, unmount } = renderWithStore(refuse);
 
     await saisirUneRecette(user);
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    expect(await screen.findByText(CONSTAT_NON_ACQUITTE)).toBeInTheDocument();
+    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
 
     unmount();
     renderOn(store);
 
-    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/titre/i)).toHaveValue('');
     expect(store.getState().recipe.status).toBe('idle');
   });

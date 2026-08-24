@@ -1,6 +1,6 @@
 # ADR 0002 — Borner l'acquittement des écritures Firestore
 
-- **Statut** : en vigueur
+- **Statut** : remplacée par [ADR 0038](0038-une-ecriture-acceptee-localement-est-reussie.md)
 - **Date** : 2026-08-20 (`3ca6e1c`, `fix(data): borner l'acquittement des écritures Firestore`)
 - **Portée** : `src/data/` — tous les adapters Firestore
 

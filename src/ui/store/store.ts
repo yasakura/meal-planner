@@ -28,6 +28,7 @@ import { menuInitialState, menuReducer } from '../features/menu/menu-slice';
 import { savedMenusReducer } from '../features/menu/saved-menus-slice';
 import { recipeEditReducer } from '../features/recipe/recipe-edit-slice';
 import { recipeInitialState, recipeReducer } from '../features/recipe/recipe-slice';
+import { writeRejectionsReducer } from '../features/writes/write-rejections-slice';
 
 export type AppDependencies = {
   authGateway: AuthGateway;
@@ -56,6 +57,7 @@ const rootReducer = combineReducers({
   menu: menuReducer,
   savedMenus: savedMenusReducer,
   convives: convivesReducer,
+  writeRejections: writeRejectionsReducer,
 });
 
 export function createStore(dependencies: AppDependencies) {

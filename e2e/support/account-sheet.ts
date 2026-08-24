@@ -18,7 +18,7 @@ export async function openAccountSheet(page: Page): Promise<void> {
 }
 
 export async function closeAccountSheet(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Fermer' }).click();
+  await page.locator(PANNEAU).getByRole('button', { name: 'Fermer' }).click();
 }
 
 export function accountSheetPanel(page: Page): Locator {
@@ -38,13 +38,23 @@ export async function armReopenDuringExit(page: Page, panneau: Prise): Promise<R
   return page.evaluateHandle(
     ({ panneau, compte }) => {
       const AU_REPOS = 'matrix(1, 0, 0, 1, 0, 0)';
-      const sortieCommencee = new Promise<void>((resolve) => {
+      const entreeAchevee = new Promise<void>((resolve) => {
         const guetter = () => {
-          if (getComputedStyle(panneau).transform === AU_REPOS) requestAnimationFrame(guetter);
-          else resolve();
+          if (getComputedStyle(panneau).transform === AU_REPOS) resolve();
+          else requestAnimationFrame(guetter);
         };
         requestAnimationFrame(guetter);
       });
+      const sortieCommencee = entreeAchevee.then(
+        () =>
+          new Promise<void>((resolve) => {
+            const guetter = () => {
+              if (getComputedStyle(panneau).transform === AU_REPOS) requestAnimationFrame(guetter);
+              else resolve();
+            };
+            requestAnimationFrame(guetter);
+          }),
+      );
       const fait = sortieCommencee
         .then(() => {
           const sortieTerminee = new Promise<void>((resolve) => {

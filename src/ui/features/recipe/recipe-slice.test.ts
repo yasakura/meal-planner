@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
 import { type Recipe } from '../../../domain/entities/recipe';
-import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type CreateRecipe, type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
 import { type NewRecipeId } from '../../../domain/use-cases/new-recipe-id';
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
@@ -36,7 +35,7 @@ function unSucces(): CreateRecipe {
   return async () => RecipeBuilder.aRecipe().build();
 }
 
-const nonAcquitte: CreateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+const refuse: CreateRecipe = () => Promise.reject(new Error('Firestore refuse'));
 
 describe('recipe slice', () => {
   it('un store neuf est idle, et porte déjà un identifiant de brouillon', () => {
@@ -107,15 +106,6 @@ describe('recipe slice', () => {
   it('l’ouverture d’un formulaire remet à idle un enregistrement en échec', async () => {
     const failing: CreateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({ createRecipe: failing });
-    await store.dispatch(createRecipe(anInput()));
-
-    store.dispatch(recipeFormScreenOpened());
-
-    expect(selectRecipeCreation(store.getState()).status).toBe('idle');
-  });
-
-  it('l’ouverture d’un formulaire efface un constat non acquitté', async () => {
-    const store = createTestStore({ createRecipe: nonAcquitte });
     await store.dispatch(createRecipe(anInput()));
 
     store.dispatch(recipeFormScreenOpened());
@@ -219,7 +209,7 @@ describe('recipe slice', () => {
     const abandonne = store.dispatch(createRecipe(anInput()));
     const courant = store.dispatch(createRecipe(anInput()));
     await courant;
-    lent.reject(RepositoryUnavailableError.create());
+    lent.reject(new Error('Firestore refuse'));
     await abandonne;
 
     expect(selectRecipeCreation(store.getState())).toEqual({
@@ -240,7 +230,7 @@ describe('recipe slice', () => {
 
     const abandonne = store.dispatch(createRecipe(anInput()));
     const courant = store.dispatch(createRecipe(anInput()));
-    lent.reject(RepositoryUnavailableError.create());
+    lent.reject(new Error('Firestore refuse'));
     await abandonne;
 
     expect(selectRecipeCreation(store.getState())).toEqual({
@@ -251,43 +241,27 @@ describe('recipe slice', () => {
     expect(selectIsCreationLocked(store.getState())).toBe(true);
   });
 
-  it('le dépôt qui n’a pas répondu : l’enregistrement n’est pas confirmé, il n’a pas échoué', async () => {
-    const store = createTestStore({ createRecipe: nonAcquitte });
-
-    const enregistrement = await store.dispatch(createRecipe(anInput()));
-
-    expect(selectRecipeCreation(store.getState())).toEqual({
-      status: 'unconfirmed',
-      draftId: ID_DU_STORE,
-      latestCreateRequestId: enregistrement.meta.requestId,
-    });
-  });
-
   const SUCCES = { tone: 'success', message: 'Recette enregistrée.' };
-  const PANNE = {
-    tone: 'unconfirmed',
-    message: 'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
-  };
   const ECHEC = { tone: 'error', message: 'Impossible d’enregistrer la recette.' };
 
   function constat(store: ReturnType<typeof createTestStore>) {
     return recipeCreateNoticeOf(selectRecipeCreation(store.getState()));
   }
 
-  it('un enregistrement non acquitté se constate poliment, et l’envoi se réarme', async () => {
-    const store = createTestStore({ createRecipe: nonAcquitte });
+  it('un enregistrement refusé se constate, et l’envoi se réarme', async () => {
+    const store = createTestStore({ createRecipe: refuse });
 
     await store.dispatch(createRecipe(anInput()));
 
-    expect(constat(store)).toEqual(PANNE);
+    expect(constat(store)).toEqual(ECHEC);
     expect(selectIsCreationLocked(store.getState())).toBe(false);
   });
 
-  it('un second envoi après un constat non acquitté réécrit le MÊME document', async () => {
+  it('un second envoi après un constat de refus réécrit le MÊME document', async () => {
     const ids: string[] = [];
     const spy: CreateRecipe = (input) => {
       ids.push(input.id);
-      return Promise.reject(RepositoryUnavailableError.create());
+      return Promise.reject(new Error('Firestore refuse'));
     };
     const store = createTestStore({ createRecipe: spy, newRecipeId: identifiantsSuccessifs() });
     store.dispatch(recipeFormScreenOpened());
@@ -323,15 +297,15 @@ describe('recipe slice', () => {
     expect(constat(store)).toEqual(SUCCES);
   });
 
-  it('un envoi qui aboutit chasse le constat non acquitté du précédent', async () => {
+  it('un envoi qui aboutit chasse le constat de refus du précédent', async () => {
     let enPanne = true;
     const spy: CreateRecipe = async () => {
-      if (enPanne) throw RepositoryUnavailableError.create();
+      if (enPanne) throw new Error('Firestore refuse');
       return RecipeBuilder.aRecipe().build();
     };
     const store = createTestStore({ createRecipe: spy });
     await store.dispatch(createRecipe(anInput()));
-    expect(constat(store)).toEqual(PANNE);
+    expect(constat(store)).toEqual(ECHEC);
 
     enPanne = false;
     await store.dispatch(createRecipe(anInput()));

@@ -28,7 +28,7 @@ import { withSlotChoice } from './slot-choice';
 
 export type MenuStatus = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
 
-export type MenuSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'unconfirmed';
+export type MenuSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export type MenuState = {
   status: MenuStatus;
@@ -203,7 +203,7 @@ const menuSlice = createSlice({
       })
       .addCase(saveMenu.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestSaveRequestId) return;
-        state.saveStatus = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
+        state.saveStatus = 'error';
       });
   },
 });
@@ -250,12 +250,6 @@ export const selectStartDateFloorIso = (state: RootState): string =>
 
 export function menuSaveNoticeOf(state: MenuState): MenuSaveNotice | null {
   if (state.saveStatus === 'saved') return { tone: 'success', message: MENU_SAVED_MESSAGE };
-  if (state.saveStatus === 'unconfirmed') {
-    return {
-      tone: 'unconfirmed',
-      message: 'Aucune connexion — l’enregistrement du menu n’a pas pu être confirmé.',
-    };
-  }
   if (state.saveStatus === 'error') {
     return { tone: 'error', message: 'Impossible d’enregistrer le menu.' };
   }

@@ -14,16 +14,15 @@ import {
   type RootState,
 } from '../../store/store';
 import { authStateChanged } from '../auth/auth-slice';
-import { elidedDe } from './french-elision';
 
 export type ConvivesFailure = 'unreadable' | 'unavailable';
 
-export type ConviveAddStatus = 'idle' | 'adding' | 'error' | 'unconfirmed';
+export type ConviveAddStatus = 'idle' | 'adding' | 'error';
 
-export type ConviveRenameStatus = 'idle' | 'renaming' | 'error' | 'unconfirmed';
-export type ConviveRemoveStatus = 'idle' | 'removing' | 'error' | 'unconfirmed';
+export type ConviveRenameStatus = 'idle' | 'renaming' | 'error';
+export type ConviveRemoveStatus = 'idle' | 'removing' | 'error';
 
-export type RowNotice = { tone: 'error' | 'unconfirmed'; message: string };
+export type RowNotice = { tone: 'error'; message: string };
 
 export type ConviveRow = {
   id: string;
@@ -43,7 +42,6 @@ export type ConvivesState = {
   attempt: number;
   addStatus: ConviveAddStatus;
   addError: string | null;
-  addSubjectName: string | null;
   draftConviveId: string | null;
   latestAddRequestId: string | null;
   renameStatus: ConviveRenameStatus;
@@ -62,7 +60,6 @@ const initialState: ConvivesState = {
   attempt: 0,
   addStatus: 'idle',
   addError: null,
-  addSubjectName: null,
   draftConviveId: null,
   latestAddRequestId: null,
   renameStatus: 'idle',
@@ -117,7 +114,6 @@ export const removeConvive = createAsyncThunk<void, RemoveConviveInput, AppThunk
 function restAddLifecycle(state: ConvivesState): void {
   state.addStatus = 'idle';
   state.addError = null;
-  state.addSubjectName = null;
 }
 
 function restRenameLifecycle(state: ConvivesState): void {
@@ -193,7 +189,6 @@ const convivesSlice = createSlice({
       .addCase(addConvive.pending, (state, action) => {
         state.latestAddRequestId = action.meta.requestId;
         state.addStatus = 'adding';
-        state.addSubjectName = action.meta.arg.name;
       })
       .addCase(addConvive.fulfilled, (state, action) => {
         if (action.meta.requestId !== state.latestAddRequestId) return;
@@ -202,11 +197,6 @@ const convivesSlice = createSlice({
       })
       .addCase(addConvive.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestAddRequestId) return;
-        if (isRepositoryUnavailable(action.error)) {
-          state.addStatus = 'unconfirmed';
-          state.addError = null;
-          return;
-        }
         state.addStatus = 'error';
         state.addError = action.error.message ?? null;
       })
@@ -224,7 +214,7 @@ const convivesSlice = createSlice({
       })
       .addCase(renameConvive.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestRenameRequestId) return;
-        state.renameStatus = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
+        state.renameStatus = 'error';
       })
       .addCase(removeConvive.pending, (state, action) => {
         state.latestRemoveRequestId = action.meta.requestId;
@@ -237,7 +227,7 @@ const convivesSlice = createSlice({
       })
       .addCase(removeConvive.rejected, (state, action) => {
         if (action.meta.requestId !== state.latestRemoveRequestId) return;
-        state.removeStatus = isRepositoryUnavailable(action.error) ? 'unconfirmed' : 'error';
+        state.removeStatus = 'error';
       });
   },
 });
@@ -301,27 +291,11 @@ export const selectIsAddInFlight = (state: RootState): boolean =>
   state.convives.addStatus === 'adding';
 
 function rowNotice(state: ConvivesState, convive: Convive): RowNotice | null {
-  if (state.editingConviveId === convive.id) {
-    if (state.renameStatus === 'error') {
-      return { tone: 'error', message: 'Impossible de renommer le convive.' };
-    }
-    if (state.renameStatus === 'unconfirmed') {
-      return {
-        tone: 'unconfirmed',
-        message: `Aucune connexion — le renommage ${elidedDe(convive.name)} n’a pas pu être confirmé.`,
-      };
-    }
+  if (state.editingConviveId === convive.id && state.renameStatus === 'error') {
+    return { tone: 'error', message: 'Impossible de renommer le convive.' };
   }
-  if (state.pendingRemovalId === convive.id) {
-    if (state.removeStatus === 'error') {
-      return { tone: 'error', message: 'Impossible de retirer le convive.' };
-    }
-    if (state.removeStatus === 'unconfirmed') {
-      return {
-        tone: 'unconfirmed',
-        message: `Aucune connexion — le retrait ${elidedDe(convive.name)} n’a pas pu être confirmé.`,
-      };
-    }
+  if (state.pendingRemovalId === convive.id && state.removeStatus === 'error') {
+    return { tone: 'error', message: 'Impossible de retirer le convive.' };
   }
   return null;
 }

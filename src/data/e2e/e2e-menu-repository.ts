@@ -6,7 +6,7 @@ import { type Unsubscribe } from '../../domain/ports/unsubscribe';
 import { type E2eFailureSwitch } from './e2e-failure-switch';
 
 export class E2eMenuRepository implements MenuRepository {
-  private readonly menus = new Map<string, Menu>();
+  private menus = new Map<string, Menu>();
   private readonly listeners = new Set<(menus: Menu[]) => void>();
 
   private constructor(private readonly failures: E2eFailureSwitch) {}
@@ -15,11 +15,14 @@ export class E2eMenuRepository implements MenuRepository {
     return new E2eMenuRepository(failures);
   }
 
-  async save(menu: Menu): Promise<void> {
-    this.failures.guardWrite();
-    await this.failures.serverAck();
+  save(menu: Menu): Promise<void> {
+    const avantEcriture = new Map(this.menus);
     this.menus.set(toIsoDate(menu.dateDebut), menu);
     this.emit();
+    this.failures.refuseAfterwards(() => {
+      this.rollbackTo(avantEcriture);
+    });
+    return Promise.resolve();
   }
 
   async findAll(): Promise<Menu[]> {
@@ -27,11 +30,14 @@ export class E2eMenuRepository implements MenuRepository {
     return this.snapshot();
   }
 
-  async remove(dateDebut: CalendarDate): Promise<void> {
-    this.failures.guardWrite();
-    await this.failures.serverAck();
+  remove(dateDebut: CalendarDate): Promise<void> {
+    const avantEcriture = new Map(this.menus);
     this.menus.delete(toIsoDate(dateDebut));
     this.emit();
+    this.failures.refuseAfterwards(() => {
+      this.rollbackTo(avantEcriture);
+    });
+    return Promise.resolve();
   }
 
   observeAll(listener: (menus: Menu[]) => void, onError: (error: unknown) => void): Unsubscribe {
@@ -41,6 +47,11 @@ export class E2eMenuRepository implements MenuRepository {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  private rollbackTo(avantEcriture: Map<string, Menu>): void {
+    this.menus = avantEcriture;
+    this.emit();
   }
 
   private snapshot(): Menu[] {

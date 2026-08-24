@@ -681,7 +681,6 @@ describe('MenuCreateContainer', () => {
   });
 
   const CONSTAT_ENREGISTRE = 'Menu enregistré';
-  const CONSTAT_PANNE = 'Aucune connexion — l’enregistrement du menu n’a pas pu être confirmé.';
   const CONSTAT_ECHEC = 'Impossible d’enregistrer le menu.';
 
   async function genererLeMenu(user: ReturnType<typeof userEvent.setup>) {
@@ -732,19 +731,19 @@ describe('MenuCreateContainer', () => {
     expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
   });
 
-  it('dépôt indisponible : l’écran dit que l’enregistrement n’est pas confirmé, sans rien réclamer', async () => {
+  it('un enregistrement refusé n’est pas une impasse : « Enregistrer » se réarme, sans « Réessayer »', async () => {
     const user = userEvent.setup();
     renderWithStore({
       generateMenu: async () => aMenu(),
       listRecipes: async () => twoRecipes(),
-      saveMenu: () => Promise.reject(RepositoryUnavailableError.create()),
+      saveMenu: () => Promise.reject(new Error('Firestore refuse')),
     });
     await arriveeAchevee();
     await genererLeMenu(user);
 
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_PANNE);
+    expect(await screen.findByRole('alert')).toHaveTextContent(CONSTAT_ECHEC);
     expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
   });

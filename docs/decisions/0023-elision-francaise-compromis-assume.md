@@ -1,8 +1,11 @@
 # ADR 0023 — L'élision française : se tromper sur les h aspirés, sciemment
 
-- **Statut** : en vigueur
+- **Statut** : caduque depuis le 2026-08-24 — son objet a disparu avec l'état `unconfirmed`
+  ([ADR 0038](0038-une-ecriture-acceptee-localement-est-reussie.md)) : plus aucun constat ne nomme
+  la personne concernée, `french-elision.ts` n'avait plus d'appelant et a été supprimé. La décision
+  n'est pas remplacée, elle n'a plus de sujet ; elle est conservée pour qui rouvrirait la question.
 - **Date** : 2026-08-12 (`bbc9f0f`), étendue aux constats de renommage et de retrait le 2026-08-14
-- **Portée** : `src/ui/features/convives/french-elision.ts`
+- **Portée** : plus aucune — le module a été supprimé le 2026-08-24
 
 ## Contexte
 

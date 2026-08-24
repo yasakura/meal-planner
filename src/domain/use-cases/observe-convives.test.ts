@@ -51,7 +51,7 @@ describe('observeConvivesUseCase', () => {
     const conviveRepository: ConviveRepository = {
       save: () => Promise.resolve(),
       findAll: () => Promise.resolve(source),
-      updateExisting: () => Promise.resolve(undefined),
+      updateOnlyIfExists: () => Promise.resolve(undefined),
       remove: () => Promise.resolve(),
       observeAll: (listener) => {
         listener(source);
@@ -71,7 +71,7 @@ describe('observeConvivesUseCase', () => {
     const conviveRepository: ConviveRepository = {
       save: () => Promise.resolve(),
       findAll: () => Promise.resolve([]),
-      updateExisting: () => Promise.resolve(undefined),
+      updateOnlyIfExists: () => Promise.resolve(undefined),
       remove: () => Promise.resolve(),
       observeAll: (_listener, onError) => {
         onError(new Error('boom'));

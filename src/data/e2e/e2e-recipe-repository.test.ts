@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { RepositoryUnavailableError } from '../../domain/errors/repository-unavailable-error';
 import { type Recipe } from '../../domain/entities/recipe';
@@ -10,24 +10,25 @@ const gratin = RecipeBuilder.aRecipe().withId('r-1').withTitle('Gratin').build()
 const curry = RecipeBuilder.aRecipe().withId('r-2').withTitle('Curry').build();
 const omelette = RecipeBuilder.aRecipe().withId('r-3').withTitle('Omelette').build();
 
+function sansPanne(): E2eFailureSwitch {
+  return E2eFailureSwitch.reporting(() => {});
+}
+
 describe('E2eRecipeRepository', () => {
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
-    const repository = E2eRecipeRepository.seededWith(
-      [gratin, curry, omelette],
-      E2eFailureSwitch.create(),
-    );
+    const repository = E2eRecipeRepository.seededWith([gratin, curry, omelette], sansPanne());
 
     expect(await repository.findAll()).toEqual([omelette, curry, gratin]);
   });
 
   it('rend undefined pour un id inconnu — une absence, pas une panne', async () => {
-    const repository = E2eRecipeRepository.seededWith([gratin], E2eFailureSwitch.create());
+    const repository = E2eRecipeRepository.seededWith([gratin], sansPanne());
 
     expect(await repository.findById('inconnu')).toBeUndefined();
   });
 
   it('rejette findAll avec RepositoryUnavailableError quand les lectures sont en panne', async () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eRecipeRepository.seededWith([gratin], failures);
 
     failures.failReads();
@@ -36,7 +37,7 @@ describe('E2eRecipeRepository', () => {
   });
 
   it('rejette findById avec RepositoryUnavailableError quand les lectures sont en panne', async () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eRecipeRepository.seededWith([gratin], failures);
 
     failures.failReads();
@@ -44,32 +45,25 @@ describe('E2eRecipeRepository', () => {
     await expect(repository.findById('r-1')).rejects.toBeInstanceOf(RepositoryUnavailableError);
   });
 
-  it('rejette save quand les écritures sont en panne, et n’enregistre rien', async () => {
-    const failures = E2eFailureSwitch.create();
+  it('failWrites : save est pris tout de suite, puis annulé quand le serveur le refuse', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
     const repository = E2eRecipeRepository.seededWith([], failures);
-
     failures.failWrites();
 
-    await expect(repository.save(curry)).rejects.toBeInstanceOf(RepositoryUnavailableError);
-    failures.restore();
-    expect(await repository.findAll()).toEqual([]);
-  });
+    await repository.save(curry);
+    expect(await repository.findAll()).toEqual([curry]);
 
-  it('un dépôt muet ne refuse pas save : c’est la borne qui le déclare indisponible, et rien n’est enregistré', async () => {
-    const failures = E2eFailureSwitch.create({ ackTimeoutMs: 10 });
-    const repository = E2eRecipeRepository.seededWith([], failures);
-
-    failures.hangWrites();
-
-    await expect(repository.save(curry)).rejects.toBeInstanceOf(RepositoryUnavailableError);
-    failures.restore();
-    expect(await repository.findAll()).toEqual([]);
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('E2eRecipeRepository — observation', () => {
   it("livre l'instantané courant dès l'abonnement, dans un ordre DIFFÉRENT de l'ordre d'insertion", () => {
-    const repository = E2eRecipeRepository.seededWith([gratin, curry], E2eFailureSwitch.create());
+    const repository = E2eRecipeRepository.seededWith([gratin, curry], sansPanne());
     const instantanes: (readonly Recipe[])[] = [];
 
     repository.observeAll(
@@ -81,7 +75,7 @@ describe('E2eRecipeRepository — observation', () => {
   });
 
   it('réémet la liste entière à chaque enregistrement', async () => {
-    const repository = E2eRecipeRepository.seededWith([gratin], E2eFailureSwitch.create());
+    const repository = E2eRecipeRepository.seededWith([gratin], sansPanne());
     const instantanes: (readonly Recipe[])[] = [];
     repository.observeAll(
       (recipes) => instantanes.push(recipes),
@@ -94,7 +88,7 @@ describe('E2eRecipeRepository — observation', () => {
   });
 
   it("n'émet plus rien une fois le désabonnement appelé", async () => {
-    const repository = E2eRecipeRepository.seededWith([gratin], E2eFailureSwitch.create());
+    const repository = E2eRecipeRepository.seededWith([gratin], sansPanne());
     const instantanes: (readonly Recipe[])[] = [];
     const stop = repository.observeAll(
       (recipes) => instantanes.push(recipes),
@@ -110,7 +104,7 @@ describe('E2eRecipeRepository — observation', () => {
   });
 
   it("signale l'indisponibilité sur le canal d'erreur quand les lectures sont en panne, au lieu de livrer un instantané", () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eRecipeRepository.seededWith([gratin], failures);
     const instantanes: (readonly Recipe[])[] = [];
     const echecs: unknown[] = [];
@@ -127,7 +121,7 @@ describe('E2eRecipeRepository — observation', () => {
   });
 
   it('reprend ses instantanés à la première écriture qui suit le rétablissement des lectures', async () => {
-    const failures = E2eFailureSwitch.create();
+    const failures = sansPanne();
     const repository = E2eRecipeRepository.seededWith([gratin], failures);
     const instantanes: (readonly Recipe[])[] = [];
     failures.failReads();

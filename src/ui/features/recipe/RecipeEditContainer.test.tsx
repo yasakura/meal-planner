@@ -89,10 +89,7 @@ function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
   );
 }
 
-const CONSTAT_NON_ACQUITTE =
-  'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.';
-
-const nonAcquitte: UpdateRecipe = () => Promise.reject(RepositoryUnavailableError.create());
+const CONSTAT_ECHEC = 'Impossible d’enregistrer la recette.';
 
 function capturingSpy() {
   const state: { captured: UpdateRecipeInput | undefined } = { captured: undefined };
@@ -522,37 +519,25 @@ describe('RecipeEditContainer', () => {
     expect(store.getState().recipeEdit.status).toBe('idle');
     expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
   });
-  it('hors ligne, la modification n’est pas confirmée : le constat est poli et n’accuse aucun échec', async () => {
-    const user = userEvent.setup();
-    renderWithStore({ updateRecipe: nonAcquitte });
 
-    await screen.findByLabelText(/titre/i);
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-
-    expect(await screen.findByRole('status')).toHaveTextContent(CONSTAT_NON_ACQUITTE);
-    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('une modification non acquittée n’est pas une impasse : le second envoi repart et le constat s’efface', async () => {
+  it('une modification refusée n’est pas une impasse : le second envoi repart et le constat s’efface', async () => {
     const user = userEvent.setup();
     let horsLigne = true;
     const reseau: UpdateRecipe = async (input) => {
-      if (horsLigne) throw RepositoryUnavailableError.create();
+      if (horsLigne) throw new Error('Firestore refuse');
       return RecipeBuilder.aRecipe().withId(input.id).build();
     };
     renderWithStore({ updateRecipe: reseau });
 
     await screen.findByLabelText(/titre/i);
     await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    expect(await screen.findByText(CONSTAT_NON_ACQUITTE)).toBeInTheDocument();
+    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
 
     horsLigne = false;
     expect(screen.getByRole('button', { name: /^enregistrer$/i })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
 
     await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1'));
-    expect(screen.queryByText(CONSTAT_NON_ACQUITTE)).not.toBeInTheDocument();
+    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
   });
 });

@@ -293,7 +293,7 @@ test.describe('Menu', () => {
     await expect(page).toHaveURL('/menu');
   });
 
-  test('hors ligne, l’enregistrement n’est pas confirmé ; le réseau rétabli, il l’est', async ({
+  test('hors ligne, le menu est enregistré ; le refus du serveur lève le bandeau, « Fermer » le solde', async ({
     page,
   }) => {
     await page.goto('/menu');
@@ -301,19 +301,23 @@ test.describe('Menu', () => {
     await page.getByRole('button', { name: 'Générer un menu' }).click();
     await expect(page.locator('main section')).toHaveCount(14);
 
+    const bandeau = page.getByText('Une modification n’a pas pu être enregistrée.');
+    await expect(bandeau).toHaveCount(0);
+
     await failWrites(page);
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    const panne = page.getByText(
-      'Aucune connexion — l’enregistrement du menu n’a pas pu être confirmé.',
-    );
-    await expect(panne).toHaveCount(1);
+    await expect(page).toHaveURL('/menu');
+    await expect(bandeau).toHaveCount(1);
 
     await restore(page);
-    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await page
+      .locator('[role="status"]')
+      .filter({ hasText: 'Une modification n’a pas pu être enregistrée.' })
+      .getByRole('button', { name: 'Fermer' })
+      .click();
 
-    await expect(page.getByText('Menu enregistré', { exact: true })).toHaveCount(1);
-    await expect(panne).toHaveCount(0);
+    await expect(bandeau).toHaveCount(0);
   });
 });
 

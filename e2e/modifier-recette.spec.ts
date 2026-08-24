@@ -197,7 +197,7 @@ test.describe('Modifier une recette', () => {
 });
 
 test.describe('Modifier une recette hors ligne', () => {
-  test('l’enregistrement non confirmé est visible sans défiler, et la recette n’est pas modifiée', async ({
+  test('la modification part et l’écran suit ; le refus du serveur la reprend, bandeau à l’appui', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -207,25 +207,22 @@ test.describe('Modifier une recette hors ligne', () => {
     await page.getByLabel('Titre').fill('Aubergines farcies');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    const constat = page.getByText(
-      'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
-    );
-    await expect(constat).toBeVisible();
+    await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois');
+    await expect(page.getByRole('heading', { level: 1, name: 'Aubergines farcies' })).toBeVisible();
 
-    await attendreAtteignable(constat);
+    const bandeau = page.getByText('Une modification n’a pas pu être enregistrée.');
+    await expect(bandeau).toBeVisible();
+    await attendreAtteignable(bandeau);
 
-    await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois/modifier');
-
-    await relireLeGratinDepuisLeDepot(page);
+    await expect(page.getByRole('heading', { level: 1, name: 'Gratin dauphinois' })).toBeVisible();
     await expect(ingredientsDuDetail(page)).toHaveCount(2);
-    await expect(page.getByRole('link', { name: '← Recettes' })).toBeVisible();
 
     await page.getByRole('link', { name: '← Recettes' }).click();
     await expect(page).toHaveURL('/catalogue');
     await expect(titresDuCatalogue(page)).toHaveText(TITRES_DE_DEPART);
   });
 
-  test('réseau rétabli, le même formulaire enregistre et ne laisse aucune trace du constat non confirmé', async ({
+  test('« Fermer » solde le bandeau, et la modification suivante n’en ramène aucun', async ({
     page,
   }) => {
     await page.goto('/catalogue');
@@ -234,23 +231,23 @@ test.describe('Modifier une recette hors ligne', () => {
 
     await page.getByLabel('Titre').fill('Aubergines farcies');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
-    await expect(
-      page.getByText('l’enregistrement de la recette n’a pas pu être confirmé'),
-    ).toHaveCount(1);
+    const bandeau = page.getByText('Une modification n’a pas pu être enregistrée.');
+    await expect(bandeau).toHaveCount(1);
 
     await restore(page);
+    await page
+      .locator('[role="status"]')
+      .filter({ hasText: 'Une modification n’a pas pu être enregistrée.' })
+      .getByRole('button', { name: 'Fermer' })
+      .click();
+    await expect(bandeau).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Modifier' }).click();
+    await page.getByLabel('Titre').fill('Aubergines farcies');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
     await expect(page).toHaveURL('/catalogue/recipe-gratin-dauphinois');
     await expect(page.getByRole('heading', { level: 1, name: 'Aubergines farcies' })).toBeVisible();
-    await expect(
-      page.getByText('l’enregistrement de la recette n’a pas pu être confirmé'),
-    ).toHaveCount(0);
-
-    await page.getByRole('link', { name: 'Modifier' }).click();
-    await expect(page.getByLabel('Titre')).toHaveValue('Aubergines farcies');
-    await expect(
-      page.getByText('l’enregistrement de la recette n’a pas pu être confirmé'),
-    ).toHaveCount(0);
+    await expect(bandeau).toHaveCount(0);
   });
 });

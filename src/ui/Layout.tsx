@@ -15,6 +15,7 @@ import { tokens } from './theme/tokens';
 const { colors, space } = tokens;
 
 const Shell = styled.div`
+  --topbar-h: 52px;
   --tabbar-h: calc(56px + env(safe-area-inset-bottom));
   min-height: 100dvh;
   display: flex;
@@ -42,11 +43,11 @@ export function Layout() {
     <Shell>
       <ScrollToTop />
       <TopBar onAccountClick={() => setAccountOpen(true)} />
+      <LinkBanner />
       <Content>
         <Outlet />
       </Content>
       <StickyTabBar>
-        <LinkBanner />
         <BottomTabBar />
       </StickyTabBar>
       <AccountSheet

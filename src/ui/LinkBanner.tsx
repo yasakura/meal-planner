@@ -5,16 +5,30 @@ import { tokens } from './theme/tokens';
 import { LINK_LOST_NOTICE } from './link-lost-notice';
 import { catalogueRetried, selectCatalogueLinkLost } from './features/catalogue/catalogue-slice';
 import { convivesRetried, selectConvivesLinkLost } from './features/convives/convives-slice';
+import {
+  WRITE_REJECTED_NOTICE,
+  selectWriteRejected,
+  writeRejectionDismissed,
+} from './features/writes/write-rejections-slice';
 
 const { colors, fonts, radii, space } = tokens;
 
 const Banner = styled.div`
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: ${space.xs}px;
+  padding: ${space.sm}px ${space.lg}px;
+  background: ${colors.ink};
+`;
+
+const Line = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: ${space.md}px;
-  padding: ${space.sm}px ${space.lg}px;
-  background: ${colors.ink};
 `;
 
 const Message = styled.p`
@@ -24,7 +38,7 @@ const Message = styled.p`
   color: ${colors.creme};
 `;
 
-const RetryButton = styled.button`
+const LineButton = styled.button`
   flex-shrink: 0;
   min-height: 32px;
   padding: ${space.xs}px ${space.md}px;
@@ -39,9 +53,11 @@ const RetryButton = styled.button`
 export function LinkBanner() {
   const catalogueLost = useAppSelector(selectCatalogueLinkLost);
   const convivesLost = useAppSelector(selectConvivesLinkLost);
+  const writeRejected = useAppSelector(selectWriteRejected);
   const dispatch = useAppDispatch();
 
-  if (!catalogueLost && !convivesLost) return null;
+  const linkLost = catalogueLost || convivesLost;
+  if (!linkLost && !writeRejected) return null;
 
   const retry = () => {
     dispatch(catalogueRetried());
@@ -50,10 +66,22 @@ export function LinkBanner() {
 
   return (
     <Banner role="status">
-      <Message>{LINK_LOST_NOTICE}</Message>
-      <RetryButton type="button" onClick={retry}>
-        Réessayer
-      </RetryButton>
+      {linkLost && (
+        <Line>
+          <Message>{LINK_LOST_NOTICE}</Message>
+          <LineButton type="button" onClick={retry}>
+            Réessayer
+          </LineButton>
+        </Line>
+      )}
+      {writeRejected && (
+        <Line>
+          <Message>{WRITE_REJECTED_NOTICE}</Message>
+          <LineButton type="button" onClick={() => dispatch(writeRejectionDismissed())}>
+            Fermer
+          </LineButton>
+        </Line>
+      )}
     </Banner>
   );
 }

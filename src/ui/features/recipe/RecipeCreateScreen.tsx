@@ -179,17 +179,9 @@ const ErrorMessage = styled.p`
   margin: 0;
 `;
 
-const Note = styled.p`
-  font-family: ${fonts.body};
-  font-size: 14px;
-  color: ${colors.inkSecondary};
-  margin: 0;
-`;
-
 function NoticeView({ notice }: { notice: RecipeFormNotice | null }) {
   if (notice === null) return null;
   if (notice.tone === 'error') return <ErrorMessage role="alert">{notice.message}</ErrorMessage>;
-  if (notice.tone === 'unconfirmed') return <Note role="status">{notice.message}</Note>;
   return <Confirmation role="status">{notice.message}</Confirmation>;
 }
 

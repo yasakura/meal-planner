@@ -22,13 +22,14 @@ import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { saveMenuUseCase } from '../../domain/use-cases/save-menu';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
+import { writeRejected } from '../features/writes/write-rejections-slice';
 import { type AppStore, createStore } from './store';
 
 export type E2eHost = { location: { search: string } };
 
 export function createE2eStore(host: E2eHost): AppStore {
   const seed = readE2eSeed(host.location.search);
-  const failures = E2eFailureSwitch.create();
+  const failures = E2eFailureSwitch.reporting(() => store.dispatch(writeRejected()));
   const recipeRepository = E2eRecipeRepository.seededWith(seed.recipes, failures);
   const conviveRepository = E2eConviveRepository.seededWith(seed.convives, failures);
   const menuRepository = E2eMenuRepository.startingEmpty(failures);
@@ -37,7 +38,7 @@ export function createE2eStore(host: E2eHost): AppStore {
 
   const clock = E2eClock.on(E2E_TODAY);
 
-  return createStore({
+  const store = createStore({
     authGateway: E2eAuthGateway.signedInAs(E2E_ACCOUNT),
     clock,
     createRecipe: createRecipeUseCase({ recipeRepository }),
@@ -62,4 +63,5 @@ export function createE2eStore(host: E2eHost): AppStore {
     renameConvive: renameConviveUseCase({ conviveRepository }),
     removeConvive: removeConviveUseCase({ conviveRepository }),
   });
+  return store;
 }

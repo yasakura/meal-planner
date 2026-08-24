@@ -66,46 +66,6 @@ describe('FirestoreRecipeRepository', () => {
     expect(mockedSetDoc).toHaveBeenCalledWith(docRef, recipeToDocument(recipe));
   });
 
-  it("save propage l'erreur Firestore sans l'avaler", async () => {
-    mockedDoc.mockReturnValue({} as never);
-    mockedSetDoc.mockRejectedValue(new Error('permission-denied'));
-    const recipe = RecipeBuilder.aRecipe().build();
-    const repository = FirestoreRecipeRepository.create(db);
-
-    await expect(repository.save(recipe)).rejects.toThrow('permission-denied');
-  });
-
-  it(
-    "signale une écriture que le serveur n'a pas acquittée dans la borne d'attente",
-    { timeout: 1000 },
-    async () => {
-      mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
-      const repository = FirestoreRecipeRepository.create(db, { ackTimeoutMs: 10 });
-
-      await expect(repository.save(RecipeBuilder.aRecipe().build())).rejects.toSatisfy(
-        isRepositoryUnavailable,
-      );
-    },
-  );
-
-  it("ne laisse aucune borne en suspens une fois l'écriture acquittée", async () => {
-    vi.useFakeTimers();
-    try {
-      mockedDoc.mockReturnValue({} as never);
-      mockedSetDoc.mockResolvedValue(undefined);
-      const repository = FirestoreRecipeRepository.create(db);
-
-      await repository.save(RecipeBuilder.aRecipe().build());
-      await Promise.resolve();
-
-      expect(mockedSetDoc).toHaveBeenCalledTimes(1);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("findAll lit la collection 'recipes' et mappe chaque document via documentToRecipe", async () => {
     const collectionRef = { marker: 'collection-ref-sentinel' };
     mockedCollection.mockReturnValue(collectionRef as never);
@@ -254,6 +214,41 @@ describe('FirestoreRecipeRepository', () => {
       const repository = FirestoreRecipeRepository.create(db, { readTimeoutMs: 10 });
 
       await expect(repository.findById('recipe-42')).rejects.toSatisfy(isRepositoryUnavailable);
+    },
+  );
+
+  it(
+    "save rend la main dès que Firestore a pris l'écriture, sans attendre l'acquittement du serveur",
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      mockedSetDoc.mockReturnValue(new Promise<void>(() => {}));
+      const repository = FirestoreRecipeRepository.create(db, { onWriteRejected: vi.fn() });
+
+      await expect(repository.save(RecipeBuilder.aRecipe().build())).resolves.toBeUndefined();
+    },
+  );
+
+  it(
+    'un refus serveur arrivé après coup ne reprend pas la main : il part au constat global',
+    { timeout: 1000 },
+    async () => {
+      mockedDoc.mockReturnValue({} as never);
+      let refuser: (raison: unknown) => void = () => {};
+      mockedSetDoc.mockReturnValue(
+        new Promise<void>((_resolve, reject) => {
+          refuser = reject;
+        }),
+      );
+      const onWriteRejected = vi.fn();
+      const repository = FirestoreRecipeRepository.create(db, { onWriteRejected });
+
+      await expect(repository.save(RecipeBuilder.aRecipe().build())).resolves.toBeUndefined();
+      refuser(firestoreError('permission-denied'));
+
+      await vi.waitFor(() => {
+        expect(onWriteRejected).toHaveBeenCalledTimes(1);
+      });
     },
   );
 });

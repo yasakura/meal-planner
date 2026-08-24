@@ -179,7 +179,7 @@ test.describe('Mise en page du catalogue', () => {
     expect(mesure.hauteur).toBeGreaterThan(0);
   });
 
-  test('le constat d’enregistrement non confirmé est visible sans défiler', async ({ page }) => {
+  test('le bandeau de refus d’écriture est visible sans défiler', async ({ page }) => {
     await page.goto('/catalogue');
     await failWrites(page);
     await page.getByRole('link', { name: 'Ajouter une recette' }).click();
@@ -190,12 +190,10 @@ test.describe('Mise en page du catalogue', () => {
 
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    const constat = page.getByText(
-      'Aucune connexion — l’enregistrement de la recette n’a pas pu être confirmé.',
-    );
-    await expect(constat).toBeVisible();
+    const bandeau = page.getByText('Une modification n’a pas pu être enregistrée.');
+    await expect(bandeau).toBeVisible();
 
-    await attendreAtteignable(constat);
+    await attendreAtteignable(bandeau);
   });
 
   test('la barre d’action masque le contenu qui défile dessous', async ({ page }) => {

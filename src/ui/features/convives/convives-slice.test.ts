@@ -77,7 +77,6 @@ describe('convives slice', () => {
       attempt: 0,
       addStatus: 'idle',
       addError: null,
-      addSubjectName: null,
       draftConviveId: 'generated-id-1',
       latestAddRequestId: null,
       renameStatus: 'idle',
@@ -112,7 +111,6 @@ describe('convives slice', () => {
       attempt: 0,
       addStatus: 'idle',
       addError: null,
-      addSubjectName: null,
       draftConviveId: 'generated-id-1',
       latestAddRequestId: added.meta.requestId,
       renameStatus: 'idle',
@@ -157,7 +155,6 @@ describe('convives slice', () => {
       attempt: 0,
       addStatus: 'error',
       addError: 'Firestore indisponible',
-      addSubjectName: 'Rory',
       draftConviveId: 'generated-id-1',
       latestAddRequestId: failed.meta.requestId,
       renameStatus: 'idle',
@@ -187,7 +184,6 @@ describe('convives slice', () => {
       attempt: 0,
       addStatus: 'adding',
       addError: null,
-      addSubjectName: 'Rory',
       draftConviveId: 'generated-id-1',
       latestAddRequestId: inFlight.requestId,
       renameStatus: 'idle',
@@ -200,42 +196,12 @@ describe('convives slice', () => {
     });
   });
 
-  it('un ajout que le serveur n’a pas acquitté prend un addStatus distinct de error, sans rejoindre la liste', async () => {
-    const existing = twoConvives();
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      addConvive: unacknowledged,
-    });
-    store.dispatch(convivesObserved(existing));
-
-    const unacked = await store.dispatch(addConvive({ name: 'Rory' }));
-
-    expect(selectConvives(store.getState())).toEqual({
-      convives: existing,
-      received: true,
-      failure: null,
-      attempt: 0,
-      addStatus: 'unconfirmed',
-      addError: null,
-      addSubjectName: 'Rory',
-      draftConviveId: 'generated-id-1',
-      latestAddRequestId: unacked.meta.requestId,
-      renameStatus: 'idle',
-      renameDraft: '',
-      editingConviveId: null,
-      latestRenameRequestId: null,
-      removeStatus: 'idle',
-      pendingRemovalId: null,
-      latestRemoveRequestId: null,
-    });
-  });
-
   it('rouvrir l’écran remet le cycle de vie de l’ajout au repos', async () => {
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ addConvive: unacknowledged });
+    const refuse: AddConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
+    const store = createTestStore({ addConvive: refuse });
     store.dispatch(convivesObserved(twoConvives()));
     await store.dispatch(addConvive({ name: 'Rory' }));
-    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).addStatus).toBe('error');
 
     store.dispatch(conviveFormScreenOpened());
 
@@ -252,35 +218,6 @@ describe('convives slice', () => {
     store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).addStatus).toBe('adding');
-  });
-
-  it('un ajout non acquitté retient le prénom soumis pour pouvoir le nommer', async () => {
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ addConvive: unacknowledged });
-
-    await store.dispatch(addConvive({ name: 'Rory' }));
-
-    expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
-  });
-
-  it('rouvrir l’écran oublie le prénom soumis, sauf si l’ajout est encore en vol', async () => {
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ addConvive: unacknowledged });
-    await store.dispatch(addConvive({ name: 'Rory' }));
-
-    store.dispatch(conviveFormScreenOpened());
-
-    expect(selectConvives(store.getState()).addSubjectName).toBeNull();
-  });
-
-  it('rouvrir l’écran pendant un ajout en vol conserve le prénom soumis', () => {
-    const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
-    const store = createTestStore({ addConvive: pendingAdd });
-    void store.dispatch(addConvive({ name: 'Rory' }));
-
-    store.dispatch(conviveFormScreenOpened());
-
-    expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
   });
 
   it('rouvrir l’écran efface aussi un échec d’ajout, pas seulement un constat non confirmé', async () => {
@@ -320,7 +257,6 @@ describe('convives slice', () => {
       attempt: 0,
       addStatus: 'idle',
       addError: null,
-      addSubjectName: null,
       draftConviveId: 'generated-id-1',
       latestAddRequestId: retried.meta.requestId,
       renameStatus: 'idle',
@@ -351,12 +287,11 @@ describe('convives slice', () => {
     const abandoned = store.dispatch(addConvive({ name: 'Rory' }));
     const current = store.dispatch(addConvive({ name: 'Rory' }));
     await current;
-    slow.reject(RepositoryUnavailableError.create());
+    slow.reject(new Error('Le dépôt a refusé'));
     await abandoned;
 
     expect(selectConvives(store.getState()).addStatus).toBe('idle');
     expect(selectConvives(store.getState()).addError).toBeNull();
-    expect(selectConvives(store.getState()).addSubjectName).toBeNull();
     expect(selectConvives(store.getState()).latestAddRequestId).toBe(current.requestId);
   });
 
@@ -366,7 +301,7 @@ describe('convives slice', () => {
     let call = 0;
     const addConviveUseCase: AddConvive = () => {
       call += 1;
-      return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
+      return call === 1 ? slow.promise : Promise.reject(new Error('Le dépôt a refusé'));
     };
     const store = createTestStore({
       addConvive: addConviveUseCase,
@@ -379,8 +314,7 @@ describe('convives slice', () => {
     slow.resolve(ConviveBuilder.aConvive().withId('c3').withName('Sacha').build());
     await abandoned;
 
-    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
-    expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
+    expect(selectConvives(store.getState()).addStatus).toBe('error');
   });
 
   it('une émission du canal pendant un ajout en vol ramène quand même le cycle au repos, et le foyer reste celui du canal', async () => {
@@ -400,10 +334,10 @@ describe('convives slice', () => {
   });
 
   it('un nouvel envoi chasse le constat de l’ajout précédent', async () => {
-    const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ addConvive: unacknowledged });
+    const refuse: AddConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
+    const store = createTestStore({ addConvive: refuse });
     await store.dispatch(addConvive({ name: 'Rory' }));
-    expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).addStatus).toBe('error');
 
     const renvoi = store.dispatch(addConvive({ name: 'Rory' }));
 
@@ -412,14 +346,14 @@ describe('convives slice', () => {
   });
 
   it('un nouvel envoi chasse le constat du retrait précédent', async () => {
-    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RemoveConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      removeConvive: unacknowledged,
+      removeConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).removeStatus).toBe('error');
 
     const renvoi = store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -438,8 +372,8 @@ describe('convives slice', () => {
     expect(add.ids).toEqual(['draft-1']);
   });
 
-  it('réenvoie un ajout non acquitté sous le MÊME identifiant, sans fabriquer de doublon', async () => {
-    const add = recordingAdd(() => Promise.reject(RepositoryUnavailableError.create()));
+  it('réenvoie un ajout refusé sous le MÊME identifiant, sans fabriquer de doublon', async () => {
+    const add = recordingAdd(() => Promise.reject(new Error('Le dépôt a refusé')));
     const store = createTestStore({ newConviveId: sequentialDraftIds(), addConvive: add.fn });
 
     await store.dispatch(addConvive({ name: 'Rory' }));
@@ -589,23 +523,6 @@ describe('convives slice', () => {
     ]);
   });
 
-  it('un renommage que le serveur n’a pas acquitté prend un status distinct de error', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      renameConvive: unacknowledged,
-    });
-    store.dispatch(convivesObserved(twoConvives()));
-    store.dispatch(conviveEditRequested('c2'));
-
-    await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
-
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
-    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
-      'Aurélie',
-      'Lionel',
-    ]);
-  });
-
   it('un rejet tardif d’un renommage dépassé ne verrouille pas la ligne après un renommage réussi', async () => {
     const slow = deferred<Convive>();
     let call = 0;
@@ -623,7 +540,7 @@ describe('convives slice', () => {
     const abandoned = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     const current = store.dispatch(renameConvive({ id: 'c2', name: 'Lionelle' }));
     await current;
-    slow.reject(RepositoryUnavailableError.create());
+    slow.reject(new Error('Le dépôt a refusé'));
     await abandoned;
 
     expect(selectConvives(store.getState()).renameStatus).toBe('idle');
@@ -668,31 +585,31 @@ describe('convives slice', () => {
   });
 
   it('modifier le brouillon laisse le constat en place, sans refermer l’édition', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RenameConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      renameConvive: unacknowledged,
+      renameConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
 
     store.dispatch(renameDraftEdited('Li'));
 
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
     expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
     expect(selectConvives(store.getState()).renameDraft).toBe('Li');
   });
 
   it('un nouvel envoi chasse le constat du renommage précédent', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RenameConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      renameConvive: unacknowledged,
+      renameConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
 
     const renvoi = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
@@ -701,14 +618,14 @@ describe('convives slice', () => {
   });
 
   it('rouvrir l’écran referme l’édition et remet le cycle de renommage au repos', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RenameConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      renameConvive: unacknowledged,
+      renameConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
 
     store.dispatch(conviveFormScreenOpened());
 
@@ -796,34 +713,18 @@ describe('convives slice', () => {
     ]);
   });
 
-  it('un retrait que le serveur n’a pas acquitté prend un status distinct de error, sans quitter la liste', async () => {
-    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      removeConvive: unacknowledged,
-    });
-    store.dispatch(convivesObserved(twoConvives()));
-    store.dispatch(conviveRemovalRequested('c2'));
-
-    await store.dispatch(removeConvive({ id: 'c2' }));
-
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
-    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
-      'Aurélie',
-      'Lionel',
-    ]);
-  });
-
-  it('un rejet tardif d’un retrait dépassé n’écrase pas le constat du retrait courant', async () => {
+  it('un rejet tardif d’un retrait dépassé ne rouvre pas de constat après un retrait abouti', async () => {
     const slow = deferred<void>();
     let call = 0;
     const removeConviveUseCase: RemoveConvive = () => {
       call += 1;
-      return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
+      return call === 1 ? slow.promise : Promise.resolve();
     };
     const store = createTestStore({
       removeConvive: removeConviveUseCase,
     });
     store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(conviveRemovalRequested('c2'));
 
     const abandoned = store.dispatch(removeConvive({ id: 'c1' }));
     const current = store.dispatch(removeConvive({ id: 'c2' }));
@@ -831,8 +732,50 @@ describe('convives slice', () => {
     slow.reject(new Error('Firestore indisponible'));
     await abandoned;
 
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).removeStatus).toBe('idle');
+    expect(selectConvives(store.getState()).pendingRemovalId).toBeNull();
     expect(selectConvives(store.getState()).latestRemoveRequestId).toBe(current.requestId);
+  });
+
+  it('porte le constat d’un retrait refusé sur la seule ligne concernée, comme une alerte', async () => {
+    const failingRemove: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
+    const store = createTestStore({
+      removeConvive: failingRemove,
+    });
+    store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(conviveRemovalRequested('c2'));
+    await store.dispatch(removeConvive({ id: 'c2' }));
+
+    const rows = conviveRowsOf(selectConvives(store.getState()));
+
+    expect(rows[0]?.notice).toBeNull();
+    expect(rows[1]?.notice).toEqual({
+      tone: 'error',
+      message: 'Impossible de retirer le convive.',
+    });
+  });
+
+  it('un rejet tardif d’un retrait dépassé ne déverrouille pas le retrait encore en vol', async () => {
+    const slow = deferred<void>();
+    let call = 0;
+    const removeConviveUseCase: RemoveConvive = () => {
+      call += 1;
+      return call === 1 ? slow.promise : new Promise<void>(() => {});
+    };
+    const store = createTestStore({
+      removeConvive: removeConviveUseCase,
+    });
+    store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(conviveRemovalRequested('c2'));
+
+    const abandoned = store.dispatch(removeConvive({ id: 'c1' }));
+    const current = store.dispatch(removeConvive({ id: 'c2' }));
+    slow.reject(new Error('Le dépôt a refusé'));
+    await abandoned;
+
+    expect(selectConvives(store.getState()).removeStatus).toBe('removing');
+    expect(selectConvives(store.getState()).latestRemoveRequestId).toBe(current.requestId);
+    expect(conviveRowsOf(selectConvives(store.getState()))[1]?.confirmDisabled).toBe(true);
   });
 
   it('un succès tardif d’un retrait dépassé retire quand même le convive, sans toucher au constat courant', async () => {
@@ -840,7 +783,7 @@ describe('convives slice', () => {
     let call = 0;
     const removeConviveUseCase: RemoveConvive = () => {
       call += 1;
-      return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
+      return call === 1 ? slow.promise : Promise.reject(new Error('Le dépôt a refusé'));
     };
     const store = createTestStore({
       removeConvive: removeConviveUseCase,
@@ -855,7 +798,7 @@ describe('convives slice', () => {
     await abandoned;
 
     expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual(['Lionel']);
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).removeStatus).toBe('error');
     expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
   });
 
@@ -888,12 +831,12 @@ describe('convives slice', () => {
   });
 
   it('rouvrir l’écran referme la confirmation et remet le cycle de retrait au repos', async () => {
-    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ removeConvive: unacknowledged });
+    const refuse: RemoveConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
+    const store = createTestStore({ removeConvive: refuse });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).removeStatus).toBe('error');
 
     store.dispatch(conviveFormScreenOpened());
 
@@ -987,10 +930,10 @@ describe('convives slice', () => {
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.editInputDisabled).toBe(true);
   });
 
-  it('après un renommage non acquitté, le bouton et le champ se réarment tous les deux', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+  it('après un renommage refusé, le bouton et le champ se réarment tous les deux', async () => {
+    const refuse: RenameConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      renameConvive: unacknowledged,
+      renameConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
@@ -1031,68 +974,15 @@ describe('convives slice', () => {
     });
   });
 
-  it('nomme le convive dans le constat d’un renommage non acquitté, sur un ton de constat', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      renameConvive: unacknowledged,
-    });
-    store.dispatch(convivesObserved(twoConvives()));
-    store.dispatch(conviveEditRequested('c1'));
-    await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
-
-    const rows = conviveRowsOf(selectConvives(store.getState()));
-
-    expect(rows[0]?.notice).toEqual({
-      tone: 'unconfirmed',
-      message: 'Aucune connexion — le renommage d’Aurélie n’a pas pu être confirmé.',
-    });
-    expect(rows[1]?.notice).toBeNull();
-  });
-
-  it('porte le constat d’un retrait refusé sur la seule ligne concernée, comme une alerte', async () => {
-    const failingRemove: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
-    const store = createTestStore({
-      removeConvive: failingRemove,
-    });
-    store.dispatch(convivesObserved(twoConvives()));
-    store.dispatch(conviveRemovalRequested('c2'));
-    await store.dispatch(removeConvive({ id: 'c2' }));
-
-    const rows = conviveRowsOf(selectConvives(store.getState()));
-
-    expect(rows[0]?.notice).toBeNull();
-    expect(rows[1]?.notice).toEqual({
-      tone: 'error',
-      message: 'Impossible de retirer le convive.',
-    });
-  });
-
-  it('nomme le convive dans le constat d’un retrait non acquitté, sur un ton de constat', async () => {
-    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      removeConvive: unacknowledged,
-    });
-    store.dispatch(convivesObserved(twoConvives()));
-    store.dispatch(conviveRemovalRequested('c2'));
-    await store.dispatch(removeConvive({ id: 'c2' }));
-
-    const rows = conviveRowsOf(selectConvives(store.getState()));
-
-    expect(rows[1]?.notice).toEqual({
-      tone: 'unconfirmed',
-      message: 'Aucune connexion — le retrait de Lionel n’a pas pu être confirmé.',
-    });
-  });
-
   it('ouvrir l’édition d’une autre ligne efface le constat périmé de la précédente', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RenameConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      renameConvive: unacknowledged,
+      renameConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
 
     store.dispatch(conviveEditRequested('c1'));
 
@@ -1130,14 +1020,14 @@ describe('convives slice', () => {
   });
 
   it('demander le retrait d’un autre convive efface le constat périmé du précédent', async () => {
-    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RemoveConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      removeConvive: unacknowledged,
+      removeConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).removeStatus).toBe('error');
 
     store.dispatch(conviveRemovalRequested('c1'));
 
@@ -1235,28 +1125,28 @@ describe('convives slice', () => {
   });
 
   it('un constat de renommage ne verrouille plus les autres lignes', async () => {
-    const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RenameConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      renameConvive: unacknowledged,
+      renameConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c1'));
     await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
 
-    expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).renameStatus).toBe('error');
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.actionsDisabled).toBe(false);
   });
 
   it('un constat de retrait ne verrouille plus les autres lignes', async () => {
-    const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
+    const refuse: RemoveConvive = () => Promise.reject(new Error('Le dépôt a refusé'));
     const store = createTestStore({
-      removeConvive: unacknowledged,
+      removeConvive: refuse,
     });
     store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
 
-    expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
+    expect(selectConvives(store.getState()).removeStatus).toBe('error');
     expect(conviveRowsOf(selectConvives(store.getState()))[0]?.actionsDisabled).toBe(false);
   });
 

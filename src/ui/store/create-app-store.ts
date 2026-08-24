@@ -20,14 +20,16 @@ import { removeConviveUseCase } from '../../domain/use-cases/remove-convive';
 import { renameConviveUseCase } from '../../domain/use-cases/rename-convive';
 import { saveMenuUseCase } from '../../domain/use-cases/save-menu';
 import { updateRecipeUseCase } from '../../domain/use-cases/update-recipe';
-import { createStore } from './store';
+import { writeRejected } from '../features/writes/write-rejections-slice';
+import { type AppStore, createStore } from './store';
 
-export function createAppStore() {
-  const recipeRepository = FirestoreRecipeRepository.create(db);
-  const conviveRepository = FirestoreConviveRepository.create(db);
-  const menuRepository = FirestoreMenuRepository.create(db);
+export function createAppStore(): AppStore {
+  const onWriteRejected = () => store.dispatch(writeRejected());
+  const recipeRepository = FirestoreRecipeRepository.create(db, { onWriteRejected });
+  const conviveRepository = FirestoreConviveRepository.create(db, { onWriteRejected });
+  const menuRepository = FirestoreMenuRepository.create(db, { onWriteRejected });
   const clock = SystemClock.create();
-  return createStore({
+  const store = createStore({
     authGateway: FirebaseAuthGateway.create(auth),
     clock,
     createRecipe: createRecipeUseCase({ recipeRepository }),
@@ -48,4 +50,5 @@ export function createAppStore() {
     renameConvive: renameConviveUseCase({ conviveRepository }),
     removeConvive: removeConviveUseCase({ conviveRepository }),
   });
+  return store;
 }
