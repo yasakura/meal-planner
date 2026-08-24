@@ -10,11 +10,11 @@ import {
   conviveFormScreenOpened,
   conviveRemovalCancelled,
   conviveRemovalRequested,
-  loadConvives,
+  convivesRetried,
+  convivesViewOf,
   removeConvive,
   renameConvive,
   renameDraftEdited,
-  conviveRowsOf,
   selectConvives,
   selectIsAddInFlight,
   type ConviveAddStatus,
@@ -34,14 +34,13 @@ function addNoticeFor(addStatus: ConviveAddStatus, subjectName: string | null): 
 export function ConvivesContainer() {
   const [name, setName] = useState('');
   const convivesState = useAppSelector(selectConvives);
-  const { status, convives, addStatus, addSubjectName, renameDraft } = convivesState;
+  const { addStatus, addSubjectName, renameDraft } = convivesState;
   const isAddInFlight = useAppSelector(selectIsAddInFlight);
-  const rows = useMemo(() => conviveRowsOf(convivesState), [convivesState]);
+  const view = useMemo(() => convivesViewOf(convivesState), [convivesState]);
   const dispatch = useAppDispatch();
 
   useEffect(() => {
     dispatch(conviveFormScreenOpened());
-    dispatch(loadConvives());
   }, [dispatch]);
 
   const handleSubmit = async () => {
@@ -70,24 +69,24 @@ export function ConvivesContainer() {
   };
 
   let props: ConvivesSectionProps;
-  if (status === 'unavailable') {
+  if (view.status === 'unavailable') {
     props = {
       ...form,
       status: 'unavailable',
       message: 'Aucune connexion — le foyer n’a pas pu être chargé.',
+      onRetry: () => dispatch(convivesRetried()),
     };
-  } else if (status === 'error') {
+  } else if (view.status === 'error') {
     props = {
       ...form,
       status: 'error',
       message: 'Impossible de charger les convives.',
-      onRetry: () => dispatch(loadConvives()),
+      onRetry: () => dispatch(convivesRetried()),
     };
-  } else if (status === 'success') {
-    props =
-      convives.length === 0
-        ? { ...form, status: 'empty' }
-        : { ...form, status: 'loaded', convives: rows, rowActions };
+  } else if (view.status === 'loaded') {
+    props = { ...form, status: 'loaded', convives: view.convives, rowActions };
+  } else if (view.status === 'empty') {
+    props = { ...form, status: 'empty' };
   } else {
     props = { ...form, status: 'loading' };
   }

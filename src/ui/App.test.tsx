@@ -12,7 +12,7 @@ import { createSlot } from '../domain/entities/slot';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { App } from './App';
-import { RecipesSubscription } from './RecipesSubscription';
+import { DataSubscription } from './DataSubscription';
 import { generateMenu, saveMenu } from './features/menu/menu-slice';
 import { MENU_APRES_ENREGISTREMENT } from './features/menu/menu-return';
 import { type AppDependencies } from './store/store';
@@ -24,9 +24,9 @@ function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
-        <RecipesSubscription>
+        <DataSubscription>
           <App />
-        </RecipesSubscription>
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );

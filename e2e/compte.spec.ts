@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { accountSheetPanel, closeAccountSheet, openAccountSheet } from './support/account-sheet';
+import { accountSheetPanel, openAccountSheet } from './support/account-sheet';
 import { failReads, restore } from './support/e2e-controls';
 
 const FOYER_INJOIGNABLE = 'Aucune connexion — le foyer n’a pas pu être chargé.';
@@ -41,6 +41,7 @@ test.describe('Sheet Compte', () => {
     await page.getByRole('button', { name: 'Se déconnecter' }).click();
     await expect(page.getByLabel('Email')).toBeVisible();
 
+    await failReads(page);
     await page.getByLabel('Email').fill('e2e@foyer.test');
     await page.getByLabel('Mot de passe').fill('peu-importe');
     await page.getByRole('button', { name: 'Se connecter' }).click();
@@ -50,16 +51,13 @@ test.describe('Sheet Compte', () => {
     await expect(page.locator('nav a[href="/catalogue"]')).toHaveCount(1);
     await expect(accountSheetPanel(page)).toHaveCount(0);
 
-    await failReads(page);
     await openAccountSheet(page);
     await expect(page.getByText(FOYER_INJOIGNABLE, { exact: true })).toHaveCount(1);
     await expect(page.locator('[data-testid="convive-name"]')).toHaveCount(0);
 
     await restore(page);
     await expect(accountSheetPanel(page)).toHaveCount(1);
-    await closeAccountSheet(page);
-    await expect(accountSheetPanel(page)).toHaveCount(0);
-    await openAccountSheet(page);
+    await accountSheetPanel(page).getByRole('button', { name: 'Réessayer' }).click();
 
     await expect(page.getByText(FOYER_INJOIGNABLE, { exact: true })).toHaveCount(0);
     await expect(page.locator('[data-testid="convive-name"]')).toHaveText([

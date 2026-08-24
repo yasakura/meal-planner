@@ -28,7 +28,7 @@ export type ConvivesSectionProps = {
 } & (
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  | { status: 'unavailable'; message: string }
+  | { status: 'unavailable'; message: string; onRetry: () => void }
   | { status: 'empty' }
   | { status: 'loaded'; convives: ConviveRow[]; rowActions: ConviveRowActions }
 );
@@ -286,7 +286,14 @@ function Body(props: ConvivesSectionProps) {
         </>
       );
     case 'unavailable':
-      return <Note role="status">{props.message}</Note>;
+      return (
+        <>
+          <Note role="status">{props.message}</Note>
+          <RetryButton type="button" onClick={props.onRetry}>
+            Réessayer
+          </RetryButton>
+        </>
+      );
     case 'empty':
       return (
         <>

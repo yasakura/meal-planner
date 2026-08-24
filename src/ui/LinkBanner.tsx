@@ -1,9 +1,10 @@
 import { styled } from 'styled-components';
 
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { tokens } from '../../theme/tokens';
-import { CATALOGUE_LINK_LOST_NOTICE } from './catalogue-notice';
-import { catalogueRetried, selectCatalogueLinkLost } from './catalogue-slice';
+import { useAppDispatch, useAppSelector } from './store/hooks';
+import { tokens } from './theme/tokens';
+import { LINK_LOST_NOTICE } from './link-lost-notice';
+import { catalogueRetried, selectCatalogueLinkLost } from './features/catalogue/catalogue-slice';
+import { convivesRetried, selectConvivesLinkLost } from './features/convives/convives-slice';
 
 const { colors, fonts, radii, space } = tokens;
 
@@ -35,16 +36,22 @@ const RetryButton = styled.button`
   font-size: 13px;
 `;
 
-export function CatalogueLinkBanner() {
-  const linkLost = useAppSelector(selectCatalogueLinkLost);
+export function LinkBanner() {
+  const catalogueLost = useAppSelector(selectCatalogueLinkLost);
+  const convivesLost = useAppSelector(selectConvivesLinkLost);
   const dispatch = useAppDispatch();
 
-  if (!linkLost) return null;
+  if (!catalogueLost && !convivesLost) return null;
+
+  const retry = () => {
+    dispatch(catalogueRetried());
+    dispatch(convivesRetried());
+  };
 
   return (
     <Banner role="status">
-      <Message>{CATALOGUE_LINK_LOST_NOTICE}</Message>
-      <RetryButton type="button" onClick={() => dispatch(catalogueRetried())}>
+      <Message>{LINK_LOST_NOTICE}</Message>
+      <RetryButton type="button" onClick={retry}>
         Réessayer
       </RetryButton>
     </Banner>

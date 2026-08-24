@@ -12,7 +12,7 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { RecipesSubscription } from '../../RecipesSubscription';
+import { DataSubscription } from '../../DataSubscription';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { MenuCreateContainer } from './MenuCreateContainer';
 import { generateMenu } from './menu-slice';
@@ -56,12 +56,12 @@ function renderAt(store: TestStore, entree: string) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[entree]}>
-        <RecipesSubscription>
+        <DataSubscription>
           <Routes>
             <Route path="/menu/nouveau" element={<MenuCreateContainer />} />
             <Route path={SLOT_CHOICE_ROUTE} element={<SlotChoiceContainer />} />
           </Routes>
-        </RecipesSubscription>
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );
@@ -226,6 +226,24 @@ describe('SlotChoiceContainer', () => {
       'Aucune connexion — le catalogue n’a pas pu être chargé.',
     );
     expect(boutonsDeRecette()).toHaveLength(0);
+  });
+
+  it('hors ligne, le sélecteur propose « Réessayer », qui rouvre un abonnement neuf et ramène les recettes', async () => {
+    const user = userEvent.setup();
+    const canal = RecipeChannel.refusingWith(RepositoryUnavailableError.create());
+    const store = await storeAvecBrouillon(canal);
+    renderAt(store, PREMIER_MIDI);
+    await arriveeAchevee();
+
+    canal.willEmit(troisRecettes());
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(boutonsDeRecette()).toHaveLength(3);
+    expect(
+      screen.queryByText('Aucune connexion — le catalogue n’a pas pu être chargé.'),
+    ).toBeNull();
+    expect(canal.subscriptions).toBe(2);
+    expect(canal.live).toBe(1);
   });
 
   it('un catalogue vide n’offre rien à choisir et le dit', async () => {

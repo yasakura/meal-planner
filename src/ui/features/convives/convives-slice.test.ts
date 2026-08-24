@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { type Convive } from '../../../domain/entities/convive';
 import { type AddConvive, type AddConviveInput } from '../../../domain/use-cases/add-convive';
 import { type NewConviveId } from '../../../domain/use-cases/new-convive-id';
-import { type ListConvives } from '../../../domain/use-cases/list-convives';
+import { type ObserveConvives } from '../../../domain/use-cases/observe-convives';
+import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { createTestStore } from '../../../test/create-test-store';
@@ -16,6 +17,7 @@ import {
   type RenameConvive,
   type RenameConviveInput,
 } from '../../../domain/use-cases/rename-convive';
+import { authStateChanged } from '../auth/auth-slice';
 import {
   addConvive,
   conviveEditCancelled,
@@ -23,12 +25,19 @@ import {
   conviveEditRequested,
   conviveRemovalCancelled,
   conviveRemovalRequested,
-  loadConvives,
+  convivesObservationFailed,
+  convivesObserved,
+  convivesRetried,
+  convivesViewOf,
+  observeConvives,
   removeConvive,
   renameConvive,
   renameDraftEdited,
   conviveRowsOf,
   selectConvives,
+  selectConvivesAttempt,
+  selectConvivesLinkLost,
+  type ConvivesState,
 } from './convives-slice';
 
 function twoConvives(): Convive[] {
@@ -58,14 +67,14 @@ function recordingAdd(outcome: (input: AddConviveInput) => Promise<Convive>): {
 }
 
 describe('convives slice', () => {
-  it('un store neuf est idle, sans convives ni erreur', () => {
+  it('un store neuf n’a rien reçu, ne constate aucune panne, et n’a tenté qu’une fois', () => {
     const store = createTestStore();
 
     expect(selectConvives(store.getState())).toEqual({
-      status: 'idle',
       convives: [],
-      error: null,
-      latestLoadRequestId: null,
+      received: false,
+      failure: null,
+      attempt: 0,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
@@ -81,93 +90,7 @@ describe('convives slice', () => {
     });
   });
 
-  it('loadConvives réussi passe en success avec les convives renvoyés par le use case injecté', async () => {
-    const convives = twoConvives();
-    const listConvives: ListConvives = async () => convives;
-    const store = createTestStore({ listConvives });
-
-    const loaded = await store.dispatch(loadConvives());
-
-    expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
-      convives,
-      error: null,
-      latestLoadRequestId: loaded.meta.requestId,
-      addStatus: 'idle',
-      addError: null,
-      addSubjectName: null,
-      draftConviveId: 'generated-id-1',
-      latestAddRequestId: null,
-      renameStatus: 'idle',
-      renameDraft: '',
-      editingConviveId: null,
-      latestRenameRequestId: null,
-      removeStatus: 'idle',
-      pendingRemovalId: null,
-      latestRemoveRequestId: null,
-    });
-  });
-
-  it('loadConvives en échec passe en error avec le message du use case et conserve les convives déjà chargés', async () => {
-    const convives = twoConvives();
-    let shouldFail = false;
-    const listConvives: ListConvives = async () => {
-      if (shouldFail) throw new Error('Firestore indisponible');
-      return convives;
-    };
-    const store = createTestStore({ listConvives });
-
-    await store.dispatch(loadConvives());
-    shouldFail = true;
-    const failed = await store.dispatch(loadConvives());
-
-    expect(selectConvives(store.getState())).toEqual({
-      status: 'error',
-      convives,
-      error: 'Firestore indisponible',
-      latestLoadRequestId: failed.meta.requestId,
-      addStatus: 'idle',
-      addError: null,
-      addSubjectName: null,
-      draftConviveId: 'generated-id-1',
-      latestAddRequestId: null,
-      renameStatus: 'idle',
-      renameDraft: '',
-      editingConviveId: null,
-      latestRenameRequestId: null,
-      removeStatus: 'idle',
-      pendingRemovalId: null,
-      latestRemoveRequestId: null,
-    });
-  });
-
-  it('pendant un loadConvives en vol, le status passe à loading', () => {
-    const pending: ListConvives = () => new Promise<Convive[]>(() => {});
-    const store = createTestStore({ listConvives: pending });
-
-    const inFlight = store.dispatch(loadConvives());
-
-    expect(selectConvives(store.getState())).toEqual({
-      status: 'loading',
-      convives: [],
-      error: null,
-      latestLoadRequestId: inFlight.requestId,
-      addStatus: 'idle',
-      addError: null,
-      addSubjectName: null,
-      draftConviveId: 'generated-id-1',
-      latestAddRequestId: null,
-      renameStatus: 'idle',
-      renameDraft: '',
-      editingConviveId: null,
-      latestRenameRequestId: null,
-      removeStatus: 'idle',
-      pendingRemovalId: null,
-      latestRemoveRequestId: null,
-    });
-  });
-
-  it('addConvive appelle le use case avec le prénom saisi et ajoute le convive créé à la liste', async () => {
+  it('addConvive appelle le use case avec le prénom saisi, et son aboutissement laisse le foyer au canal', async () => {
     const existing = twoConvives();
     const captured: { input: AddConviveInput | undefined } = { input: undefined };
     const addConviveUseCase: AddConvive = async (input) => {
@@ -175,19 +98,18 @@ describe('convives slice', () => {
       return ConviveBuilder.aConvive().withId('c3').withName(input.name).build();
     };
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: addConviveUseCase,
     });
-    const loaded = await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
 
     const added = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(captured.input).toEqual({ id: 'generated-id-1', name: 'Rory' });
     expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
-      convives: [...existing, ConviveBuilder.aConvive().withId('c3').withName('Rory').build()],
-      error: null,
-      latestLoadRequestId: loaded.meta.requestId,
+      convives: existing,
+      received: true,
+      failure: null,
+      attempt: 0,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
@@ -203,17 +125,13 @@ describe('convives slice', () => {
     });
   });
 
-  it('range le convive ajouté à sa place alphabétique, avec la même collation que la liste chargée', async () => {
-    const loaded = [
-      ConviveBuilder.aConvive().withId('c1').withName('Emma').build(),
-      ConviveBuilder.aConvive().withId('c2').withName('Zoé').build(),
-    ];
-    const addElise: AddConvive = async (input) =>
-      ConviveBuilder.aConvive().withId('c3').withName(input.name).build();
-    const store = createTestStore({ listConvives: async () => loaded, addConvive: addElise });
-    await store.dispatch(loadConvives());
+  it('le convive ajouté rejoint le foyer par le canal, une seule fois et à sa place alphabétique', async () => {
+    const store = createTestStore({ newConviveId: sequentialDraftIds() });
+    store.dispatch(observeConvives());
 
+    await store.dispatch(addConvive({ name: 'Zoé' }));
     await store.dispatch(addConvive({ name: 'Élise' }));
+    await store.dispatch(addConvive({ name: 'Emma' }));
 
     expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
       'Élise',
@@ -226,18 +144,17 @@ describe('convives slice', () => {
     const existing = twoConvives();
     const failingAdd: AddConvive = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: failingAdd,
     });
-    const loaded = await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
 
     const failed = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
       convives: existing,
-      error: null,
-      latestLoadRequestId: loaded.meta.requestId,
+      received: true,
+      failure: null,
+      attempt: 0,
       addStatus: 'error',
       addError: 'Firestore indisponible',
       addSubjectName: 'Rory',
@@ -257,18 +174,17 @@ describe('convives slice', () => {
     const existing = twoConvives();
     const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: pendingAdd,
     });
-    const loaded = await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
 
     const inFlight = store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
       convives: existing,
-      error: null,
-      latestLoadRequestId: loaded.meta.requestId,
+      received: true,
+      failure: null,
+      attempt: 0,
       addStatus: 'adding',
       addError: null,
       addSubjectName: 'Rory',
@@ -284,48 +200,21 @@ describe('convives slice', () => {
     });
   });
 
-  it('un chargement empêché par un dépôt injoignable prend un status distinct de error', async () => {
-    const unavailable: ListConvives = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({ listConvives: unavailable });
-
-    const refused = await store.dispatch(loadConvives());
-
-    expect(selectConvives(store.getState())).toEqual({
-      status: 'unavailable',
-      convives: [],
-      error: null,
-      latestLoadRequestId: refused.meta.requestId,
-      addStatus: 'idle',
-      addError: null,
-      addSubjectName: null,
-      draftConviveId: 'generated-id-1',
-      latestAddRequestId: null,
-      renameStatus: 'idle',
-      renameDraft: '',
-      editingConviveId: null,
-      latestRenameRequestId: null,
-      removeStatus: 'idle',
-      pendingRemovalId: null,
-      latestRemoveRequestId: null,
-    });
-  });
-
   it('un ajout que le serveur n’a pas acquitté prend un addStatus distinct de error, sans rejoindre la liste', async () => {
     const existing = twoConvives();
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: unacknowledged,
     });
-    const loaded = await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
 
     const unacked = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
       convives: existing,
-      error: null,
-      latestLoadRequestId: loaded.meta.requestId,
+      received: true,
+      failure: null,
+      attempt: 0,
       addStatus: 'unconfirmed',
       addError: null,
       addSubjectName: 'Rory',
@@ -341,32 +230,26 @@ describe('convives slice', () => {
     });
   });
 
-  it('un nouveau chargement remet le cycle de vie de l’ajout au repos', async () => {
+  it('rouvrir l’écran remet le cycle de vie de l’ajout au repos', async () => {
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      addConvive: unacknowledged,
-    });
-    await store.dispatch(loadConvives());
+    const store = createTestStore({ addConvive: unacknowledged });
+    store.dispatch(convivesObserved(twoConvives()));
     await store.dispatch(addConvive({ name: 'Rory' }));
     expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
 
-    await store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).addStatus).toBe('idle');
     expect(selectConvives(store.getState()).addError).toBeNull();
   });
 
-  it('un chargement qui démarre pendant un ajout en vol ne réarme pas le formulaire', async () => {
+  it('rouvrir l’écran pendant un ajout en vol ne réarme pas le formulaire', async () => {
     const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      addConvive: pendingAdd,
-    });
+    const store = createTestStore({ addConvive: pendingAdd });
     void store.dispatch(addConvive({ name: 'Rory' }));
     expect(selectConvives(store.getState()).addStatus).toBe('adding');
 
-    void store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).addStatus).toBe('adding');
   });
@@ -380,41 +263,35 @@ describe('convives slice', () => {
     expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
   });
 
-  it('un nouveau chargement oublie le prénom soumis, sauf si l’ajout est encore en vol', async () => {
+  it('rouvrir l’écran oublie le prénom soumis, sauf si l’ajout est encore en vol', async () => {
     const unacknowledged: AddConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      addConvive: unacknowledged,
-    });
+    const store = createTestStore({ addConvive: unacknowledged });
     await store.dispatch(addConvive({ name: 'Rory' }));
 
-    await store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).addSubjectName).toBeNull();
   });
 
-  it('un chargement qui démarre pendant un ajout en vol conserve le prénom soumis', () => {
+  it('rouvrir l’écran pendant un ajout en vol conserve le prénom soumis', () => {
     const pendingAdd: AddConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({ addConvive: pendingAdd });
     void store.dispatch(addConvive({ name: 'Rory' }));
 
-    void store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
   });
 
-  it('un nouveau chargement efface aussi un échec d’ajout, pas seulement un constat non confirmé', async () => {
+  it('rouvrir l’écran efface aussi un échec d’ajout, pas seulement un constat non confirmé', async () => {
     const failingAdd: AddConvive = () => Promise.reject(new Error('Firestore indisponible'));
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      addConvive: failingAdd,
-    });
-    await store.dispatch(loadConvives());
+    const store = createTestStore({ addConvive: failingAdd });
+    store.dispatch(convivesObserved(twoConvives()));
     await store.dispatch(addConvive({ name: 'Rory' }));
     expect(selectConvives(store.getState()).addStatus).toBe('error');
     expect(selectConvives(store.getState()).addError).toBe('Firestore indisponible');
 
-    await store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).addStatus).toBe('idle');
     expect(selectConvives(store.getState()).addError).toBeNull();
@@ -428,61 +305,24 @@ describe('convives slice', () => {
       return ConviveBuilder.aConvive().withId('c3').withName(input.name).build();
     };
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: flakyAdd,
     });
-    const loaded = await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
     await store.dispatch(addConvive({ name: 'Rory' }));
     shouldFail = false;
 
     const retried = await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
-      convives: [...existing, ConviveBuilder.aConvive().withId('c3').withName('Rory').build()],
-      error: null,
-      latestLoadRequestId: loaded.meta.requestId,
+      convives: existing,
+      received: true,
+      failure: null,
+      attempt: 0,
       addStatus: 'idle',
       addError: null,
       addSubjectName: null,
       draftConviveId: 'generated-id-1',
       latestAddRequestId: retried.meta.requestId,
-      renameStatus: 'idle',
-      renameDraft: '',
-      editingConviveId: null,
-      latestRenameRequestId: null,
-      removeStatus: 'idle',
-      pendingRemovalId: null,
-      latestRemoveRequestId: null,
-    });
-  });
-
-  it('un rejet tardif d’un chargement dépassé n’écrase pas le foyer fraîchement chargé', async () => {
-    const fresh = twoConvives();
-    const slow = deferred<Convive[]>();
-    let call = 0;
-    const listConvives: ListConvives = () => {
-      call += 1;
-      return call === 1 ? slow.promise : Promise.resolve(fresh);
-    };
-    const store = createTestStore({ listConvives });
-
-    const abandoned = store.dispatch(loadConvives());
-    const current = store.dispatch(loadConvives());
-    await current;
-    slow.reject(RepositoryUnavailableError.create());
-    await abandoned;
-
-    expect(selectConvives(store.getState())).toEqual({
-      status: 'success',
-      convives: fresh,
-      error: null,
-      latestLoadRequestId: current.requestId,
-      addStatus: 'idle',
-      addError: null,
-      addSubjectName: null,
-      draftConviveId: 'generated-id-1',
-      latestAddRequestId: null,
       renameStatus: 'idle',
       renameDraft: '',
       editingConviveId: null,
@@ -504,10 +344,9 @@ describe('convives slice', () => {
         : Promise.resolve(ConviveBuilder.aConvive().withId('c3').withName(input.name).build());
     };
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: addConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
 
     const abandoned = store.dispatch(addConvive({ name: 'Rory' }));
     const current = store.dispatch(addConvive({ name: 'Rory' }));
@@ -530,10 +369,9 @@ describe('convives slice', () => {
       return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
     };
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: addConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
 
     const abandoned = store.dispatch(addConvive({ name: 'Sacha' }));
     const current = store.dispatch(addConvive({ name: 'Rory' }));
@@ -543,53 +381,22 @@ describe('convives slice', () => {
 
     expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
     expect(selectConvives(store.getState()).addSubjectName).toBe('Rory');
-    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
-      'Aurélie',
-      'Lionel',
-    ]);
   });
 
-  it('un rechargement du foyer n’invalide pas l’ajout en vol : son résultat rejoint bien la liste', async () => {
+  it('une émission du canal pendant un ajout en vol ramène quand même le cycle au repos, et le foyer reste celui du canal', async () => {
     const existing = twoConvives();
     const slowAdd = deferred<Convive>();
     const store = createTestStore({
-      listConvives: async () => existing,
       addConvive: () => slowAdd.promise,
     });
 
     const add = store.dispatch(addConvive({ name: 'Rory' }));
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(existing));
     slowAdd.resolve(ConviveBuilder.aConvive().withId('c3').withName('Rory').build());
     await add;
 
-    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
-      'Aurélie',
-      'Lionel',
-      'Rory',
-    ]);
     expect(selectConvives(store.getState()).addStatus).toBe('idle');
-  });
-
-  it('un ajout n’invalide pas le chargement en vol : la liste chargée s’affiche bien', async () => {
-    const existing = twoConvives();
-    const rory = ConviveBuilder.aConvive().withId('c3').withName('Rory').build();
-    const slowLoad = deferred<Convive[]>();
-    const store = createTestStore({
-      listConvives: () => slowLoad.promise,
-      addConvive: async () => rory,
-    });
-
-    const load = store.dispatch(loadConvives());
-    await store.dispatch(addConvive({ name: 'Rory' }));
-    slowLoad.resolve([...existing, rory]);
-    await load;
-
-    expect(selectConvives(store.getState()).status).toBe('success');
-    expect(selectConvives(store.getState()).convives.map((c) => c.name)).toEqual([
-      'Aurélie',
-      'Lionel',
-      'Rory',
-    ]);
+    expect(selectConvives(store.getState()).convives).toEqual(existing);
   });
 
   it('un nouvel envoi chasse le constat de l’ajout précédent', async () => {
@@ -607,10 +414,9 @@ describe('convives slice', () => {
   it('un nouvel envoi chasse le constat du retrait précédent', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
     expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
@@ -630,7 +436,6 @@ describe('convives slice', () => {
     await store.dispatch(addConvive({ name: 'Rory' }));
 
     expect(add.ids).toEqual(['draft-1']);
-    expect(selectConvives(store.getState()).convives.map((c) => c.id)).toEqual(['draft-1']);
   });
 
   it('réenvoie un ajout non acquitté sous le MÊME identifiant, sans fabriquer de doublon', async () => {
@@ -653,10 +458,6 @@ describe('convives slice', () => {
     await store.dispatch(addConvive({ name: 'Zoé' }));
 
     expect(add.ids).toEqual(['draft-1', 'draft-2']);
-    expect(selectConvives(store.getState()).convives.map((c) => [c.id, c.name])).toEqual([
-      ['draft-1', 'Rory'],
-      ['draft-2', 'Zoé'],
-    ]);
   });
 
   it('rouvrir l’écran pose un identifiant neuf pour la saisie suivante', () => {
@@ -706,10 +507,9 @@ describe('convives slice', () => {
       return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: renameConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
@@ -724,10 +524,9 @@ describe('convives slice', () => {
     const renameConviveUseCase: RenameConvive = async (input) =>
       ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: renameConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     await store.dispatch(renameConvive({ id: 'c2', name: 'Alix' }));
 
@@ -741,10 +540,9 @@ describe('convives slice', () => {
     const renameConviveUseCase: RenameConvive = async (input) =>
       ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: renameConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     const renamed = await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
@@ -757,10 +555,9 @@ describe('convives slice', () => {
   it('pendant un renommage en vol, renameStatus passe à renaming et la liste ne bouge pas', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: pendingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     const inFlight = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
@@ -777,10 +574,9 @@ describe('convives slice', () => {
   it('un renommage refusé passe en error, sans altérer la liste ni refermer l’édition', async () => {
     const failingRename: RenameConvive = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: failingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
@@ -796,10 +592,9 @@ describe('convives slice', () => {
   it('un renommage que le serveur n’a pas acquitté prend un status distinct de error', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
@@ -821,10 +616,9 @@ describe('convives slice', () => {
         : Promise.resolve(ConviveBuilder.aConvive().withId(input.id).withName(input.name).build());
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: renameConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     const abandoned = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     const current = store.dispatch(renameConvive({ id: 'c2', name: 'Lionelle' }));
@@ -846,10 +640,9 @@ describe('convives slice', () => {
         : Promise.resolve(ConviveBuilder.aConvive().withId(input.id).withName(input.name).build());
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: renameConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     const abandoned = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     const current = store.dispatch(renameConvive({ id: 'c2', name: 'Lionelle' }));
@@ -864,8 +657,8 @@ describe('convives slice', () => {
   });
 
   it('ouvrir l’édition d’une ligne mémorise le convive édité, l’annuler l’oublie', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
 
     store.dispatch(conviveEditRequested('c2'));
     expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
@@ -877,10 +670,9 @@ describe('convives slice', () => {
   it('modifier le brouillon laisse le constat en place, sans refermer l’édition', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
@@ -895,10 +687,9 @@ describe('convives slice', () => {
   it('un nouvel envoi chasse le constat du renommage précédent', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
@@ -909,33 +700,29 @@ describe('convives slice', () => {
     await renvoi;
   });
 
-  it('un nouveau chargement referme l’édition et remet le cycle de renommage au repos', async () => {
+  it('rouvrir l’écran referme l’édition et remet le cycle de renommage au repos', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
 
-    await store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).renameStatus).toBe('idle');
     expect(selectConvives(store.getState()).editingConviveId).toBeNull();
   });
 
-  it('un chargement qui démarre pendant un renommage en vol ne réarme pas la ligne', async () => {
+  it('rouvrir l’écran pendant un renommage en vol ne réarme pas la ligne', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      renameConvive: pendingRename,
-    });
+    const store = createTestStore({ renameConvive: pendingRename });
     store.dispatch(conviveEditRequested('c2'));
     void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
-    void store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).renameStatus).toBe('renaming');
     expect(selectConvives(store.getState()).editingConviveId).toBe('c2');
@@ -947,10 +734,9 @@ describe('convives slice', () => {
       captured.input = input;
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: removeConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     await store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -962,10 +748,9 @@ describe('convives slice', () => {
 
   it('un retrait réussi referme la confirmation et remet le cycle au repos', async () => {
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: async () => {},
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
 
     const removed = await store.dispatch(removeConvive({ id: 'c2' }));
@@ -978,10 +763,9 @@ describe('convives slice', () => {
   it('pendant un retrait en vol, removeStatus passe à removing et le convive reste affiché', async () => {
     const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: pendingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
 
     const inFlight = store.dispatch(removeConvive({ id: 'c2' }));
@@ -997,10 +781,9 @@ describe('convives slice', () => {
   it('un retrait refusé passe en error, le convive reste dans la liste et la confirmation reste ouverte', async () => {
     const failingRemove: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: failingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
 
     await store.dispatch(removeConvive({ id: 'c2' }));
@@ -1016,10 +799,9 @@ describe('convives slice', () => {
   it('un retrait que le serveur n’a pas acquitté prend un status distinct de error, sans quitter la liste', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
 
     await store.dispatch(removeConvive({ id: 'c2' }));
@@ -1039,10 +821,9 @@ describe('convives slice', () => {
       return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: removeConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     const abandoned = store.dispatch(removeConvive({ id: 'c1' }));
     const current = store.dispatch(removeConvive({ id: 'c2' }));
@@ -1062,10 +843,9 @@ describe('convives slice', () => {
       return call === 1 ? slow.promise : Promise.reject(RepositoryUnavailableError.create());
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: removeConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
 
     const abandoned = store.dispatch(removeConvive({ id: 'c1' }));
@@ -1085,10 +865,9 @@ describe('convives slice', () => {
       called += 1;
     };
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: removeConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
 
     store.dispatch(conviveRemovalRequested('c2'));
 
@@ -1098,8 +877,8 @@ describe('convives slice', () => {
   });
 
   it('annuler la confirmation oublie la demande de retrait', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
 
@@ -1108,41 +887,35 @@ describe('convives slice', () => {
     expect(selectConvives(store.getState()).pendingRemovalId).toBeNull();
   });
 
-  it('un nouveau chargement referme la confirmation et remet le cycle de retrait au repos', async () => {
+  it('rouvrir l’écran referme la confirmation et remet le cycle de retrait au repos', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      removeConvive: unacknowledged,
-    });
-    await store.dispatch(loadConvives());
+    const store = createTestStore({ removeConvive: unacknowledged });
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
     expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
 
-    await store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).removeStatus).toBe('idle');
     expect(selectConvives(store.getState()).pendingRemovalId).toBeNull();
   });
 
-  it('un chargement qui démarre pendant un retrait en vol ne réarme pas la confirmation', async () => {
+  it('rouvrir l’écran pendant un retrait en vol ne réarme pas la confirmation', async () => {
     const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
-    const store = createTestStore({
-      listConvives: async () => twoConvives(),
-      removeConvive: pendingRemove,
-    });
+    const store = createTestStore({ removeConvive: pendingRemove });
     store.dispatch(conviveRemovalRequested('c2'));
     void store.dispatch(removeConvive({ id: 'c2' }));
 
-    void store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).removeStatus).toBe('removing');
     expect(selectConvives(store.getState()).pendingRemovalId).toBe('c2');
   });
 
   it('rend une ligne par convive, dans l’ordre de la liste, au repos', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
 
     const rows = conviveRowsOf(selectConvives(store.getState()));
 
@@ -1154,8 +927,8 @@ describe('convives slice', () => {
   });
 
   it('seule la ligne éditée passe en mode édition', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     const rows = conviveRowsOf(selectConvives(store.getState()));
@@ -1164,8 +937,8 @@ describe('convives slice', () => {
   });
 
   it('seule la ligne dont le retrait attend confirmation passe en mode confirmation', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c1'));
 
     const rows = conviveRowsOf(selectConvives(store.getState()));
@@ -1174,8 +947,8 @@ describe('convives slice', () => {
   });
 
   it('verrouille l’enregistrement tant que le brouillon est vide ou blanc', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     store.dispatch(renameDraftEdited(''));
@@ -1187,8 +960,8 @@ describe('convives slice', () => {
   });
 
   it('verrouille l’enregistrement quand le brouillon est le prénom actuel du convive', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.saveDisabled).toBe(true);
@@ -1203,10 +976,9 @@ describe('convives slice', () => {
   it('verrouille l’enregistrement pendant le renommage en vol', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: pendingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     store.dispatch(renameDraftEdited('Lio'));
     void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
@@ -1218,10 +990,9 @@ describe('convives slice', () => {
   it('après un renommage non acquitté, le bouton et le champ se réarment tous les deux', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     store.dispatch(renameDraftEdited('Lio'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
@@ -1233,10 +1004,9 @@ describe('convives slice', () => {
   it('verrouille la confirmation de retrait pendant le retrait en vol', async () => {
     const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: pendingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     void store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1246,10 +1016,9 @@ describe('convives slice', () => {
   it('porte le constat d’un renommage refusé sur la seule ligne concernée, comme une alerte', async () => {
     const failingRename: RenameConvive = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: failingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
@@ -1265,10 +1034,9 @@ describe('convives slice', () => {
   it('nomme le convive dans le constat d’un renommage non acquitté, sur un ton de constat', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c1'));
     await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
 
@@ -1284,10 +1052,9 @@ describe('convives slice', () => {
   it('porte le constat d’un retrait refusé sur la seule ligne concernée, comme une alerte', async () => {
     const failingRemove: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: failingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1303,10 +1070,9 @@ describe('convives slice', () => {
   it('nomme le convive dans le constat d’un retrait non acquitté, sur un ton de constat', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1321,10 +1087,9 @@ describe('convives slice', () => {
   it('ouvrir l’édition d’une autre ligne efface le constat périmé de la précédente', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     await store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
     expect(selectConvives(store.getState()).renameStatus).toBe('unconfirmed');
@@ -1338,10 +1103,9 @@ describe('convives slice', () => {
   it('ouvrir l’édition d’une autre ligne pendant un renommage en vol ne déplace rien', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: pendingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
@@ -1353,10 +1117,9 @@ describe('convives slice', () => {
   it('annuler l’édition pendant un renommage en vol ne referme rien', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: pendingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
@@ -1369,10 +1132,9 @@ describe('convives slice', () => {
   it('demander le retrait d’un autre convive efface le constat périmé du précédent', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
     expect(selectConvives(store.getState()).removeStatus).toBe('unconfirmed');
@@ -1386,10 +1148,9 @@ describe('convives slice', () => {
   it('demander le retrait d’un autre convive pendant un retrait en vol ne déplace rien', async () => {
     const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: pendingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     void store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1401,10 +1162,9 @@ describe('convives slice', () => {
   it('annuler la confirmation pendant un retrait en vol ne referme rien', async () => {
     const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: pendingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     void store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1416,20 +1176,13 @@ describe('convives slice', () => {
 
   it('un renommage abouti sur un convive absent de la liste n’y ajoute personne', async () => {
     const slowRename = deferred<Convive>();
-    let load = 0;
-    const listConvives: ListConvives = () => {
-      load += 1;
-      return Promise.resolve(
-        load === 1
-          ? twoConvives()
-          : [ConviveBuilder.aConvive().withId('c1').withName('Aurélie').build()],
-      );
-    };
-    const store = createTestStore({ listConvives, renameConvive: () => slowRename.promise });
-    await store.dispatch(loadConvives());
+    const store = createTestStore({ renameConvive: () => slowRename.promise });
+    store.dispatch(convivesObserved(twoConvives()));
 
     const rename = store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
-    await store.dispatch(loadConvives());
+    store.dispatch(
+      convivesObserved([ConviveBuilder.aConvive().withId('c1').withName('Aurélie').build()]),
+    );
     slowRename.resolve(ConviveBuilder.aConvive().withId('c2').withName('Lio').build());
     await rename;
 
@@ -1437,16 +1190,16 @@ describe('convives slice', () => {
   });
 
   it('une ligne ouverte en édition, sans échec, ne porte aucun constat', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     expect(conviveRowsOf(selectConvives(store.getState()))[1]?.notice).toBeNull();
   });
 
   it('une confirmation de retrait ouverte, sans échec, ne porte aucun constat et reste actionnable', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
 
     const row = conviveRowsOf(selectConvives(store.getState()))[1];
@@ -1455,8 +1208,8 @@ describe('convives slice', () => {
   });
 
   it('laisse toutes les lignes actionnables quand les deux cycles sont au repos', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
 
     expect(conviveRowsOf(selectConvives(store.getState())).map((r) => r.actionsDisabled)).toEqual([
       false,
@@ -1467,10 +1220,9 @@ describe('convives slice', () => {
   it('verrouille les lignes au repos pendant un renommage en vol', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: pendingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c1'));
     void store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
 
@@ -1485,10 +1237,9 @@ describe('convives slice', () => {
   it('un constat de renommage ne verrouille plus les autres lignes', async () => {
     const unacknowledged: RenameConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c1'));
     await store.dispatch(renameConvive({ id: 'c1', name: 'Alix' }));
 
@@ -1499,10 +1250,9 @@ describe('convives slice', () => {
   it('un constat de retrait ne verrouille plus les autres lignes', async () => {
     const unacknowledged: RemoveConvive = () => Promise.reject(RepositoryUnavailableError.create());
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: unacknowledged,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     await store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1513,10 +1263,9 @@ describe('convives slice', () => {
   it('verrouille les autres lignes pendant un retrait en vol', async () => {
     const pendingRemove: RemoveConvive = () => new Promise<void>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       removeConvive: pendingRemove,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveRemovalRequested('c2'));
     void store.dispatch(removeConvive({ id: 'c2' }));
 
@@ -1524,8 +1273,8 @@ describe('convives slice', () => {
   });
 
   it('ouvrir l’édition pré-remplit le brouillon avec le prénom courant', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
 
     store.dispatch(conviveEditRequested('c2'));
 
@@ -1533,8 +1282,8 @@ describe('convives slice', () => {
   });
 
   it('ouvrir l’édition d’un convive inconnu laisse le brouillon vide', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
 
     store.dispatch(conviveEditRequested('inconnu'));
 
@@ -1542,8 +1291,8 @@ describe('convives slice', () => {
   });
 
   it('la frappe remplace le brouillon', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
 
     store.dispatch(renameDraftEdited('Lio'));
@@ -1552,8 +1301,8 @@ describe('convives slice', () => {
   });
 
   it('annuler l’édition oublie le brouillon', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     store.dispatch(renameDraftEdited('Lio'));
 
@@ -1566,10 +1315,9 @@ describe('convives slice', () => {
     const renameConviveUseCase: RenameConvive = async (input) =>
       ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: renameConviveUseCase,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     store.dispatch(renameDraftEdited('Lio'));
 
@@ -1578,30 +1326,335 @@ describe('convives slice', () => {
     expect(selectConvives(store.getState()).renameDraft).toBe('');
   });
 
-  it('un chargement qui démarre pendant un renommage en vol conserve le brouillon', async () => {
+  it('rouvrir l’écran pendant un renommage en vol conserve le brouillon', async () => {
     const pendingRename: RenameConvive = () => new Promise<Convive>(() => {});
     const store = createTestStore({
-      listConvives: async () => twoConvives(),
       renameConvive: pendingRename,
     });
-    await store.dispatch(loadConvives());
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     store.dispatch(renameDraftEdited('Lio'));
     void store.dispatch(renameConvive({ id: 'c2', name: 'Lio' }));
 
-    void store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).renameDraft).toBe('Lio');
   });
 
-  it('un nouveau chargement hors écriture en vol oublie le brouillon', async () => {
-    const store = createTestStore({ listConvives: async () => twoConvives() });
-    await store.dispatch(loadConvives());
+  it('rouvrir l’écran hors écriture en vol oublie le brouillon', async () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
     store.dispatch(conviveEditRequested('c2'));
     store.dispatch(renameDraftEdited('Lio'));
 
-    await store.dispatch(loadConvives());
+    store.dispatch(conviveFormScreenOpened());
 
     expect(selectConvives(store.getState()).renameDraft).toBe('');
+  });
+});
+
+function convivesState(overrides: Partial<ConvivesState>): ConvivesState {
+  return { ...selectConvives(createTestStore().getState()), ...overrides };
+}
+
+function emittingConvives(convives: Convive[]): ObserveConvives {
+  return (listener) => {
+    listener(convives);
+    return () => {};
+  };
+}
+
+function refusingConvives(error: unknown): ObserveConvives {
+  return (_listener, onError) => {
+    onError(error);
+    return () => {};
+  };
+}
+
+describe('convives slice — le foyer observé', () => {
+  it('une émission du canal remplit le foyer avec les convives émis', () => {
+    const convives = twoConvives();
+    const store = createTestStore();
+
+    store.dispatch(convivesObserved(convives));
+
+    expect(selectConvives(store.getState()).convives).toEqual(convives);
+    expect(selectConvives(store.getState()).received).toBe(true);
+    expect(selectConvives(store.getState()).failure).toBeNull();
+  });
+
+  it('une émission ultérieure remplace le foyer, elle ne s’y ajoute pas', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+
+    const frais = [ConviveBuilder.aConvive().withId('c9').withName('Zoé').build()];
+    store.dispatch(convivesObserved(frais));
+
+    expect(selectConvives(store.getState()).convives).toEqual(frais);
+  });
+
+  it('une émission vide vide le foyer, elle ne laisse pas les convives précédents', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+
+    store.dispatch(convivesObserved([]));
+
+    expect(selectConvives(store.getState()).convives).toEqual([]);
+    expect(selectConvives(store.getState()).received).toBe(true);
+  });
+
+  it('une panne ordinaire du canal se constate comme illisible', () => {
+    const store = createTestStore();
+
+    store.dispatch(convivesObservationFailed({ unavailable: false }));
+
+    expect(selectConvives(store.getState()).failure).toBe('unreadable');
+    expect(selectConvives(store.getState()).received).toBe(false);
+  });
+
+  it('une panne du canal sur dépôt injoignable se constate distinctement de l’illisible', () => {
+    const store = createTestStore();
+
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    expect(selectConvives(store.getState()).failure).toBe('unavailable');
+    expect(selectConvives(store.getState()).received).toBe(false);
+  });
+
+  it('une émission après une panne efface le constat périmé', () => {
+    const convives = twoConvives();
+    const store = createTestStore();
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    store.dispatch(convivesObserved(convives));
+
+    expect(selectConvives(store.getState()).failure).toBeNull();
+    expect(selectConvives(store.getState()).convives).toEqual(convives);
+  });
+
+  it('une panne après une émission garde les convives déjà lus', () => {
+    const convives = twoConvives();
+    const store = createTestStore();
+    store.dispatch(convivesObserved(convives));
+
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    expect(selectConvives(store.getState()).convives).toEqual(convives);
+    expect(selectConvives(store.getState()).received).toBe(true);
+    expect(selectConvives(store.getState()).failure).toBe('unavailable');
+  });
+
+  it('la relance efface le constat et compte une tentative de plus', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObservationFailed({ unavailable: false }));
+
+    store.dispatch(convivesRetried());
+
+    expect(selectConvives(store.getState()).failure).toBeNull();
+    expect(selectConvives(store.getState()).attempt).toBe(1);
+    expect(selectConvivesAttempt(store.getState())).toBe(1);
+  });
+
+  it('la relance ne jette pas les convives déjà lus', () => {
+    const convives = twoConvives();
+    const store = createTestStore();
+    store.dispatch(convivesObserved(convives));
+
+    store.dispatch(convivesRetried());
+
+    expect(selectConvives(store.getState()).convives).toEqual(convives);
+    expect(selectConvives(store.getState()).received).toBe(true);
+  });
+
+  it('la déconnexion jette le foyer de la session précédente', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+    store.dispatch(convivesRetried());
+
+    store.dispatch(authStateChanged(null));
+
+    expect(selectConvives(store.getState()).convives).toEqual([]);
+    expect(selectConvives(store.getState()).received).toBe(false);
+    expect(selectConvives(store.getState()).failure).toBeNull();
+    expect(selectConvives(store.getState()).attempt).toBe(0);
+  });
+
+  it('une session qui s’ouvre ne jette pas ce que le canal vient d’émettre', () => {
+    const convives = twoConvives();
+    const store = createTestStore();
+    store.dispatch(convivesObserved(convives));
+
+    store.dispatch(authStateChanged(AccountBuilder.anAccount().build()));
+
+    expect(selectConvives(store.getState()).convives).toEqual(convives);
+    expect(selectConvives(store.getState()).received).toBe(true);
+  });
+});
+
+describe('observeConvives — l’abonnement branché sur le store', () => {
+  it('pousse dans le store les convives émis par le use case injecté', () => {
+    const convives = twoConvives();
+    const store = createTestStore({ observeConvives: emittingConvives(convives) });
+
+    store.dispatch(observeConvives());
+
+    expect(selectConvives(store.getState()).convives).toEqual(convives);
+  });
+
+  it('pousse le constat hors-ligne quand le canal refuse pour dépôt injoignable', () => {
+    const store = createTestStore({
+      observeConvives: refusingConvives(RepositoryUnavailableError.create()),
+    });
+
+    store.dispatch(observeConvives());
+
+    expect(selectConvives(store.getState()).failure).toBe('unavailable');
+  });
+
+  it('pousse le constat illisible pour toute autre panne', () => {
+    const store = createTestStore({
+      observeConvives: refusingConvives(new Error('Firestore down')),
+    });
+
+    store.dispatch(observeConvives());
+
+    expect(selectConvives(store.getState()).failure).toBe('unreadable');
+  });
+
+  it('rend le désabonnement du use case, et c’est bien celui-là', () => {
+    let desabonne = false;
+    const observe: ObserveConvives = () => () => {
+      desabonne = true;
+    };
+    const store = createTestStore({ observeConvives: observe });
+
+    const unsubscribe = store.dispatch(observeConvives());
+    expect(desabonne).toBe(false);
+
+    unsubscribe();
+
+    expect(desabonne).toBe(true);
+  });
+});
+
+describe('convivesViewOf', () => {
+  it('tant qu’aucune émission n’est arrivée, l’écran est un chargement', () => {
+    expect(convivesViewOf(convivesState({}))).toEqual({ status: 'loading' });
+  });
+
+  it('tant qu’aucune émission n’est arrivée, une panne illisible donne un constat d’échec', () => {
+    expect(convivesViewOf(convivesState({ failure: 'unreadable' }))).toEqual({ status: 'error' });
+  });
+
+  it('tant qu’aucune émission n’est arrivée, un dépôt injoignable donne le constat hors-ligne', () => {
+    expect(convivesViewOf(convivesState({ failure: 'unavailable' }))).toEqual({
+      status: 'unavailable',
+    });
+  });
+
+  it('une émission arrivée affiche une ligne par convive émis', () => {
+    const view = convivesViewOf(convivesState({ convives: twoConvives(), received: true }));
+
+    expect(view.status).toBe('loaded');
+    expect(view.status === 'loaded' ? view.convives.map((row) => row.name) : []).toEqual([
+      'Aurélie',
+      'Lionel',
+    ]);
+  });
+
+  it('une émission sans aucun convive est un foyer vide, pas une lecture manquante', () => {
+    expect(convivesViewOf(convivesState({ convives: [], received: true }))).toEqual({
+      status: 'empty',
+    });
+  });
+
+  it('une panne après émission garde les convives à l’écran, elle ne devient pas un constat d’échec', () => {
+    const view = convivesViewOf(
+      convivesState({ convives: twoConvives(), received: true, failure: 'unreadable' }),
+    );
+
+    expect(view.status).toBe('loaded');
+  });
+
+  it('un dépôt injoignable après émission garde les convives à l’écran, il n’annonce pas l’absence de connexion', () => {
+    const view = convivesViewOf(
+      convivesState({ convives: twoConvives(), received: true, failure: 'unavailable' }),
+    );
+
+    expect(view.status).toBe('loaded');
+  });
+
+  it('un foyer émis vide reste vide quand une panne survient ensuite', () => {
+    expect(
+      convivesViewOf(convivesState({ convives: [], received: true, failure: 'unreadable' })),
+    ).toEqual({ status: 'empty' });
+  });
+});
+
+describe('selectConvivesLinkLost', () => {
+  it('un store neuf n’a pas de lien perdu : rien n’a encore été observé', () => {
+    const store = createTestStore();
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(false);
+  });
+
+  it('une panne sans émission n’est pas un lien perdu : l’écran porte déjà le constat en pleine page', () => {
+    const store = createTestStore();
+
+    store.dispatch(convivesObservationFailed({ unavailable: false }));
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(false);
+  });
+
+  it('une panne après émission est un lien perdu : le foyer reste mais plus rien ne le rafraîchira', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+
+    store.dispatch(convivesObservationFailed({ unavailable: false }));
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(true);
+  });
+
+  it('un dépôt injoignable après émission est un lien perdu au même titre qu’une panne ordinaire', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(true);
+  });
+
+  it('une émission qui arrive après la panne rétablit le lien', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    store.dispatch(convivesObserved(twoConvives()));
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(false);
+  });
+
+  it('la relance rétablit le lien le temps de la tentative, et une nouvelle panne le reperd', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    store.dispatch(convivesRetried());
+    expect(selectConvivesLinkLost(store.getState())).toBe(false);
+
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(true);
+  });
+
+  it('la déconnexion oublie le lien perdu de la session précédente', () => {
+    const store = createTestStore();
+    store.dispatch(convivesObserved(twoConvives()));
+    store.dispatch(convivesObservationFailed({ unavailable: true }));
+
+    store.dispatch(authStateChanged(null));
+
+    expect(selectConvivesLinkLost(store.getState())).toBe(false);
   });
 });

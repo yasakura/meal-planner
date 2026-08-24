@@ -9,6 +9,7 @@ import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { Layout } from './Layout';
 import { createTestStore } from '../test/create-test-store';
 import { recipesObservationFailed, recipesObserved } from './features/catalogue/catalogue-slice';
+import { convivesObserved } from './features/convives/convives-slice';
 
 const LIEN_PERDU = 'Lien perdu — l’écran ne se met plus à jour.';
 
@@ -49,7 +50,9 @@ describe('Layout', () => {
 
   it('monte la section Foyer dans la sheet, à côté de l’info dev et de la déconnexion', async () => {
     const user = userEvent.setup();
-    renderLayout();
+    const store = createTestStore({ authGateway: StubAuthGateway.withoutSession() });
+    store.dispatch(convivesObserved([]));
+    renderLayout(store);
 
     await user.click(screen.getByRole('button', { name: /compte/i }));
 

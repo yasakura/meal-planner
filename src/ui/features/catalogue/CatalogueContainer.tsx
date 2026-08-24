@@ -30,6 +30,7 @@ export function CatalogueContainer() {
     props = {
       status: 'unavailable',
       message: CATALOGUE_UNAVAILABLE_NOTICE,
+      onRetry: () => dispatch(catalogueRetried()),
     };
   } else if (view.status === 'error') {
     props = {

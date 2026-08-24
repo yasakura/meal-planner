@@ -6,7 +6,7 @@ import { type E2eControls } from '../../data/e2e/e2e-failure-switch';
 import { E2E_TODAY } from '../../data/e2e/e2e-fixtures';
 import { observeAuthState, selectAuth } from '../features/auth/auth-slice';
 import { observeRecipes, selectCatalogue } from '../features/catalogue/catalogue-slice';
-import { addConvive, loadConvives, selectConvives } from '../features/convives/convives-slice';
+import { addConvive, observeConvives, selectConvives } from '../features/convives/convives-slice';
 import { generateMenu, saveMenu, selectMenu } from '../features/menu/menu-slice';
 import { recipeOfRoute } from '../features/recipe-detail/recipe-detail-states';
 import { updateRecipe } from '../features/recipe/recipe-edit-slice';
@@ -37,7 +37,7 @@ describe('createE2eStore', () => {
   it('précharge le foyer, dans l’ordre du domaine', async () => {
     const store = createE2eStore(hostAt(''));
 
-    await store.dispatch(loadConvives());
+    store.dispatch(observeConvives());
 
     expect(selectConvives(store.getState()).convives.map((convive) => convive.name)).toEqual([
       'Alice',
@@ -62,7 +62,7 @@ describe('createE2eStore', () => {
   it('obéit aux compteurs de l’URL pour l’état de départ', async () => {
     const store = createE2eStore(hostAt('?convives=1&recipes=0'));
 
-    await store.dispatch(loadConvives());
+    store.dispatch(observeConvives());
     store.dispatch(observeRecipes());
 
     expect(selectConvives(store.getState()).convives.map((convive) => convive.name)).toEqual([
@@ -85,7 +85,7 @@ describe('createE2eStore', () => {
     const store = createE2eStore(hostAt('?convives=0'));
 
     await store.dispatch(addConvive({ name: 'Zoé' }));
-    await store.dispatch(loadConvives());
+    store.dispatch(observeConvives());
 
     expect(selectConvives(store.getState()).convives.map((convive) => convive.name)).toEqual([
       'Zoé',
@@ -96,7 +96,7 @@ describe('createE2eStore', () => {
     const store = createE2eStore(hostAt(''));
 
     await store.dispatch(addConvive({ name: 'Zoé' }));
-    await store.dispatch(loadConvives());
+    store.dispatch(observeConvives());
 
     expect(selectConvives(store.getState()).convives.map((convive) => convive.name)).toEqual([
       'Alice',
@@ -169,12 +169,14 @@ describe('createE2eStore', () => {
     const store = createE2eStore(host);
 
     controlsOf(host).failReads();
-    await store.dispatch(loadConvives());
-    expect(selectConvives(store.getState()).status).toBe('unavailable');
+    store.dispatch(observeConvives());
+    expect(selectConvives(store.getState()).failure).toBe('unavailable');
+    expect(selectConvives(store.getState()).received).toBe(false);
 
     controlsOf(host).restore();
-    await store.dispatch(loadConvives());
-    expect(selectConvives(store.getState()).status).toBe('success');
+    store.dispatch(observeConvives());
+    expect(selectConvives(store.getState()).failure).toBeNull();
+    expect(selectConvives(store.getState()).received).toBe(true);
     expect(selectConvives(store.getState()).convives).toHaveLength(4);
   });
 
@@ -201,7 +203,8 @@ describe('createE2eStore', () => {
 
     expect(selectConvives(store.getState()).addStatus).toBe('unconfirmed');
 
-    await store.dispatch(loadConvives());
-    expect(selectConvives(store.getState()).status).toBe('success');
+    store.dispatch(observeConvives());
+    expect(selectConvives(store.getState()).received).toBe(true);
+    expect(selectConvives(store.getState()).failure).toBeNull();
   });
 });

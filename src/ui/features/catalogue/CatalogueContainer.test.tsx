@@ -8,7 +8,7 @@ import { RepositoryUnavailableError } from '../../../domain/errors/repository-un
 import { IngredientBuilder } from '../../../domain/test-builders/ingredient.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { RecipesSubscription } from '../../RecipesSubscription';
+import { DataSubscription } from '../../DataSubscription';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { FROM_CATALOGUE } from './recipe-detail-origin';
 import { CatalogueContainer } from './CatalogueContainer';
@@ -24,9 +24,9 @@ function renderWith(store: ReturnType<typeof createTestStore>) {
   return render(
     <Provider store={store}>
       <MemoryRouter>
-        <RecipesSubscription>
+        <DataSubscription>
           <CatalogueContainer />
-        </RecipesSubscription>
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );
@@ -165,11 +165,19 @@ describe('CatalogueContainer', () => {
     expect(screen.queryByText('Impossible de charger le catalogue.')).not.toBeInTheDocument();
   });
 
-  it('le constat hors-ligne ne propose pas « Réessayer », contrairement à l’échec de chargement', async () => {
-    renderWithChannel(RecipeChannel.refusingWith(RepositoryUnavailableError.create()));
+  it('le constat hors-ligne propose « Réessayer », qui rouvre un abonnement neuf et ramène le catalogue', async () => {
+    const user = userEvent.setup();
+    const channel = RecipeChannel.refusingWith(RepositoryUnavailableError.create());
+    renderWithChannel(channel);
     await screen.findByText(OFFLINE_NOTICE);
 
-    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    channel.willEmit([RecipeBuilder.aRecipe().withId('r-1').withTitle('Poulet rôti').build()]);
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(await screen.findByText('Poulet rôti')).toBeInTheDocument();
+    expect(screen.queryByText(OFFLINE_NOTICE)).not.toBeInTheDocument();
+    expect(channel.subscriptions).toBe(2);
+    expect(channel.live).toBe(1);
   });
 
   it('le constat hors-ligne est annoncé poliment, jamais comme une alerte', async () => {
@@ -197,7 +205,7 @@ describe('CatalogueContainer', () => {
     const sous = (montre: boolean) => (
       <Provider store={store}>
         <MemoryRouter>
-          <RecipesSubscription>{montre ? <CatalogueContainer /> : null}</RecipesSubscription>
+          <DataSubscription>{montre ? <CatalogueContainer /> : null}</DataSubscription>
         </MemoryRouter>
       </Provider>
     );
