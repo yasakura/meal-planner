@@ -10,7 +10,7 @@ const { colors, space, fonts } = tokens;
 export type MenuScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  | { status: 'unavailable'; message: string }
+  | { status: 'unavailable'; message: string; onRetry: () => void }
   | { status: 'empty' }
   | {
       status: 'consultation';
@@ -311,10 +311,13 @@ export function MenuSpinner() {
   );
 }
 
-export function MenuUnavailable({ message }: { message: string }) {
+export function MenuUnavailable({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <CenteredState>
       <StateText role="status">{message}</StateText>
+      <RetryButton type="button" onClick={onRetry}>
+        Réessayer
+      </RetryButton>
     </CenteredState>
   );
 }
@@ -338,7 +341,7 @@ function Body(props: MenuScreenProps) {
         </ErrorBox>
       );
     case 'unavailable':
-      return <MenuUnavailable message={props.message} />;
+      return <MenuUnavailable message={props.message} onRetry={props.onRetry} />;
     case 'empty':
       return (
         <EmptyState>

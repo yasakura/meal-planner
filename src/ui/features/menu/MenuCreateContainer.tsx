@@ -51,7 +51,7 @@ export function MenuCreateContainer() {
       onRegenerate: () => dispatch(generateMenu(menuState.selectedDays)),
       onSave: handleSave,
     };
-  } else if (view.status === 'error') {
+  } else if (view.status === 'error' || view.status === 'unavailable') {
     body = { ...view, onRetry: () => void dispatch(menuRetried()) };
   } else if (view.status === 'form') {
     body = { ...view, onGenerate: () => dispatch(generateMenu(menuState.selectedDays)) };

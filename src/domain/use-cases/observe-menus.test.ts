@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   addDays,
   createCalendarDate,
@@ -6,10 +7,11 @@ import {
   type CalendarDate,
 } from '../entities/calendar-date';
 import { type Menu } from '../entities/menu';
+import { type MenuRepository } from '../ports/menu-repository';
 import { MenuBuilder } from '../test-builders/menu.builder';
 import { DriftingClock } from '../test-doubles/drifting-clock';
 import { InMemoryMenuRepository } from '../test-doubles/in-memory-menu-repository';
-import { browseMenusUseCase, type MenuNavigation } from './browse-menus';
+import { observeMenusUseCase, type MenuNavigation } from './observe-menus';
 
 const MERCREDI_19_AOUT = createCalendarDate({ year: 2026, month: 8, day: 19 });
 
@@ -21,30 +23,47 @@ function menuCommencantDans(decalage: number): MenuBuilder {
   return MenuBuilder.aMenu().startingOn(jourRelatif(decalage));
 }
 
-async function navigationSur(...menus: Menu[]): Promise<MenuNavigation> {
+function collecting(): {
+  emissions: MenuNavigation[];
+  listener: (navigation: MenuNavigation) => void;
+} {
+  const emissions: MenuNavigation[] = [];
+  return { emissions, listener: (navigation) => emissions.push(navigation) };
+}
+
+function observing(menuRepository: MenuRepository) {
+  return observeMenusUseCase({
+    menuRepository,
+    clock: DriftingClock.startingOn(MERCREDI_19_AOUT),
+  });
+}
+
+async function repositoryAvec(...menus: Menu[]): Promise<InMemoryMenuRepository> {
   const menuRepository = InMemoryMenuRepository.create();
   for (const menu of menus) {
     await menuRepository.save(menu);
   }
-  const browseMenus = browseMenusUseCase({
-    menuRepository,
-    clock: DriftingClock.startingOn(MERCREDI_19_AOUT),
-  });
-  return browseMenus();
+  return menuRepository;
+}
+
+async function navigationSur(...menus: Menu[]): Promise<MenuNavigation> {
+  const collector = collecting();
+  observing(await repositoryAvec(...menus))(collector.listener, () => {});
+  return collector.emissions.at(-1) as MenuNavigation;
 }
 
 function debuts(navigation: MenuNavigation): string[] {
   return navigation.menus.map((menu) => toIsoDate(menu.dateDebut));
 }
 
-describe('browseMenusUseCase', () => {
-  it('ne rend AUCUN menu et AUCUN index à ouvrir quand rien n’est enregistré', async () => {
+describe('observeMenusUseCase', () => {
+  it('n’émet AUCUN menu et AUCUN index à ouvrir quand rien n’est enregistré', async () => {
     const navigation = await navigationSur();
 
     expect(navigation).toEqual({ menus: [], indexInitial: null });
   });
 
-  it('rend les menus ENTIERS, ordonnés par date de début croissante, quel que soit l’ordre du dépôt', async () => {
+  it('émet les menus ENTIERS, ordonnés par date de début croissante, quel que soit l’ordre du dépôt', async () => {
     const menuDeJuillet = menuCommencantDans(-44).lastingDays(7).build();
     const menuDAout = menuCommencantDans(-2).lastingDays(7).build();
     const menuDeSeptembre = menuCommencantDans(19).lastingDays(14).build();
@@ -133,5 +152,79 @@ describe('browseMenusUseCase', () => {
 
     expect(debuts(navigation)).toEqual(['2026-08-13', '2026-08-16']);
     expect(navigation.indexInitial).toBe(1);
+  });
+
+  it('ordonne AUSSI les émissions suivantes, et y désigne le menu à ouvrir', async () => {
+    const menuEnCours = menuCommencantDans(-2).lastingDays(7).build();
+    const menuRepository = await repositoryAvec(menuCommencantDans(30).lastingDays(7).build());
+    const collector = collecting();
+    observing(menuRepository)(collector.listener, () => {});
+
+    await menuRepository.save(menuEnCours);
+
+    expect(collector.emissions).toHaveLength(2);
+    expect(debuts(collector.emissions.at(-1) as MenuNavigation)).toEqual([
+      '2026-08-17',
+      '2026-09-18',
+    ]);
+    expect(collector.emissions.at(-1)?.indexInitial).toBe(0);
+  });
+
+  it('ne mute pas le tableau émis par le dépôt', () => {
+    const menuDeSeptembre = menuCommencantDans(19).lastingDays(14).build();
+    const menuDAout = menuCommencantDans(-2).lastingDays(7).build();
+    const source = [menuDeSeptembre, menuDAout];
+    const menuRepository: MenuRepository = {
+      save: () => Promise.resolve(),
+      findAll: () => Promise.resolve(source),
+      remove: () => Promise.resolve(),
+      observeAll: (listener) => {
+        listener(source);
+        return () => {};
+      },
+    };
+    const collector = collecting();
+
+    observing(menuRepository)(collector.listener, () => {});
+
+    expect(debuts(collector.emissions.at(-1) as MenuNavigation)).toEqual([
+      '2026-08-17',
+      '2026-09-07',
+    ]);
+    expect(source.map((menu) => toIsoDate(menu.dateDebut))).toEqual(['2026-09-07', '2026-08-17']);
+  });
+
+  it('transmet l’erreur du dépôt à onError, sans passer par le listener', () => {
+    const panne = new Error('boom');
+    const menuRepository: MenuRepository = {
+      save: () => Promise.resolve(),
+      findAll: () => Promise.reject(panne),
+      remove: () => Promise.resolve(),
+      observeAll: (_listener, onError) => {
+        onError(panne);
+        return () => {};
+      },
+    };
+    const collector = collecting();
+    const errors: unknown[] = [];
+
+    observing(menuRepository)(collector.listener, (error) => errors.push(error));
+
+    expect(errors).toEqual([panne]);
+    expect(collector.emissions).toHaveLength(0);
+  });
+
+  it('rend le désabonnement du dépôt : après lui, une écriture n’émet plus rien', async () => {
+    const menuRepository = await repositoryAvec();
+    const collector = collecting();
+
+    const unsubscribe = observing(menuRepository)(collector.listener, () => {});
+    await menuRepository.save(menuCommencantDans(-2).lastingDays(7).build());
+    expect(collector.emissions).toHaveLength(2);
+
+    unsubscribe();
+    await menuRepository.save(menuCommencantDans(30).lastingDays(7).build());
+
+    expect(collector.emissions).toHaveLength(2);
   });
 });

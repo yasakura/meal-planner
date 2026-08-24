@@ -8,12 +8,12 @@ import {
 import { type AuthGateway } from '../../domain/ports/auth-gateway';
 import { type Clock } from '../../domain/ports/clock';
 import { type AddConvive } from '../../domain/use-cases/add-convive';
-import { type BrowseMenus } from '../../domain/use-cases/browse-menus';
 import { type CreateRecipe } from '../../domain/use-cases/create-recipe';
 import { type GenerateMenu } from '../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../domain/use-cases/list-recipes';
 import { type NewConviveId } from '../../domain/use-cases/new-convive-id';
 import { type ObserveConvives } from '../../domain/use-cases/observe-convives';
+import { type ObserveMenus } from '../../domain/use-cases/observe-menus';
 import { type ObserveRecipes } from '../../domain/use-cases/observe-recipes';
 import { type NewRecipeId } from '../../domain/use-cases/new-recipe-id';
 import { type NextMonday } from '../../domain/use-cases/next-monday';
@@ -39,7 +39,7 @@ export type AppDependencies = {
   listRecipes: ListRecipes;
   observeRecipes: ObserveRecipes;
   generateMenu: GenerateMenu;
-  browseMenus: BrowseMenus;
+  observeMenus: ObserveMenus;
   nextMonday: NextMonday;
   saveMenu: SaveMenu;
   observeConvives: ObserveConvives;

@@ -2,27 +2,37 @@ import { act, render, screen } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { createCalendarDate } from '../domain/entities/calendar-date';
+import { type MenuNavigation } from '../domain/use-cases/observe-menus';
 import { ConviveBuilder } from '../domain/test-builders/convive.builder';
+import { MenuBuilder } from '../domain/test-builders/menu.builder';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { createTestStore } from '../test/create-test-store';
 import { ConviveChannel } from './test-utils/convive-channel';
+import { MenuChannel } from './test-utils/menu-channel';
 import { RecipeChannel } from './test-utils/recipe-channel';
 import { catalogueRetried, selectCatalogue } from './features/catalogue/catalogue-slice';
 import { convivesRetried, selectConvives } from './features/convives/convives-slice';
+import { savedMenusRetried, selectSavedMenus } from './features/menu/saved-menus-slice';
 import { DataSubscription } from './DataSubscription';
 
 function renderSubscription(channel: RecipeChannel) {
-  return renderChannels(channel, ConviveChannel.silent());
+  return renderChannels(channel, ConviveChannel.silent(), MenuChannel.silent());
 }
 
 function renderConvives(convives: ConviveChannel) {
-  return renderChannels(RecipeChannel.silent(), convives);
+  return renderChannels(RecipeChannel.silent(), convives, MenuChannel.silent());
 }
 
-function renderChannels(recipes: RecipeChannel, convives: ConviveChannel) {
+function renderMenus(menus: MenuChannel) {
+  return renderChannels(RecipeChannel.silent(), ConviveChannel.silent(), menus);
+}
+
+function renderChannels(recipes: RecipeChannel, convives: ConviveChannel, menus: MenuChannel) {
   const store = createTestStore({
     observeRecipes: recipes.observeRecipes,
     observeConvives: convives.observeConvives,
+    observeMenus: menus.observeMenus,
   });
   const view = render(
     <Provider store={store}>
@@ -40,6 +50,17 @@ function uneRecette() {
 
 function unConvive() {
   return [ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()];
+}
+
+function unMenu(): MenuNavigation {
+  return {
+    menus: [
+      MenuBuilder.aMenu()
+        .startingOn(createCalendarDate({ year: 2026, month: 8, day: 24 }))
+        .build(),
+    ],
+    indexInitial: 0,
+  };
 }
 
 describe('DataSubscription', () => {
@@ -158,6 +179,66 @@ describe('DataSubscription', () => {
       store.dispatch(catalogueRetried());
     });
 
+    expect(convives.subscriptions).toBe(1);
+  });
+
+  it('monté, il pousse dans le store ce que le canal des menus émet', () => {
+    const channel = MenuChannel.seededWith(unMenu());
+
+    const { store } = renderMenus(channel);
+
+    expect(selectSavedMenus(store.getState()).menus).toEqual(unMenu().menus);
+  });
+
+  it('n’ouvre qu’un seul abonnement aux menus, et le démontage le referme', () => {
+    const channel = MenuChannel.seededWith(unMenu());
+
+    const { unmount } = renderMenus(channel);
+    expect(channel.subscriptions).toBe(1);
+    expect(channel.live).toBe(1);
+
+    unmount();
+
+    expect(channel.live).toBe(0);
+  });
+
+  it('une relance des menus rouvre un abonnement neuf, et n’en laisse pas deux ouverts', () => {
+    const channel = MenuChannel.refusingWith(new Error('Firestore down'));
+    const { store } = renderMenus(channel);
+    expect(channel.subscriptions).toBe(1);
+
+    act(() => {
+      store.dispatch(savedMenusRetried());
+    });
+
+    expect(channel.subscriptions).toBe(2);
+    expect(channel.live).toBe(1);
+  });
+
+  it('une émission de menus qui arrive après le montage remplace ce qui est en store', () => {
+    const channel = MenuChannel.seededWith(unMenu());
+    const { store } = renderMenus(channel);
+
+    const frais = { menus: [], indexInitial: null };
+    act(() => {
+      channel.emit(frais);
+    });
+
+    expect(selectSavedMenus(store.getState()).menus).toEqual([]);
+  });
+
+  it('une relance des menus ne rouvre ni le catalogue ni les convives', () => {
+    const recipes = RecipeChannel.seededWith(uneRecette());
+    const convives = ConviveChannel.seededWith(unConvive());
+    const { store } = renderChannels(recipes, convives, MenuChannel.silent());
+    expect(recipes.subscriptions).toBe(1);
+    expect(convives.subscriptions).toBe(1);
+
+    act(() => {
+      store.dispatch(savedMenusRetried());
+    });
+
+    expect(recipes.subscriptions).toBe(1);
     expect(convives.subscriptions).toBe(1);
   });
 });

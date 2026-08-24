@@ -4,18 +4,23 @@ import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
+import { createCalendarDate } from '../domain/entities/calendar-date';
+import { type MenuNavigation } from '../domain/use-cases/observe-menus';
 import { AccountBuilder } from '../domain/test-builders/account.builder';
 import { ConviveBuilder } from '../domain/test-builders/convive.builder';
+import { MenuBuilder } from '../domain/test-builders/menu.builder';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { createTestStore } from '../test/create-test-store';
 import { DataSubscription } from './DataSubscription';
 import { ConviveChannel } from './test-utils/convive-channel';
+import { MenuChannel } from './test-utils/menu-channel';
 import { RecipeChannel } from './test-utils/recipe-channel';
 import { authStateChanged } from './features/auth/auth-slice';
 import { CatalogueContainer } from './features/catalogue/CatalogueContainer';
 import { LinkBanner } from './LinkBanner';
 import { recipesObservationFailed, recipesObserved } from './features/catalogue/catalogue-slice';
 import { convivesObservationFailed, convivesObserved } from './features/convives/convives-slice';
+import { menusObservationFailed, menusObserved } from './features/menu/saved-menus-slice';
 import { writeRejected } from './features/writes/write-rejections-slice';
 
 const LIEN_PERDU = 'Lien perdu — l’écran ne se met plus à jour.';
@@ -26,10 +31,26 @@ function uneRecette() {
   return [RecipeBuilder.aRecipe().withId('r-1').withTitle('Ratatouille').build()];
 }
 
-function renderAbonne(channel: RecipeChannel, convives = ConviveChannel.silent()) {
+function unMenu(): MenuNavigation {
+  return {
+    menus: [
+      MenuBuilder.aMenu()
+        .startingOn(createCalendarDate({ year: 2026, month: 8, day: 24 }))
+        .build(),
+    ],
+    indexInitial: 0,
+  };
+}
+
+function renderAbonne(
+  channel: RecipeChannel,
+  convives = ConviveChannel.silent(),
+  menus = MenuChannel.silent(),
+) {
   const store = createTestStore({
     observeRecipes: channel.observeRecipes,
     observeConvives: convives.observeConvives,
+    observeMenus: menus.observeMenus,
   });
   const view = render(
     <Provider store={store}>
@@ -41,7 +62,7 @@ function renderAbonne(channel: RecipeChannel, convives = ConviveChannel.silent()
       </MemoryRouter>
     </Provider>,
   );
-  return { store, channel, convives, ...view };
+  return { store, channel, convives, menus, ...view };
 }
 
 function renderBandeauSeul(store: ReturnType<typeof createTestStore>) {
@@ -218,6 +239,69 @@ describe('LinkBanner', () => {
       convivesObserved([ConviveBuilder.aConvive().withId('c-1').withName('Zoé').build()]),
     );
     store.dispatch(convivesObservationFailed({ unavailable: true }));
+    renderBandeauSeul(store);
+    expect(screen.getByText(LIEN_PERDU)).toBeInTheDocument();
+
+    act(() => {
+      store.dispatch(authStateChanged(null));
+    });
+
+    expect(screen.queryByText(LIEN_PERDU)).not.toBeInTheDocument();
+  });
+
+  it('une panne du flux des menus après émission annonce le même lien perdu que celle des recettes', async () => {
+    const { menus } = renderAbonne(
+      RecipeChannel.seededWith(uneRecette()),
+      ConviveChannel.silent(),
+      MenuChannel.seededWith(unMenu()),
+    );
+    await screen.findByText('Ratatouille');
+    expect(screen.queryByText(LIEN_PERDU)).not.toBeInTheDocument();
+
+    act(() => {
+      menus.fail(new Error('Firestore down'));
+    });
+
+    expect(screen.getByText(LIEN_PERDU)).toBeInTheDocument();
+  });
+
+  it('une panne du flux des menus SANS émission n’annonce rien : l’écran des menus porte déjà son constat', async () => {
+    renderAbonne(
+      RecipeChannel.seededWith(uneRecette()),
+      ConviveChannel.silent(),
+      MenuChannel.refusingWith(new Error('Firestore down')),
+    );
+    await screen.findByText('Ratatouille');
+
+    expect(screen.queryByText(LIEN_PERDU)).not.toBeInTheDocument();
+  });
+
+  it('« Réessayer » relance aussi le flux des menus', async () => {
+    const user = userEvent.setup();
+    const { channel, convives, menus } = renderAbonne(
+      RecipeChannel.seededWith(uneRecette()),
+      ConviveChannel.silent(),
+      MenuChannel.seededWith(unMenu()),
+    );
+    await screen.findByText('Ratatouille');
+    act(() => {
+      menus.fail(new Error('Firestore down'));
+    });
+    expect(screen.getByText(LIEN_PERDU)).toBeInTheDocument();
+
+    menus.willEmit(unMenu());
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(menus.subscriptions).toBe(2);
+    expect(channel.subscriptions).toBe(2);
+    expect(convives.subscriptions).toBe(2);
+    expect(screen.queryByText(LIEN_PERDU)).not.toBeInTheDocument();
+  });
+
+  it('la déconnexion emporte aussi le bandeau né d’une panne du flux des menus', () => {
+    const store = createTestStore();
+    store.dispatch(menusObserved(unMenu()));
+    store.dispatch(menusObservationFailed({ unavailable: true }));
     renderBandeauSeul(store);
     expect(screen.getByText(LIEN_PERDU)).toBeInTheDocument();
 

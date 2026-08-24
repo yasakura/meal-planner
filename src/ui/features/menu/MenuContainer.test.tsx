@@ -10,30 +10,18 @@ import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type BrowseMenus, type MenuNavigation } from '../../../domain/use-cases/browse-menus';
 import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
-import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
-import { type NextMonday } from '../../../domain/use-cases/next-monday';
-import { type SaveMenu } from '../../../domain/use-cases/save-menu';
+import { type MenuNavigation } from '../../../domain/use-cases/observe-menus';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
-import { deferred } from '../../test-utils/deferred';
+import { DataSubscription } from '../../DataSubscription';
+import { MenuChannel } from '../../test-utils/menu-channel';
+import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { generateMenu, saveMenu } from './menu-slice';
 import { MENU_APRES_ENREGISTREMENT } from './menu-return';
 import { MenuContainer } from './MenuContainer';
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
-
-function aMenu(): Menu {
-  return createMenu({
-    dateDebut: LUNDI_24_AOUT,
-    repas: [
-      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
-      createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
-      createRepas({ jour: 1, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
-    ],
-  });
-}
 
 function twoRecipes(): Recipe[] {
   return [
@@ -52,7 +40,9 @@ function renderOn(store: TestStore) {
   return render(
     <Provider store={store}>
       <MemoryRouter>
-        <MenuContainer />
+        <DataSubscription>
+          <MenuContainer />
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );
@@ -62,24 +52,15 @@ function renderApresEnregistrement(store: TestStore) {
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={[MENU_APRES_ENREGISTREMENT]}>
-        <MenuContainer />
+        <DataSubscription>
+          <MenuContainer />
+        </DataSubscription>
       </MemoryRouter>
     </Provider>,
   );
 }
 
-function renderWithStore(overrides: {
-  generateMenu?: GenerateMenu;
-  listRecipes?: ListRecipes;
-  nextMonday?: NextMonday;
-  saveMenu?: SaveMenu;
-  browseMenus?: BrowseMenus;
-}) {
-  const store = createTestStore(overrides);
-  return { store, ...renderOn(store) };
-}
-
-describe('MenuContainer — consultation des menus enregistrés', async () => {
+describe('MenuContainer — consultation des menus enregistrés', () => {
   const LUNDI_31_AOUT = createCalendarDate({ year: 2026, month: 8, day: 31 });
   const LUNDI_7_SEPT = createCalendarDate({ year: 2026, month: 9, day: 7 });
 
@@ -99,8 +80,21 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
     menuDeLaSemaine(LUNDI_7_SEPT),
   ];
 
-  function browsing(menus: Menu[], indexInitial: number | null): BrowseMenus {
-    return async () => ({ menus, indexInitial });
+  function navigation(menus: Menu[], indexInitial: number | null): MenuNavigation {
+    return { menus, indexInitial };
+  }
+
+  function storeAbonneA(
+    menus: MenuChannel,
+    recettes: RecipeChannel = RecipeChannel.seededWith(twoRecipes()),
+    overrides?: { generateMenu?: GenerateMenu },
+  ): TestStore {
+    return createTestStore({
+      observeMenus: menus.observeMenus,
+      observeRecipes: recettes.observeRecipes,
+      listRecipes: async () => twoRecipes(),
+      ...overrides,
+    });
   }
 
   function flecheGauche() {
@@ -111,18 +105,17 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
     return screen.getByRole('button', { name: 'Menu suivant' });
   }
 
-  it('à l’arrivée, l’état de chargement annonce un chargement, sans prétendre générer', () => {
-    renderWithStore({ browseMenus: () => new Promise<MenuNavigation>(() => {}) });
+  it('tant que le canal n’a rien émis, l’état de chargement annonce un chargement, sans prétendre générer', () => {
+    renderOn(storeAbonneA(MenuChannel.silent()));
 
     expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
+    expect(screen.queryByRole('button', { name: /générer un menu/i })).not.toBeInTheDocument();
   });
 
   it('les flèches font défiler les menus enregistrés et se verrouillent à chaque borne', async () => {
     const user = userEvent.setup();
-    renderWithStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => twoRecipes(),
-    });
+    renderOn(storeAbonneA(MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1))));
+
     expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
     expect(flecheGauche()).toBeEnabled();
     expect(flecheDroite()).toBeEnabled();
@@ -143,10 +136,8 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
 
   it('le curseur déplacé revient au menu désigné après un remontage sur le MÊME store', async () => {
     const user = userEvent.setup();
-    const { store, unmount } = renderWithStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => twoRecipes(),
-    });
+    const store = storeAbonneA(MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1)));
+    const { unmount } = renderOn(store);
     expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
     await user.click(flecheGauche());
     expect(screen.getByText('24 – 30 août')).toBeInTheDocument();
@@ -158,35 +149,37 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
     expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
   });
 
-  it('à l’arrivée, l’écran montre le chargement avant de montrer le menu consulté', async () => {
-    const lente = deferred<MenuNavigation>();
-    renderWithStore({
-      browseMenus: () => lente.promise,
-      listRecipes: async () => twoRecipes(),
-    });
+  it('un menu enregistré ailleurs arrive à l’écran sans le moindre geste', async () => {
+    const canal = MenuChannel.seededWith(navigation([menuDeLaSemaine(LUNDI_24_AOUT)], 0));
+    renderOn(storeAbonneA(canal));
+    expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
+
+    act(() => canal.emit(navigation(TROIS_SEMAINES, 1)));
+
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(flecheGauche()).toBeEnabled();
+  });
+
+  it('l’écran montre le chargement avant de montrer le menu consulté', async () => {
+    const canal = MenuChannel.silent();
+    renderOn(storeAbonneA(canal));
 
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /générer un menu/i })).not.toBeInTheDocument();
 
-    await act(async () => lente.resolve({ menus: TROIS_SEMAINES, indexInitial: 1 }));
+    act(() => canal.emit(navigation(TROIS_SEMAINES, 1)));
 
     expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('une relecture des titres qui échoue au remontage laisse le menu consulté à l’écran, sur le MÊME store', async () => {
-    let enPanne = false;
-    const { store, unmount } = renderWithStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => {
-        if (enPanne) throw RepositoryUnavailableError.create();
-        return twoRecipes();
-      },
-    });
+  it('des titres injoignables au remontage laissent le menu consulté à l’écran, sur le MÊME store', async () => {
+    const recettes = RecipeChannel.seededWith(twoRecipes());
+    const store = storeAbonneA(MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1)), recettes);
+    const { unmount } = renderOn(store);
     expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
 
     unmount();
-    enPanne = true;
+    recettes.fail(RepositoryUnavailableError.create());
     renderOn(store);
     await arriveeAchevee();
 
@@ -195,36 +188,74 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('les menus enregistrés illisibles : l’écran accuse les menus, et « Réessayer » les relit', async () => {
+  it('les menus enregistrés illisibles : l’écran accuse les menus, et « Réessayer » rouvre leur canal', async () => {
     const user = userEvent.setup();
-    let enPanne = true;
+    const canal = MenuChannel.refusingWith(new Error('Boom firestore'));
     let generations = 0;
-    renderWithStore({
-      browseMenus: async () => {
-        if (enPanne) throw new Error('Boom firestore');
-        return { menus: TROIS_SEMAINES, indexInitial: 1 };
-      },
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => {
-        generations += 1;
-        return aMenu();
-      },
-    });
+    renderOn(
+      storeAbonneA(canal, RecipeChannel.seededWith(twoRecipes()), {
+        generateMenu: async () => {
+          generations += 1;
+          return menuDeLaSemaine(LUNDI_24_AOUT);
+        },
+      }),
+    );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Impossible de charger tes menus enregistrés.',
     );
     expect(screen.queryByText('Impossible de générer le menu.')).not.toBeInTheDocument();
 
-    enPanne = false;
+    canal.willEmit(navigation(TROIS_SEMAINES, 1));
     await user.click(screen.getByRole('button', { name: /réessayer/i }));
 
     expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(canal.subscriptions).toBe(2);
+    expect(canal.live).toBe(1);
     expect(generations).toBe(0);
   });
 
+  it('hors ligne, l’écran des menus n’est pas une impasse : « Réessayer » rouvre leur canal', async () => {
+    const user = userEvent.setup();
+    const canal = MenuChannel.refusingWith(RepositoryUnavailableError.create());
+    renderOn(storeAbonneA(canal));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Aucune connexion — le menu n’a pas pu être chargé.',
+    );
+
+    canal.willEmit(navigation(TROIS_SEMAINES, 1));
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Aucune connexion — le menu n’a pas pu être chargé.'),
+    ).not.toBeInTheDocument();
+    expect(canal.subscriptions).toBe(2);
+    expect(canal.live).toBe(1);
+  });
+
+  it('des titres hors ligne ne laissent pas l’écran sans sortie : « Réessayer » rouvre LEUR canal, et laisse celui des menus tranquille', async () => {
+    const user = userEvent.setup();
+    const recettes = RecipeChannel.refusingWith(RepositoryUnavailableError.create());
+    const menus = MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1));
+    renderOn(storeAbonneA(menus, recettes));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Aucune connexion — le menu n’a pas pu être chargé.',
+    );
+
+    recettes.willEmit(twoRecipes());
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(recettes.subscriptions).toBe(2);
+    expect(recettes.live).toBe(1);
+    expect(menus.subscriptions).toBe(1);
+  });
+
   it('aucun menu enregistré : l’écran le dit et invite à en générer un', async () => {
-    renderWithStore({ browseMenus: browsing([], null), listRecipes: async () => twoRecipes() });
+    renderOn(storeAbonneA(MenuChannel.seededWith(navigation([], null))));
 
     expect(await screen.findByText('Aucun menu enregistré')).toBeInTheDocument();
     expect(screen.getByText('Génère ton premier menu pour le retrouver ici')).toBeInTheDocument();
@@ -236,11 +267,11 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
 
   it('le constat « Menu enregistré » ne survit pas à un retour ultérieur sur l’onglet, sur le MÊME store', async () => {
     const enregistre = menuDeLaSemaine(LUNDI_24_AOUT);
-    const store = createTestStore({
-      browseMenus: browsing([enregistre], 0),
-      listRecipes: async () => twoRecipes(),
-      generateMenu: async () => enregistre,
-    });
+    const store = storeAbonneA(
+      MenuChannel.seededWith(navigation([enregistre], 0)),
+      RecipeChannel.seededWith(twoRecipes()),
+      { generateMenu: async () => enregistre },
+    );
     await store.dispatch(generateMenu(14));
     await store.dispatch(saveMenu());
     const premiere = renderApresEnregistrement(store);
@@ -251,5 +282,24 @@ describe('MenuContainer — consultation des menus enregistrés', async () => {
 
     expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
     expect(screen.queryByText('Menu enregistré')).not.toBeInTheDocument();
+  });
+
+  it('le menu refusé par le serveur s’efface de l’écran, constat compris, sans un geste', async () => {
+    const enregistre = menuDeLaSemaine(LUNDI_24_AOUT);
+    const canal = MenuChannel.seededWith(navigation([enregistre], 0));
+    const store = storeAbonneA(canal, RecipeChannel.seededWith(twoRecipes()), {
+      generateMenu: async () => enregistre,
+    });
+    await store.dispatch(generateMenu(14));
+    await store.dispatch(saveMenu());
+    renderApresEnregistrement(store);
+    expect(await screen.findByText('Menu enregistré')).toBeInTheDocument();
+    expect(screen.getByText('24 – 30 août')).toBeInTheDocument();
+
+    act(() => canal.emit(navigation([], null)));
+
+    expect(screen.queryByText('Menu enregistré')).not.toBeInTheDocument();
+    expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
+    expect(screen.getByText('Aucun menu enregistré')).toBeInTheDocument();
   });
 });
