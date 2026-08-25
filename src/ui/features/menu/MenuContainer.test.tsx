@@ -383,20 +383,19 @@ describe('MenuContainer — le menu consulté s’annonce sans se modifier', () 
     return screen.getByRole('link', { name: titre }).closest('li') as HTMLElement;
   }
 
-  it('le créneau enregistré que personne ne mange annonce la sortie de la famille, là où son voisin du même jour n’annonce rien', async () => {
+  it('le créneau enregistré que personne ne mange annonce la sortie à la place de son plat, là où son voisin du même jour montre le sien', async () => {
     consulterLeMenuDeLaSortie();
 
-    expect(await screen.findByRole('link', { name: 'Ratatouille' })).toBeInTheDocument();
-    expect(
-      within(ligneDe('Ratatouille')).getByText('La famille est de sortie'),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Blanquette' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Ratatouille' })).toBeNull();
+    expect(screen.getByText('La famille est de sortie')).toBeInTheDocument();
     expect(within(ligneDe('Blanquette')).queryByText('La famille est de sortie')).toBeNull();
   });
 
   it('le menu consulté n’offre aucun rond de présence ni compteur d’invités : on n’y modifie pas qui mange', async () => {
     consulterLeMenuDeLaSortie();
 
-    expect(await screen.findByRole('link', { name: 'Ratatouille' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Blanquette' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Aurélie au repas de/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Ajouter un invité au repas de/ })).toBeNull();
     expect(screen.queryByText('0 invité')).toBeNull();

@@ -69,12 +69,16 @@ export function slotChoiceViewOf(
 export function withSlotChoice(days: MenuDay[]): MenuDay[] {
   return days.map((day) => ({
     ...day,
-    slots: day.slots.map((slot) => ({
-      ...slot,
-      choose: {
-        href: slotChoiceHref(slot.address),
-        label: `Choisir une recette pour ${day.label}, ${slot.creneauLabel}`,
-      },
-    })),
+    slots: day.slots.map((slot) =>
+      slot.recipe === 'sortie'
+        ? slot
+        : {
+            ...slot,
+            choose: {
+              href: slotChoiceHref(slot.address),
+              label: `Choisir une recette pour ${day.label}, ${slot.creneauLabel}`,
+            },
+          },
+    ),
   }));
 }

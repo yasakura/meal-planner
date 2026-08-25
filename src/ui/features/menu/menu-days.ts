@@ -25,11 +25,12 @@ type SlotLine = {
   address: SlotAddress;
   choose: SlotChoiceLink | null;
   presence: SlotPresence | null;
-  sortie: string | null;
 };
 
 export type MenuSlotLine =
-  (SlotLine & { recipe: 'known'; href: string }) | (SlotLine & { recipe: 'unknown' });
+  | (SlotLine & { recipe: 'known'; href: string })
+  | (SlotLine & { recipe: 'unknown' })
+  | (SlotLine & { recipe: 'sortie' });
 
 export type MenuDay = { key: string; label: string; slots: MenuSlotLine[] };
 
@@ -70,13 +71,14 @@ export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): 
         address: { repasIndex, slotIndex },
         choose: null,
         presence: null,
-        sortie: personneNeMangeAuRepas(repas) ? FAMILLE_DE_SORTIE : null,
       };
       const title = titleById.get(slot.recipeId);
       day.slots.push(
-        title === undefined
-          ? { ...ligne, title: titreManquant, recipe: 'unknown' }
-          : { ...ligne, title, recipe: 'known', href: origin.recipeHref(slot.recipeId) },
+        personneNeMangeAuRepas(repas)
+          ? { ...ligne, title: FAMILLE_DE_SORTIE, recipe: 'sortie' }
+          : title === undefined
+            ? { ...ligne, title: titreManquant, recipe: 'unknown' }
+            : { ...ligne, title, recipe: 'known', href: origin.recipeHref(slot.recipeId) },
       );
     }
   }

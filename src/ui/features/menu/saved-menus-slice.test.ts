@@ -123,7 +123,6 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
         address: { repasIndex: 0, slotIndex: 0 },
         choose: null,
         presence: null,
-        sortie: null,
       },
     ]);
   });

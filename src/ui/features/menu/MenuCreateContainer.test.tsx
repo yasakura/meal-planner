@@ -1043,6 +1043,37 @@ describe('MenuCreateContainer — choisir qui mange à chaque créneau du brouil
     ).not.toBeInTheDocument();
   });
 
+  it('le créneau que plus personne ne mange remplace son plat par la mention, sans lien ni crayon, et rend le plat tel quel dès qu’on y remet quelqu’un', async () => {
+    const { user } = await brouillonAvecFoyer();
+    const midi = () => ligne('lundi 24 août, Midi');
+    expect(within(midi()).getByRole('link', { name: 'Ratatouille' })).toBeInTheDocument();
+    expect(
+      within(midi()).getByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
+    ).toBeInTheDocument();
+
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(within(midi()).queryByRole('link', { name: 'Ratatouille' })).toBeNull();
+    expect(
+      within(midi()).queryByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
+    ).toBeNull();
+    expect(within(midi()).getByText('La famille est de sortie')).toBeInTheDocument();
+    expect(
+      within(ligne('mardi 25 août, Midi')).getByRole('link', { name: 'Ratatouille' }),
+    ).toBeInTheDocument();
+
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(within(midi()).getByRole('link', { name: 'Ratatouille' })).toHaveAttribute(
+      'href',
+      '/catalogue/r1?depuis=menu-nouveau',
+    );
+    expect(
+      within(midi()).getByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
+    ).toBeInTheDocument();
+  });
+
   it('un créneau que personne ne mange mais qui reçoit un invité n’annonce aucune sortie', async () => {
     const { user } = await brouillonAvecFoyer();
 

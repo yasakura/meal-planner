@@ -291,12 +291,11 @@ const GuestCount = styled.span`
   text-align: center;
 `;
 
-const SortieNote = styled.p`
+const SortieNote = styled.span`
   font-family: ${fonts.body};
-  font-size: 12px;
+  font-size: 15px;
   font-style: italic;
   color: ${colors.inkSecondary};
-  margin: 0;
 `;
 
 const CreneauLabel = styled.span`
@@ -421,6 +420,8 @@ export function MenuDays({
                   <SlotEnd>
                     {slot.recipe === 'known' ? (
                       <SlotLink to={slot.href}>{slot.title}</SlotLink>
+                    ) : slot.recipe === 'sortie' ? (
+                      <SortieNote>{slot.title}</SortieNote>
                     ) : (
                       <SlotTitle>{slot.title}</SlotTitle>
                     )}
@@ -430,7 +431,6 @@ export function MenuDays({
                 {presenceActions === null || slot.presence === null ? null : (
                   <PresenceRow presence={slot.presence} actions={presenceActions} />
                 )}
-                {slot.sortie === null ? null : <SortieNote>{slot.sortie}</SortieNote>}
               </SlotItem>
             ))}
           </SlotList>
