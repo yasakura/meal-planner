@@ -122,6 +122,7 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
         href: '/catalogue/r1?depuis=menu',
         address: { repasIndex: 0, slotIndex: 0 },
         choose: null,
+        sortie: null,
       },
     ]);
   });
