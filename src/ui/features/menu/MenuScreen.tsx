@@ -324,7 +324,7 @@ export function MenuUnavailable({ message, onRetry }: { message: string; onRetry
 
 export function MenuSaveNoticeView({ notice }: { notice: MenuSaveNotice | null }) {
   if (notice === null) return null;
-  return <Note role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.message}</Note>;
+  return <Note role="status">{notice.message}</Note>;
 }
 
 function Body(props: MenuScreenProps) {

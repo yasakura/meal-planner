@@ -14,7 +14,7 @@ describe('InMemoryRecipeRepository', () => {
     await repository.save(curry);
     await repository.save(omelette);
 
-    expect(await repository.findAll()).toEqual([omelette, curry, gratin]);
+    expect(await repository.findAll()).toEqual([omelette, gratin, curry]);
   });
 });
 

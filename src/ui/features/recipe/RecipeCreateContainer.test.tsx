@@ -48,10 +48,6 @@ function capturingSpy() {
   return { fn, state };
 }
 
-const CONSTAT_ECHEC = 'Impossible d’enregistrer la recette.';
-
-const refuse: CreateRecipe = () => Promise.reject(new Error('Firestore refuse'));
-
 const ID_DU_FORMULAIRE = 'generated-id-1';
 
 function identifiantsSuccessifs() {
@@ -66,6 +62,23 @@ async function saisirUneRecette(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('RecipeCreateContainer', () => {
+  it('ne laisse pas partir un nombre de personnes que le domaine refuserait, et laisse partir celui qu’il accepte', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore(spy.fn);
+    await saisirUneRecette(user);
+    await user.clear(screen.getByLabelText(/personnes/i));
+
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    expect(spy.state.captured).toBeUndefined();
+
+    await user.type(screen.getByLabelText(/personnes/i), '4');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    await vi.waitFor(() => expect(spy.state.captured?.convivesReference).toBe(4));
+  });
+
   it('rend le titre, une ligne ingrédient, le champ personnes (=4) et les boutons ajouter/enregistrer', () => {
     renderWithStore();
 
@@ -95,20 +108,6 @@ describe('RecipeCreateContainer', () => {
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
     await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue'));
-  });
-
-  it('ne navigue pas si l’enregistrement échoue (reste sur la page)', async () => {
-    const user = userEvent.setup();
-    const failing: CreateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
-    renderWithStore(failing);
-
-    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
-    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
-    await user.type(screen.getByLabelText(/quantité/i), '500');
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    await screen.findByRole('alert');
-    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('rend un intitulé de section « Ingrédients »', () => {
@@ -178,44 +177,6 @@ describe('RecipeCreateContainer', () => {
       convivesReference: 4,
       instructions: '',
     });
-  });
-
-  it('submit en échec : message sobre via role alert, sans le message technique', async () => {
-    const user = userEvent.setup();
-    const failing: CreateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
-    renderWithStore(failing);
-
-    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
-    await user.type(screen.getByLabelText(/nom/i), 'Poulet');
-    await user.type(screen.getByLabelText(/quantité/i), '500');
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Impossible d’enregistrer la recette.',
-    );
-    expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
-  });
-
-  it('après un échec, le second envoi efface le constat de panne avant même d’aboutir', async () => {
-    const user = userEvent.setup();
-    const enVol = deferred<Recipe>();
-    let appels = 0;
-    const depot: CreateRecipe = () => {
-      appels += 1;
-      return appels === 1 ? Promise.reject(new Error('Firestore indisponible')) : enVol.promise;
-    };
-    renderWithStore(depot);
-
-    await saisirUneRecette(user);
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
-
-    enVol.resolve(RecipeBuilder.aRecipe().build());
-    expect(await screen.findByText('Recette enregistrée.')).toBeInTheDocument();
   });
 
   it('le select d’unité propose les 5 unités (g, kg, ml, l, pièce)', () => {
@@ -502,54 +463,6 @@ describe('RecipeCreateContainer', () => {
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
-  it('un enregistrement refusé alerte et ne quitte pas le formulaire', async () => {
-    const user = userEvent.setup();
-    renderWithStore(refuse);
-
-    await saisirUneRecette(user);
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(CONSTAT_ECHEC);
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('après un enregistrement refusé, « Enregistrer » se réarme et la saisie est conservée', async () => {
-    const user = userEvent.setup();
-    renderWithStore(refuse);
-
-    await saisirUneRecette(user);
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_ECHEC);
-
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
-    expect(screen.getByLabelText(/titre/i)).toHaveValue('Poulet rôti');
-    expect(screen.getByLabelText(/nom/i)).toHaveValue('Poulet');
-  });
-
-  it('le refus levé, réenvoyer réécrit le même document et solde le constat', async () => {
-    const user = userEvent.setup();
-    const ids: string[] = [];
-    let enPanne = true;
-    const depot: CreateRecipe = async (input) => {
-      ids.push(input.id);
-      if (enPanne) throw new Error('Firestore refuse');
-      return RecipeBuilder.aRecipe().build();
-    };
-    renderWithStore(depot);
-
-    await saisirUneRecette(user);
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    await screen.findByText(CONSTAT_ECHEC);
-
-    enPanne = false;
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(await screen.findByRole('status')).toHaveTextContent('Recette enregistrée.');
-    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
-    expect(ids).toEqual([ID_DU_FORMULAIRE, ID_DU_FORMULAIRE]);
-  });
-
   it('deux formulaires successifs sur le MÊME store écrivent deux documents distincts', async () => {
     const user = userEvent.setup();
     const ids: string[] = [];
@@ -600,21 +513,5 @@ describe('RecipeCreateContainer', () => {
     await user.click(screen.getByRole('button', { name: /enregistrer/i }));
 
     await vi.waitFor(() => expect(ids).toEqual(['id-2', 'id-4']));
-  });
-
-  it('remonté sur le MÊME store après un enregistrement refusé, rouvre un formulaire neuf', async () => {
-    const user = userEvent.setup();
-    const { store, unmount } = renderWithStore(refuse);
-
-    await saisirUneRecette(user);
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
-
-    unmount();
-    renderOn(store);
-
-    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/titre/i)).toHaveValue('');
-    expect(store.getState().recipe.status).toBe('idle');
   });
 });

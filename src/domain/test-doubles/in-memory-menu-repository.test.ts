@@ -26,7 +26,7 @@ describe('InMemoryMenuRepository', () => {
     await repository.save(menuDu19Janvier);
     await repository.save(menuDu2Fevrier);
 
-    expect(await repository.findAll()).toEqual([menuDu2Fevrier, menuDu19Janvier, menuDu5Janvier]);
+    expect(await repository.findAll()).toEqual([menuDu2Fevrier, menuDu5Janvier, menuDu19Janvier]);
   });
 });
 

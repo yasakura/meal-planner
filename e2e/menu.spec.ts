@@ -26,7 +26,7 @@ test.describe('Menu', () => {
     await expect(premierJour.nth(0)).toContainText('Midi');
     await expect(premierJour.nth(0)).toContainText('Omelette aux herbes');
     await expect(premierJour.nth(1)).toContainText('Soir');
-    await expect(premierJour.nth(1)).toContainText('Gratin dauphinois');
+    await expect(premierJour.nth(1)).toContainText('Curry de pois chiches');
 
     await expect(page.getByRole('button', { name: 'Régénérer' })).toBeVisible();
   });
@@ -376,8 +376,8 @@ test.describe('Menu et modification de recette', () => {
     await expect(ancienTitre).toHaveCount(9);
     await expect(nouveauTitre).toHaveCount(0);
 
-    const premierJour = page.locator('main section').first().locator('li');
-    await expect(premierJour.nth(1)).toContainText('Gratin dauphinois');
+    const midiDuDeuxiemeJour = page.locator('main section').nth(1).locator('li').nth(0);
+    await expect(midiDuDeuxiemeJour).toContainText('Gratin dauphinois');
 
     await page.click('nav a[href="/catalogue"]');
     await expect(page.getByRole('heading', { level: 1, name: 'Recettes' })).toBeVisible();
@@ -393,7 +393,7 @@ test.describe('Menu et modification de recette', () => {
 
     await expect(nouveauTitre).toHaveCount(9);
     await expect(ancienTitre).toHaveCount(0);
-    await expect(premierJour.nth(1)).toContainText('Aubergines farcies');
+    await expect(midiDuDeuxiemeJour).toContainText('Aubergines farcies');
     await expect(page.locator('main section')).toHaveCount(14);
     await expect(page.locator('main section li')).toHaveCount(28);
     await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);

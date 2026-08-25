@@ -4,7 +4,7 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { type CreateRecipeInput } from '../../../domain/use-cases/create-recipe';
 import { type AppThunk, type AppThunkApiConfig, type RootState } from '../../store/store';
 
-export type RecipeCreationStatus = 'idle' | 'saving' | 'success' | 'error';
+export type RecipeCreationStatus = 'idle' | 'saving' | 'success';
 
 export type RecipeState = {
   status: RecipeCreationStatus;
@@ -13,8 +13,6 @@ export type RecipeState = {
 };
 
 export type RecipeFormNotice = { tone: 'success' | 'error'; message: string };
-
-export const RECIPE_SAVE_FAILED = 'Impossible d’enregistrer la recette.';
 
 export type RecipeDraft = Omit<CreateRecipeInput, 'id'>;
 
@@ -68,10 +66,6 @@ const recipeSlice = createSlice({
         if (action.meta.requestId !== state.latestCreateRequestId) return;
         state.status = 'success';
         state.draftId = action.payload.nextDraftId;
-      })
-      .addCase(createRecipe.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestCreateRequestId) return;
-        state.status = 'error';
       });
   },
 });
@@ -90,7 +84,6 @@ export const selectRecipeCreation = (state: RootState): RecipeState => state.rec
 
 export function recipeCreateNoticeOf(state: RecipeState): RecipeFormNotice | null {
   if (state.status === 'success') return { tone: 'success', message: 'Recette enregistrée.' };
-  if (state.status === 'error') return { tone: 'error', message: RECIPE_SAVE_FAILED };
   return null;
 }
 

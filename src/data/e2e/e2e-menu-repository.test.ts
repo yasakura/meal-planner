@@ -47,8 +47,8 @@ describe('E2eMenuRepository', () => {
 
     expect(await repository.findAll()).toEqual([
       menuCommencantLe(LUNDI_2_FEVRIER),
-      menuCommencantLe(LUNDI_19_JANVIER),
       menuCommencantLe(LUNDI_5_JANVIER),
+      menuCommencantLe(LUNDI_19_JANVIER),
     ]);
   });
 
@@ -121,6 +121,76 @@ describe('E2eMenuRepository', () => {
       expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER)]);
     });
     expect(onWriteRejected).toHaveBeenCalledTimes(1);
+  });
+
+  it('le refus d’une écriture n’efface pas celle faite après le rétablissement', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eMenuRepository.startingEmpty(failures);
+
+    failures.failWrites();
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
+    failures.restore();
+    await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(1));
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_19_JANVIER)]);
+  });
+
+  it('deux refus dans la même fenêtre annulent chacun leur écriture, pas la collection entière', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eMenuRepository.startingEmpty(failures);
+    failures.failWrites();
+
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
+    await repository.save(menuCommencantLe(LUNDI_19_JANVIER));
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(2));
+    expect(await repository.findAll()).toEqual([]);
+  });
+
+  it('deux refus sur le MÊME menu rendent la valeur d’origine, pas la première refusée', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eMenuRepository.startingEmpty(failures);
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-curry'));
+    failures.failWrites();
+
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-gratin'));
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-omelette'));
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(2));
+    expect(await repository.findAll()).toEqual([menuCommencantLe(LUNDI_5_JANVIER, 'recipe-curry')]);
+  });
+
+  it('un enregistrement refusé puis un retrait refusé de la MÊME période ne laissent rien derrière eux', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eMenuRepository.startingEmpty(failures);
+    failures.failWrites();
+
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER));
+    await repository.remove(LUNDI_5_JANVIER);
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(2));
+    expect(await repository.findAll()).toEqual([]);
+  });
+
+  it('le refus d’un enregistrement ne défait pas la réécriture du MÊME menu faite depuis', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eMenuRepository.startingEmpty(failures);
+
+    failures.failWrites();
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-curry'));
+    failures.restore();
+    await repository.save(menuCommencantLe(LUNDI_5_JANVIER, 'recipe-gratin'));
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(1));
+    expect(await repository.findAll()).toEqual([
+      menuCommencantLe(LUNDI_5_JANVIER, 'recipe-gratin'),
+    ]);
   });
 });
 

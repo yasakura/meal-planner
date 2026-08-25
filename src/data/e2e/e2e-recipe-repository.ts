@@ -1,67 +1,39 @@
 import { type Recipe } from '../../domain/entities/recipe';
-import { RepositoryUnavailableError } from '../../domain/errors/repository-unavailable-error';
 import { type RecipeRepository } from '../../domain/ports/recipe-repository';
 import { type Unsubscribe } from '../../domain/ports/unsubscribe';
 import { type E2eFailureSwitch } from './e2e-failure-switch';
+import { E2eOptimisticCollection } from './e2e-optimistic-collection';
 
 export class E2eRecipeRepository implements RecipeRepository {
-  private recipes: Map<string, Recipe>;
-
-  private readonly listeners = new Set<(recipes: Recipe[]) => void>();
-
-  private constructor(
-    recipes: readonly Recipe[],
-    private readonly failures: E2eFailureSwitch,
-  ) {
-    this.recipes = new Map(recipes.map((recipe) => [recipe.id, recipe]));
-  }
+  private constructor(private readonly recipes: E2eOptimisticCollection<Recipe>) {}
 
   static seededWith(recipes: readonly Recipe[], failures: E2eFailureSwitch): E2eRecipeRepository {
-    return new E2eRecipeRepository(recipes, failures);
+    return new E2eRecipeRepository(
+      E2eOptimisticCollection.seededWith(
+        recipes.map((recipe) => [recipe.id, recipe] as const),
+        failures,
+      ),
+    );
   }
 
   save(recipe: Recipe): Promise<void> {
-    const avantEcriture = new Map(this.recipes);
-    this.recipes.set(recipe.id, recipe);
-    this.emit();
-    this.failures.refuseAfterwards(() => {
-      this.rollbackTo(avantEcriture);
+    return this.recipes.accepte((contenu) => {
+      contenu.set(recipe.id, recipe);
     });
-    return Promise.resolve();
   }
 
   async findAll(): Promise<Recipe[]> {
-    this.failures.guardRead();
-    return this.snapshot();
+    return this.recipes.lireTout();
   }
 
   async findById(id: string): Promise<Recipe | undefined> {
-    this.failures.guardRead();
-    return this.recipes.get(id);
+    return this.recipes.lireUn(id);
   }
 
   observeAll(
     listener: (recipes: Recipe[]) => void,
     onError: (error: unknown) => void,
   ): Unsubscribe {
-    this.listeners.add(listener);
-    if (this.failures.readsAreDown()) onError(RepositoryUnavailableError.create());
-    else listener(this.snapshot());
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  private rollbackTo(avantEcriture: Map<string, Recipe>): void {
-    this.recipes = avantEcriture;
-    this.emit();
-  }
-
-  private snapshot(): Recipe[] {
-    return [...this.recipes.values()].reverse();
-  }
-
-  private emit(): void {
-    for (const listener of this.listeners) listener(this.snapshot());
+    return this.recipes.observeAll(listener, onError);
   }
 }

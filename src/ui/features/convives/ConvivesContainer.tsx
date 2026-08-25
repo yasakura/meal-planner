@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { ConvivesSection, type AddNotice, type ConvivesSectionProps } from './ConvivesSection';
+import { ConvivesSection, type ConvivesSectionProps } from './ConvivesSection';
 import {
   addConvive,
   conviveEditCancelled,
@@ -16,18 +16,12 @@ import {
   renameDraftEdited,
   selectConvives,
   selectIsAddInFlight,
-  type ConviveAddStatus,
 } from './convives-slice';
-
-function addNoticeFor(addStatus: ConviveAddStatus): AddNotice | null {
-  if (addStatus === 'error') return { tone: 'error', message: 'Impossible d’ajouter le convive.' };
-  return null;
-}
 
 export function ConvivesContainer() {
   const [name, setName] = useState('');
   const convivesState = useAppSelector(selectConvives);
-  const { addStatus, renameDraft } = convivesState;
+  const { renameDraft } = convivesState;
   const isAddInFlight = useAppSelector(selectIsAddInFlight);
   const view = useMemo(() => convivesViewOf(convivesState), [convivesState]);
   const dispatch = useAppDispatch();
@@ -58,7 +52,6 @@ export function ConvivesContainer() {
     onSubmit: () => void handleSubmit(),
     submitDisabled: isAddInFlight || name.trim() === '',
     inputDisabled: isAddInFlight,
-    addNotice: addNoticeFor(addStatus),
   };
 
   let props: ConvivesSectionProps;

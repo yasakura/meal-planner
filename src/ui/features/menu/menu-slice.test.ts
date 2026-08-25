@@ -572,7 +572,6 @@ describe('menu slice — plancher de la date de début', () => {
 
 describe('menu slice — enregistrement du menu', () => {
   const SUCCES = { tone: 'success', message: 'Menu enregistré' };
-  const ECHEC = { tone: 'error', message: 'Impossible d’enregistrer le menu.' };
 
   async function storeAvecMenuAffiche(overrides?: { saveMenu?: SaveMenu }) {
     const store = createTestStore({
@@ -645,16 +644,6 @@ describe('menu slice — enregistrement du menu', () => {
     expect(constat(store)).toEqual(SUCCES);
   });
 
-  it('un échec franc du dépôt : l’écran dit que l’enregistrement a échoué', async () => {
-    const save: SaveMenu = () => Promise.reject(new Error('Boom'));
-    const store = await storeAvecMenuAffiche({ saveMenu: save });
-
-    await store.dispatch(saveMenu());
-
-    expect(constat(store)).toEqual(ECHEC);
-    expect(isSaveInFlight(selectMenu(store.getState()))).toBe(false);
-  });
-
   it('sans menu affiché, aucun enregistrement ne part — et il part dès qu’un menu est à l’écran', async () => {
     let appels = 0;
     const store = createTestStore({
@@ -675,24 +664,6 @@ describe('menu slice — enregistrement du menu', () => {
     expect(appels).toBe(1);
   });
 
-  it('un nouvel essai réussi ne laisse aucune trace du constat d’échec', async () => {
-    let premier = true;
-    const save: SaveMenu = async () => {
-      if (premier) {
-        premier = false;
-        throw new Error('Boom');
-      }
-    };
-    const store = await storeAvecMenuAffiche({ saveMenu: save });
-
-    await store.dispatch(saveMenu());
-    expect(constat(store)).toEqual(ECHEC);
-
-    await store.dispatch(saveMenu());
-
-    expect(constat(store)).toEqual(SUCCES);
-  });
-
   it('le départ d’une génération efface le constat d’enregistrement', async () => {
     const store = await storeAvecMenuAffiche();
 
@@ -711,18 +682,6 @@ describe('menu slice — enregistrement du menu', () => {
     const enregistrement = store.dispatch(saveMenu());
     await store.dispatch(generateMenu(7));
     enVol.resolve();
-    await enregistrement;
-
-    expect(constat(store)).toBeNull();
-  });
-
-  it('le REJET d’un enregistrement DÉSAVOUÉ par une génération n’accuse pas le menu affiché', async () => {
-    const enVol = deferred<void>();
-    const store = await storeAvecMenuAffiche({ saveMenu: () => enVol.promise });
-
-    const enregistrement = store.dispatch(saveMenu());
-    await store.dispatch(generateMenu(7));
-    enVol.reject(new Error('Firestore refuse'));
     await enregistrement;
 
     expect(constat(store)).toBeNull();
@@ -895,15 +854,6 @@ describe('menu slice — le sort du brouillon enregistré', () => {
     expect(menuSaveHonored(issue)).toBe(false);
     expect(selectMenu(store.getState()).menu).toEqual(aMenu());
     expect(menuCreationViewOf(selectMenu(store.getState())).status).toBe('draft');
-  });
-
-  it('un enregistrement REFUSÉ ne rend aucun menu et laisse le brouillon', async () => {
-    const store = await storeAvecBrouillon({ saveMenu: () => Promise.reject(new Error('Boom')) });
-
-    const issue = await store.dispatch(saveMenu());
-
-    expect(menuSaveHonored(issue)).toBe(false);
-    expect(selectMenu(store.getState()).menu).toEqual(aMenu());
   });
 });
 

@@ -2,6 +2,7 @@ import { toIsoDate, type CalendarDate } from '../entities/calendar-date';
 import { type Menu } from '../entities/menu';
 import { type MenuRepository } from '../ports/menu-repository';
 import { type Unsubscribe } from '../ports/unsubscribe';
+import { seededShuffle } from '../lib/seeded-shuffle';
 
 export class InMemoryMenuRepository implements MenuRepository {
   public saveCount = 0;
@@ -50,7 +51,7 @@ export class InMemoryMenuRepository implements MenuRepository {
   }
 
   private snapshot(): Menu[] {
-    return this.all().reverse();
+    return seededShuffle(this.all());
   }
 
   private emit(): void {

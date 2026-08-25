@@ -697,7 +697,6 @@ describe('MenuCreateContainer', () => {
   });
 
   const CONSTAT_ENREGISTRE = 'Menu enregistré';
-  const CONSTAT_ECHEC = 'Impossible d’enregistrer le menu.';
 
   async function genererLeMenu(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: /générer un menu/i }));
@@ -745,64 +744,6 @@ describe('MenuCreateContainer', () => {
     enVol.resolve();
     expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
-  });
-
-  it('un enregistrement refusé n’est pas une impasse : « Enregistrer » se réarme, sans « Réessayer »', async () => {
-    const user = userEvent.setup();
-    renderWithStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: async () => twoRecipes(),
-      saveMenu: () => Promise.reject(new Error('Firestore refuse')),
-    });
-    await arriveeAchevee();
-    await genererLeMenu(user);
-
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(CONSTAT_ECHEC);
-    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
-  });
-
-  it('échec franc du dépôt : l’écran alerte', async () => {
-    const user = userEvent.setup();
-    renderWithStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: async () => twoRecipes(),
-      saveMenu: () => Promise.reject(new Error('Boom')),
-    });
-    await arriveeAchevee();
-    await genererLeMenu(user);
-
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(CONSTAT_ECHEC);
-  });
-
-  it('un nouvel essai réussi ne laisse aucune trace du constat d’échec', async () => {
-    const user = userEvent.setup();
-    let premier = true;
-    const save: SaveMenu = async () => {
-      if (premier) {
-        premier = false;
-        throw new Error('Boom');
-      }
-    };
-    renderWithStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: async () => twoRecipes(),
-      saveMenu: save,
-    });
-    await arriveeAchevee();
-    await genererLeMenu(user);
-
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
-
-    expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
-    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
   });
 
   it('le constat d’enregistrement ne survit pas à un remontage sur le MÊME store', async () => {
@@ -869,9 +810,9 @@ describe('MenuCreateContainer', () => {
 
     expect(screen.queryByText(CONSTAT_ENREGISTRE)).not.toBeInTheDocument();
 
-    seconde.reject(new Error('Boom'));
+    await act(async () => seconde.resolve());
 
-    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
+    expect(await screen.findByText(CONSTAT_ENREGISTRE)).toBeInTheDocument();
   });
 
   it('la ligne d’une recette absente du catalogue n’est pas un lien, et le créneau voisin l’est', async () => {

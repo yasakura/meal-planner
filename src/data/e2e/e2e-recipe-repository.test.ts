@@ -18,7 +18,7 @@ describe('E2eRecipeRepository', () => {
   it('rend un ordre DIFFÉRENT de l’ordre d’insertion : le port n’en garantit aucun', async () => {
     const repository = E2eRecipeRepository.seededWith([gratin, curry, omelette], sansPanne());
 
-    expect(await repository.findAll()).toEqual([omelette, curry, gratin]);
+    expect(await repository.findAll()).toEqual([omelette, gratin, curry]);
   });
 
   it('rend undefined pour un id inconnu — une absence, pas une panne', async () => {
@@ -58,6 +58,77 @@ describe('E2eRecipeRepository', () => {
       expect(await repository.findAll()).toEqual([]);
     });
     expect(onWriteRejected).toHaveBeenCalledTimes(1);
+  });
+
+  it('failWrites : la réécriture est prise tout de suite, puis la recette revient telle qu’elle était', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eRecipeRepository.seededWith([curry], failures);
+    const curryRevu = RecipeBuilder.aRecipe().withId('r-2').withTitle('Curry revu').build();
+    failures.failWrites();
+
+    await repository.save(curryRevu);
+    expect(await repository.findAll()).toEqual([curryRevu]);
+
+    await vi.waitFor(async () => {
+      expect(await repository.findAll()).toEqual([curry]);
+    });
+    expect(onWriteRejected).toHaveBeenCalledTimes(1);
+  });
+
+  it('le refus d’une écriture n’efface pas celle faite après le rétablissement', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eRecipeRepository.seededWith([], failures);
+
+    failures.failWrites();
+    await repository.save(curry);
+    failures.restore();
+    await repository.save(gratin);
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(1));
+    expect(await repository.findAll()).toEqual([gratin]);
+  });
+
+  it('deux refus dans la même fenêtre annulent chacun leur écriture, pas la collection entière', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eRecipeRepository.seededWith([], failures);
+    failures.failWrites();
+
+    await repository.save(curry);
+    await repository.save(gratin);
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(2));
+    expect(await repository.findAll()).toEqual([]);
+  });
+
+  it('deux refus sur la MÊME recette rendent la valeur d’origine, pas la première refusée', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eRecipeRepository.seededWith([curry], failures);
+    failures.failWrites();
+
+    await repository.save(RecipeBuilder.aRecipe().withId('r-2').withTitle('Curry doux').build());
+    await repository.save(RecipeBuilder.aRecipe().withId('r-2').withTitle('Curry fort').build());
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(2));
+    expect(await repository.findAll()).toEqual([curry]);
+  });
+
+  it('le refus d’un enregistrement ne défait pas la réécriture de la MÊME recette faite depuis', async () => {
+    const onWriteRejected = vi.fn();
+    const failures = E2eFailureSwitch.reporting(onWriteRejected);
+    const repository = E2eRecipeRepository.seededWith([], failures);
+    const curryRevu = RecipeBuilder.aRecipe().withId('r-2').withTitle('Curry revu').build();
+
+    failures.failWrites();
+    await repository.save(curry);
+    failures.restore();
+    await repository.save(curryRevu);
+
+    await vi.waitFor(() => expect(onWriteRejected).toHaveBeenCalledTimes(1));
+    expect(await repository.findAll()).toEqual([curryRevu]);
   });
 });
 

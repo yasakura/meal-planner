@@ -17,13 +17,7 @@ import {
   type IngredientRow,
 } from './ingredient-rows';
 import { isSubmitDisabled } from './recipe-form-submission';
-import {
-  recipeEditFormOpened,
-  recipeEditNoticeOf,
-  selectRecipeEdition,
-  updateRecipe,
-} from './recipe-edit-slice';
-import { type RecipeFormNotice } from './recipe-slice';
+import { recipeEditFormOpened, selectRecipeEdition, updateRecipe } from './recipe-edit-slice';
 
 type FormState = {
   title: string;
@@ -56,7 +50,6 @@ function RecipeEditForm(props: {
   recipe: Recipe;
   back: BackLink;
   saving: boolean;
-  notice: RecipeFormNotice | null;
   onSave: (values: RecipeEditValues) => void;
 }) {
   const [form, setForm] = useState<FormState>(() => formOf(props.recipe));
@@ -105,7 +98,7 @@ function RecipeEditForm(props: {
         rows: form.rows,
       })}
       submitLabel={props.saving ? 'Enregistrement…' : 'Enregistrer'}
-      notice={rowsConstat !== null ? { tone: 'error', message: rowsConstat } : props.notice}
+      notice={rowsConstat !== null ? { tone: 'error', message: rowsConstat } : null}
     />
   );
 }
@@ -149,7 +142,6 @@ export function RecipeEditContainer() {
       recipe={loaded}
       back={origin.backToRecipe(loaded.id)}
       saving={edition.status === 'saving'}
-      notice={recipeEditNoticeOf(edition)}
       onSave={handleSave}
     />
   );
