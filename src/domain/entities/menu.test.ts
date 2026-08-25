@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createCalendarDate } from './calendar-date';
 import { type Creneau } from './creneau';
-import { createMenu, replaceSlotRecipe } from './menu';
+import { createMenu, replaceRepasPresence, replaceSlotRecipe } from './menu';
 import { createRepas } from './repas';
 import { createSlot } from './slot';
 
@@ -133,5 +133,62 @@ describe('remplacement de la recette d’un créneau du menu', () => {
     expect(() => replaceSlotRecipe(menu, { repasIndex: 0, slotIndex: 1 }, 'r-choisie')).toThrow(
       'Le créneau visé est introuvable dans le menu',
     );
+  });
+});
+
+describe('déclaration de qui mange à un créneau du menu', () => {
+  const menuDeDeuxCreneaux = () =>
+    createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [repasDe(0, 'midi', ['r-lundi-midi']), repasDe(0, 'soir', ['r-lundi-soir'])],
+    });
+
+  it('déclare les présents et les invités du créneau visé sans toucher à ses recettes', () => {
+    const menu = menuDeDeuxCreneaux();
+
+    const modifie = replaceRepasPresence(menu, 1, { presents: ['c-lionel'], invites: 2 });
+
+    expect(modifie.repas[1]?.presents).toEqual(['c-lionel']);
+    expect(modifie.repas[1]?.invites).toBe(2);
+    expect(modifie.repas[1]?.slots).toEqual([{ recipeId: 'r-lundi-soir' }]);
+  });
+
+  it('rend un autre menu, laisse le menu d’origine et les autres créneaux intacts', () => {
+    const menu = menuDeDeuxCreneaux();
+
+    const modifie = replaceRepasPresence(menu, 1, { presents: ['c-lionel'], invites: 2 });
+
+    expect(modifie).not.toBe(menu);
+    expect(menu.repas[1]?.presents).toBeNull();
+    expect(modifie.repas[0]?.presents).toBeNull();
+    expect(modifie.repas[0]?.invites).toBe(0);
+  });
+
+  it('refuse une déclaration dont le repas est hors du menu', () => {
+    const menu = menuDeDeuxCreneaux();
+
+    expect(() => replaceRepasPresence(menu, 2, { presents: [], invites: 0 })).toThrow(
+      'Le repas visé est introuvable dans le menu',
+    );
+  });
+
+  it('changer la recette d’un créneau ne change pas qui y mange', () => {
+    const menu = createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({
+          jour: 0,
+          creneau: 'midi',
+          slots: [createSlot({ recipeId: 'r-lundi-midi' })],
+          presents: ['c-lionel'],
+          invites: 2,
+        }),
+      ],
+    });
+
+    const modifie = replaceSlotRecipe(menu, { repasIndex: 0, slotIndex: 0 }, 'r-choisie');
+
+    expect(modifie.repas[0]?.presents).toEqual(['c-lionel']);
+    expect(modifie.repas[0]?.invites).toBe(2);
   });
 });

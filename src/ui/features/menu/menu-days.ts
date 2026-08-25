@@ -1,5 +1,6 @@
 import { type Creneau } from '../../../domain/entities/creneau';
 import { type Menu, type SlotAddress } from '../../../domain/entities/menu';
+import { personneNeMangeAuRepas } from '../../../domain/entities/repas';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type Origin } from '../catalogue/recipe-detail-origin';
 import { menuDayLabel } from './menu-day-label';
@@ -12,6 +13,7 @@ type SlotLine = {
   title: string;
   address: SlotAddress;
   choose: SlotChoiceLink | null;
+  sortie: string | null;
 };
 
 export type MenuSlotLine =
@@ -27,6 +29,8 @@ const CRENEAU_LABELS: Record<Creneau, string> = {
 const RECETTE_INCONNUE = 'Recette inconnue';
 
 const TITRE_INDISPONIBLE = 'Titre indisponible';
+
+const FAMILLE_DE_SORTIE = 'La famille est de sortie';
 
 export function creneauLabel(creneau: Creneau): string {
   return CRENEAU_LABELS[creneau];
@@ -53,6 +57,7 @@ export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): 
         creneauLabel: creneauLabel(repas.creneau),
         address: { repasIndex, slotIndex },
         choose: null,
+        sortie: personneNeMangeAuRepas(repas) ? FAMILLE_DE_SORTIE : null,
       };
       const title = titleById.get(slot.recipeId);
       day.slots.push(

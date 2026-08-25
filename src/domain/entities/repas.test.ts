@@ -76,3 +76,56 @@ describe('Repas', () => {
     expect(repas.slots).toHaveLength(1);
   });
 });
+
+describe('présence au créneau', () => {
+  const unRepas = (presence: { presents?: string[] | null; invites?: number }) =>
+    createRepas({
+      jour: 0,
+      creneau: 'midi',
+      slots: [createSlot({ recipeId: 'r1' })],
+      ...presence,
+    });
+
+  it('sans présence déclarée, le créneau est au défaut du foyer et sans invité', () => {
+    const repas = unRepas({});
+
+    expect(repas.presents).toBeNull();
+    expect(repas.invites).toBe(0);
+  });
+
+  it('conserve les convives déclarés présents et le nombre d’invités', () => {
+    const repas = unRepas({ presents: ['convive-1', 'convive-2'], invites: 2 });
+
+    expect(repas.presents).toEqual(['convive-1', 'convive-2']);
+    expect(repas.invites).toBe(2);
+  });
+
+  it('accepte un créneau que personne ne mange, distinct du défaut du foyer', () => {
+    const repas = unRepas({ presents: [], invites: 0 });
+
+    expect(repas.presents).toEqual([]);
+    expect(repas.presents).not.toBeNull();
+  });
+
+  it('copie et gèle la liste des présents (isolation de la source)', () => {
+    const source = ['convive-1'];
+    const repas = unRepas({ presents: source });
+
+    source.push('convive-2');
+
+    expect(repas.presents).toEqual(['convive-1']);
+    expect(Object.isFrozen(repas.presents)).toBe(true);
+  });
+
+  it('rejette un nombre d’invités non entier', () => {
+    expect(() => unRepas({ invites: 1.5 })).toThrow(
+      "Le nombre d'invités doit être un entier positif ou nul",
+    );
+  });
+
+  it('rejette un nombre d’invités négatif', () => {
+    expect(() => unRepas({ invites: -1 })).toThrow(
+      "Le nombre d'invités doit être un entier positif ou nul",
+    );
+  });
+});

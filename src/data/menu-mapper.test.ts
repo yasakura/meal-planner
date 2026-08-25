@@ -64,8 +64,16 @@ describe('menu-mapper', () => {
         jour: 0,
         creneau: 'midi',
         slots: [{ recipeId: 'recipe-curry' }, { recipeId: 'recipe-tarte' }],
+        presents: null,
+        invites: 0,
       },
-      { jour: 13, creneau: 'soir', slots: [{ recipeId: 'recipe-gratin' }] },
+      {
+        jour: 13,
+        creneau: 'soir',
+        slots: [{ recipeId: 'recipe-gratin' }],
+        presents: null,
+        invites: 0,
+      },
     ]);
   });
 
@@ -157,6 +165,36 @@ describe('menu-mapper', () => {
       expect(() => documentToMenu('2026-08-24', data)).toThrow('Créneau invalide');
     });
 
+    it('présents non-tableau → throw structurel, plutôt qu’une liste de convives fabriquée lettre à lettre', () => {
+      const data: unknown = {
+        repas: [{ jour: 0, creneau: 'midi', slots: [{ recipeId: 'r' }], presents: 'c-lionel' }],
+      };
+
+      expect(() => documentToMenu('2026-08-24', data)).toThrow(
+        'Document menu invalide : les présents du repas doivent être un tableau',
+      );
+    });
+
+    it('présent non-chaîne → throw structurel, plutôt qu’un TypeError hors contrat', () => {
+      const data: unknown = {
+        repas: [{ jour: 0, creneau: 'midi', slots: [{ recipeId: 'r' }], presents: [42] }],
+      };
+
+      expect(() => documentToMenu('2026-08-24', data)).toThrow(
+        'Document menu invalide : chaque présent du repas doit être une chaîne de caractères',
+      );
+    });
+
+    it('invités non-nombre → throw structurel, sous le contrat du document et non celui de l’entité', () => {
+      const data: unknown = {
+        repas: [{ jour: 0, creneau: 'midi', slots: [{ recipeId: 'r' }], invites: '2' }],
+      };
+
+      expect(() => documentToMenu('2026-08-24', data)).toThrow(
+        "Document menu invalide : le nombre d'invités du repas doit être un nombre",
+      );
+    });
+
     it('slots non-tableau → throw structurel', () => {
       const data: unknown = { repas: [{ jour: 0, creneau: 'midi', slots: 'r' }] };
 
@@ -224,5 +262,81 @@ describe('menu-mapper', () => {
         'La recette référencée par le créneau est obligatoire',
       );
     });
+  });
+});
+
+describe('menu-mapper et la présence aux créneaux', () => {
+  it('menuToDocument écrit les présents et les invités de chaque créneau', () => {
+    const menu = createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({
+          jour: 0,
+          creneau: 'midi',
+          slots: [createSlot({ recipeId: 'recipe-curry' })],
+          presents: ['c-lionel'],
+          invites: 2,
+        }),
+      ],
+    });
+
+    expect(menuToDocument(menu).repas.map((repas) => [repas.presents, repas.invites])).toEqual([
+      [['c-lionel'], 2],
+    ]);
+  });
+
+  it('un créneau que personne ne mange survit au round-trip, distinct du créneau laissé au défaut du foyer', () => {
+    const menu = createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({
+          jour: 0,
+          creneau: 'midi',
+          slots: [createSlot({ recipeId: 'recipe-curry' })],
+          presents: [],
+          invites: 0,
+        }),
+        createRepas({
+          jour: 0,
+          creneau: 'soir',
+          slots: [createSlot({ recipeId: 'recipe-tarte' })],
+        }),
+      ],
+    });
+
+    const roundTripped = documentToMenu(menuDocumentId(menu.dateDebut), menuToDocument(menu));
+
+    expect(roundTripped.repas.at(0)?.presents).toEqual([]);
+    expect(roundTripped.repas.at(1)?.presents).toBeNull();
+  });
+
+  it('documentToMenu relit les présents et les invités écrits dans le document', () => {
+    const data: unknown = {
+      repas: [
+        {
+          jour: 0,
+          creneau: 'midi',
+          slots: [{ recipeId: 'recipe-curry' }],
+          presents: ['c-lionel'],
+          invites: 2,
+        },
+      ],
+    };
+
+    const menu = documentToMenu('2026-08-24', data);
+
+    expect(menu.repas.at(0)?.presents).toEqual(['c-lionel']);
+    expect(menu.repas.at(0)?.invites).toBe(2);
+  });
+
+  it('un document écrit avant les présences relit un créneau au défaut du foyer, sans invité', () => {
+    const data: unknown = {
+      repas: [{ jour: 0, creneau: 'midi', slots: [{ recipeId: 'recipe-curry' }] }],
+    };
+
+    const menu = documentToMenu('2026-08-24', data);
+
+    expect(menu.repas.at(0)?.presents).toBeNull();
+    expect(menu.repas.at(0)?.invites).toBe(0);
   });
 });

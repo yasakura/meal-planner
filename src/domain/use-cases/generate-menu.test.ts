@@ -169,3 +169,21 @@ describe('generateMenuUseCase', () => {
     expect(menu.dateDebut).toEqual({ year: 2027, month: 1, day: 4 });
   });
 });
+
+describe('generateMenuUseCase et la présence aux créneaux', () => {
+  it('le menu généré ne fige aucune présence : chaque créneau est au défaut du foyer, sans invité', async () => {
+    const recipeRepository = InMemoryRecipeRepository.create();
+    await recipeRepository.save(RecipeBuilder.aRecipe().withId('r0').build());
+    const generateMenu = generateMenuUseCase({
+      recipeRepository,
+      randomPicker: SequenceRandomPicker.returning(0, 0),
+    });
+
+    const menu = await generateMenu({ days: 1, dateDebut: LUNDI_24_AOUT });
+
+    expect(menu.repas.map((r) => [r.presents, r.invites])).toEqual([
+      [null, 0],
+      [null, 0],
+    ]);
+  });
+});
