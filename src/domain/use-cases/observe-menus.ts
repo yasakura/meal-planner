@@ -2,6 +2,7 @@ import { isBefore, type CalendarDate } from '../entities/calendar-date';
 import { dateFinDuMenu, type Menu } from '../entities/menu';
 import { type Clock } from '../ports/clock';
 import { type MenuRepository } from '../ports/menu-repository';
+import { type Unsubscribe } from '../ports/unsubscribe';
 
 export type MenuNavigation = {
   menus: Menu[];
@@ -27,17 +28,21 @@ function indexInitialParmi(menus: Menu[], aujourdHui: CalendarDate): number | nu
   return menus.length - 1;
 }
 
-export function browseMenusUseCase(deps: {
-  menuRepository: MenuRepository;
-  clock: Clock;
-}): () => Promise<MenuNavigation> {
-  return async () => {
-    const enregistres = await deps.menuRepository.findAll();
-    const menus = [...enregistres].sort((premier, second) =>
-      isBefore(premier.dateDebut, second.dateDebut) ? -1 : 1,
-    );
-    return { menus, indexInitial: indexInitialParmi(menus, deps.clock.today()) };
-  };
+function parDateDeDebut(enregistres: readonly Menu[]): Menu[] {
+  return [...enregistres].sort((premier, second) =>
+    isBefore(premier.dateDebut, second.dateDebut) ? -1 : 1,
+  );
 }
 
-export type BrowseMenus = ReturnType<typeof browseMenusUseCase>;
+export function observeMenusUseCase(deps: { menuRepository: MenuRepository; clock: Clock }) {
+  return (
+    listener: (navigation: MenuNavigation) => void,
+    onError: (error: unknown) => void,
+  ): Unsubscribe =>
+    deps.menuRepository.observeAll((enregistres) => {
+      const menus = parDateDeDebut(enregistres);
+      listener({ menus, indexInitial: indexInitialParmi(menus, deps.clock.today()) });
+    }, onError);
+}
+
+export type ObserveMenus = ReturnType<typeof observeMenusUseCase>;

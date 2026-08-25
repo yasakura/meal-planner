@@ -11,7 +11,6 @@ import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type BrowseMenus } from '../../../domain/use-cases/browse-menus';
 import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { nextMondayUseCase, type NextMonday } from '../../../domain/use-cases/next-monday';
@@ -83,7 +82,6 @@ function renderWithStore(overrides: {
   listRecipes?: ListRecipes;
   nextMonday?: NextMonday;
   saveMenu?: SaveMenu;
-  browseMenus?: BrowseMenus;
 }) {
   const store = createTestStore(overrides);
   return { store, ...renderOn(store) };
@@ -251,11 +249,19 @@ describe('MenuCreateContainer', () => {
     expect(count).toBe(2);
   });
 
-  it('hors ligne, la génération porte le constat du menu et n’offre aucun bouton', async () => {
+  it('hors ligne, la génération porte le constat du menu, et « Réessayer » relance la lecture qui a échoué', async () => {
     const user = userEvent.setup();
+    let enPanne = true;
+    let generations = 0;
     renderWithStore({
-      generateMenu: async () => aMenu(),
-      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
+      generateMenu: async () => {
+        generations += 1;
+        return aMenu();
+      },
+      listRecipes: async () => {
+        if (enPanne) throw RepositoryUnavailableError.create();
+        return twoRecipes();
+      },
     });
     await arriveeAchevee();
 
@@ -266,9 +272,19 @@ describe('MenuCreateContainer', () => {
       'Aucune connexion — le menu n’a pas pu être chargé.',
     );
     expect(screen.queryByRole('button', { name: /générer un menu/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /réessayer/i })).toBeInTheDocument();
     expect(screen.queryByText('Impossible de générer le menu.')).not.toBeInTheDocument();
     expect(screen.queryByText(/Ajoute d'abord des recettes/)).not.toBeInTheDocument();
+    expect(generations).toBe(0);
+
+    enPanne = false;
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(await screen.findByText('lundi 24 août')).toBeInTheDocument();
+    expect(generations).toBe(1);
+    expect(
+      screen.queryByText('Aucune connexion — le menu n’a pas pu être chargé.'),
+    ).not.toBeInTheDocument();
   });
 
   it('le réseau revenu, revenir sur l’écran rend l’offre de générer, et le menu se génère', async () => {

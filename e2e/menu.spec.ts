@@ -126,7 +126,7 @@ test.describe('Menu', () => {
     await expect(constat).toHaveCount(1);
     await expect(page.getByText("Ajoute d'abord des recettes")).toHaveCount(0);
     await expect(generer).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Réessayer' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Réessayer' })).toHaveCount(1);
 
     await restore(page);
     await page.click('nav a[href="/catalogue"]');
@@ -137,6 +137,29 @@ test.describe('Menu', () => {
     await expect(page.locator('main section')).toHaveCount(14);
     await expect(page.locator('main section li')).toHaveCount(28);
     await expect(page.getByText('Omelette aux herbes')).toHaveCount(10);
+    await expect(constat).toHaveCount(0);
+  });
+
+  test('hors ligne, l’écran de génération n’est pas une impasse : « Réessayer » relance la génération', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await failReads(page);
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+
+    const constat = page.getByText('Aucune connexion — le menu n’a pas pu être chargé.', {
+      exact: true,
+    });
+    const reessayer = page.getByRole('button', { name: 'Réessayer' });
+    await expect(constat).toHaveCount(1);
+    await expect(reessayer).toHaveCount(1);
+
+    await restore(page);
+    await reessayer.click();
+
+    await expect(page.locator('main section')).toHaveCount(14);
+    await expect(page.locator('main section li')).toHaveCount(28);
     await expect(constat).toHaveCount(0);
   });
 
@@ -291,6 +314,25 @@ test.describe('Menu', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
     await expect(constat).toHaveCount(0);
     await expect(page).toHaveURL('/menu');
+  });
+
+  test('le menu refusé par le serveur s’efface de l’écran, constat compris, sans un geste', async ({
+    page,
+  }) => {
+    await page.goto('/menu');
+    await page.getByRole('link', { name: 'Créer un menu' }).click();
+    await page.getByRole('button', { name: 'Générer un menu' }).click();
+    await expect(page.locator('main section')).toHaveCount(14);
+
+    await failWrites(page);
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+    await expect(page).toHaveURL('/menu');
+
+    await expect(page.getByText('Menu enregistré', { exact: true })).toHaveCount(0);
+    await expect(page.locator('main section')).toHaveCount(0);
+    await expect(page.getByText('Aucun menu enregistré')).toHaveCount(1);
+    await expect(page.getByText('Une modification n’a pas pu être enregistrée.')).toHaveCount(1);
   });
 
   test('hors ligne, le menu est enregistré ; le refus du serveur lève le bandeau, « Fermer » le solde', async ({

@@ -18,6 +18,7 @@ import { MENU_APRES_ENREGISTREMENT } from './features/menu/menu-return';
 import { type AppDependencies } from './store/store';
 import { createTestStore } from '../test/create-test-store';
 import { emitting } from './test-utils/recipe-channel';
+import { emittingMenus } from './test-utils/menu-channel';
 
 function renderAppAt(path: string, overrides?: Partial<AppDependencies>) {
   const store = createTestStore({ authGateway: StubAuthGateway.withoutSession(), ...overrides });
@@ -169,6 +170,9 @@ describe('App', () => {
       listRecipes: async () => [
         RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
       ],
+      observeRecipes: emitting([
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ]),
     };
   }
 
@@ -246,7 +250,7 @@ describe('App', () => {
     const user = userEvent.setup();
     renderAppAt('/menu', {
       ...avecDeQuoiGenerer(),
-      browseMenus: async () => ({ menus: [menuDeLaSemaine()], indexInitial: 0 }),
+      observeMenus: emittingMenus({ menus: [menuDeLaSemaine()], indexInitial: 0 }),
     });
 
     expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
@@ -278,7 +282,7 @@ describe('App', () => {
         RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
       ],
       generateMenu: async () => menuDatedOn(LUNDI_31_AOUT),
-      browseMenus: async () => ({
+      observeMenus: emittingMenus({
         menus: [menuDeLaSemaine(), menuDatedOn(LUNDI_31_AOUT)],
         indexInitial: 0,
       }),
@@ -298,10 +302,13 @@ describe('App', () => {
 
   it('sous StrictMode, l’arrivée après un enregistrement pose le constat et nettoie l’adresse', async () => {
     const store = createTestStore({
-      browseMenus: async () => ({ menus: [menuDeLaSemaine()], indexInitial: 0 }),
+      observeMenus: emittingMenus({ menus: [menuDeLaSemaine()], indexInitial: 0 }),
       listRecipes: async () => [
         RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
       ],
+      observeRecipes: emitting([
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ]),
       generateMenu: async () => menuDeLaSemaine(),
       saveMenu: async () => {},
     });
@@ -312,8 +319,10 @@ describe('App', () => {
       <StrictMode>
         <Provider store={store}>
           <MemoryRouter initialEntries={[MENU_APRES_ENREGISTREMENT]}>
-            <App />
-            <AdresseCourante />
+            <DataSubscription>
+              <App />
+              <AdresseCourante />
+            </DataSubscription>
           </MemoryRouter>
         </Provider>
       </StrictMode>,

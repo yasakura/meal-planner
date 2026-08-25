@@ -14,7 +14,7 @@ import {
 } from '../ui/features/convives/convives-slice';
 import { recipeOfRoute } from '../ui/features/recipe-detail/recipe-detail-states';
 import { generateMenu, saveMenu } from '../ui/features/menu/menu-slice';
-import { loadSavedMenus, selectSavedMenus } from '../ui/features/menu/saved-menus-slice';
+import { observeMenus, selectSavedMenus } from '../ui/features/menu/saved-menus-slice';
 import { createRecipe } from '../ui/features/recipe/recipe-slice';
 import { updateRecipe } from '../ui/features/recipe/recipe-edit-slice';
 import { createTestStore } from './create-test-store';
@@ -31,7 +31,7 @@ describe('createTestStore', () => {
     ]);
   });
 
-  it('câble browseMenus et saveMenu sur un même repository : un menu enregistré est retrouvé à la relecture', async () => {
+  it('câble observeMenus et saveMenu sur un même repository : un menu enregistré est retrouvé à l’abonnement', async () => {
     const menu = createMenu({
       dateDebut: createCalendarDate({ year: 2026, month: 8, day: 24 }),
       repas: [createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] })],
@@ -43,7 +43,7 @@ describe('createTestStore', () => {
 
     await store.dispatch(generateMenu(7));
     await store.dispatch(saveMenu());
-    await store.dispatch(loadSavedMenus({ fromSave: false }));
+    store.dispatch(observeMenus());
 
     expect(selectSavedMenus(store.getState()).menus).toEqual([menu]);
   });

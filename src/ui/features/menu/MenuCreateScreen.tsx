@@ -22,7 +22,7 @@ export type MenuCreateBodyProps =
   | { status: 'form'; saveNotice: MenuSaveNotice | null; onGenerate: () => void }
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
-  | { status: 'unavailable'; message: string }
+  | { status: 'unavailable'; message: string; onRetry: () => void }
   | {
       status: 'draft';
       days: MenuDay[];
@@ -248,7 +248,7 @@ function Body(props: MenuCreateScreenProps) {
         </ErrorBox>
       );
     case 'unavailable':
-      return <MenuUnavailable message={body.message} />;
+      return <MenuUnavailable message={body.message} onRetry={body.onRetry} />;
     case 'draft':
       return (
         <>

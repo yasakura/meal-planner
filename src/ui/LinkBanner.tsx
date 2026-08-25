@@ -5,6 +5,7 @@ import { tokens } from './theme/tokens';
 import { LINK_LOST_NOTICE } from './link-lost-notice';
 import { catalogueRetried, selectCatalogueLinkLost } from './features/catalogue/catalogue-slice';
 import { convivesRetried, selectConvivesLinkLost } from './features/convives/convives-slice';
+import { savedMenusRetried, selectSavedMenusLinkLost } from './features/menu/saved-menus-slice';
 import {
   WRITE_REJECTED_NOTICE,
   selectWriteRejected,
@@ -53,15 +54,17 @@ const LineButton = styled.button`
 export function LinkBanner() {
   const catalogueLost = useAppSelector(selectCatalogueLinkLost);
   const convivesLost = useAppSelector(selectConvivesLinkLost);
+  const menusLost = useAppSelector(selectSavedMenusLinkLost);
   const writeRejected = useAppSelector(selectWriteRejected);
   const dispatch = useAppDispatch();
 
-  const linkLost = catalogueLost || convivesLost;
+  const linkLost = catalogueLost || convivesLost || menusLost;
   if (!linkLost && !writeRejected) return null;
 
   const retry = () => {
     dispatch(catalogueRetried());
     dispatch(convivesRetried());
+    dispatch(savedMenusRetried());
   };
 
   return (

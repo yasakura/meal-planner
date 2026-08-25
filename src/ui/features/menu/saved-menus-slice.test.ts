@@ -6,23 +6,37 @@ import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
-import { type BrowseMenus, type MenuNavigation } from '../../../domain/use-cases/browse-menus';
-import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
+import { type MenuNavigation, type ObserveMenus } from '../../../domain/use-cases/observe-menus';
+import { AccountBuilder } from '../../../domain/test-builders/account.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
+import { MenuChannel } from '../../test-utils/menu-channel';
 import { deferred } from '../../test-utils/deferred';
+import { authStateChanged } from '../auth/auth-slice';
+import {
+  recipesObservationFailed,
+  recipesObserved,
+  selectCatalogue,
+} from '../catalogue/catalogue-slice';
 import { generateMenu, isSaveInFlight, saveMenu, selectMenu } from './menu-slice';
 import {
   menuConsultationOf,
+  menusObservationFailed,
+  menusObserved,
   nextMenuSelected,
+  observeMenus,
   previousMenuSelected,
-  savedMenusScreenOpened,
-  savedMenusScreenOpenedAfterSave,
+  savedMenusOpened,
+  savedMenusRetried,
   savedMenusViewOf,
   selectSavedMenus,
+  selectSavedMenusAttempt,
+  selectSavedMenusLinkLost,
 } from './saved-menus-slice';
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
+
+type TestStore = ReturnType<typeof createTestStore>;
 
 function twoRecipes(): Recipe[] {
   return [
@@ -31,23 +45,34 @@ function twoRecipes(): Recipe[] {
   ];
 }
 
+function menuDeLaSemaine(dateDebut: CalendarDate): Menu {
+  return createMenu({
+    dateDebut,
+    repas: [
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+      createRepas({ jour: 6, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+    ],
+  });
+}
+
+function navigation(menus: Menu[], indexInitial: number | null): MenuNavigation {
+  return { menus, indexInitial };
+}
+
+function consultation(store: TestStore) {
+  return menuConsultationOf(
+    selectSavedMenus(store.getState()),
+    selectCatalogue(store.getState()).recipes ?? [],
+  );
+}
+
+function view(store: TestStore) {
+  return savedMenusViewOf(selectSavedMenus(store.getState()), selectCatalogue(store.getState()));
+}
+
 describe('saved menus slice — consultation des menus enregistrés', () => {
   const LUNDI_31_AOUT = createCalendarDate({ year: 2026, month: 8, day: 31 });
   const LUNDI_7_SEPT = createCalendarDate({ year: 2026, month: 9, day: 7 });
-
-  function menuDeLaSemaine(dateDebut: CalendarDate): Menu {
-    return createMenu({
-      dateDebut,
-      repas: [
-        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
-        createRepas({ jour: 6, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
-      ],
-    });
-  }
-
-  function browsing(menus: Menu[], indexInitial: number | null): BrowseMenus {
-    return async () => ({ menus, indexInitial });
-  }
 
   const TROIS_SEMAINES = [
     menuDeLaSemaine(LUNDI_24_AOUT),
@@ -55,21 +80,15 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     menuDeLaSemaine(LUNDI_7_SEPT),
   ];
 
-  async function storeEnConsultation(menus: Menu[], indexInitial: number | null) {
-    const store = createTestStore({
-      browseMenus: browsing(menus, indexInitial),
-      listRecipes: async () => twoRecipes(),
-    });
-    await store.dispatch(savedMenusScreenOpened());
+  function storeEnConsultation(menus: Menu[], indexInitial: number | null): TestStore {
+    const store = createTestStore();
+    store.dispatch(menusObserved(navigation(menus, indexInitial)));
+    store.dispatch(recipesObserved(twoRecipes()));
     return store;
   }
 
-  function consultation(store: ReturnType<typeof createTestStore>) {
-    return menuConsultationOf(selectSavedMenus(store.getState()));
-  }
-
-  it('un menu enregistré n’ouvre le choix d’aucune de ses recettes, là où ses lignes mènent bien aux fiches', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+  it('un menu enregistré n’ouvre le choix d’aucune de ses recettes, là où ses lignes mènent bien aux fiches', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
     const lignes = consultation(store)?.days.flatMap((jour) => jour.slots) ?? [];
 
@@ -80,48 +99,15 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     ]);
   });
 
-  it('à l’arrivée, la liste des menus enregistrés et le curseur viennent du domaine, sans retri', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+  it('l’émission porte la liste des menus enregistrés et le curseur, que le store garde sans retri', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
     expect(selectSavedMenus(store.getState()).menus).toEqual(TROIS_SEMAINES);
-    expect(selectSavedMenus(store.getState()).index).toBe(1);
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
   });
 
-  it('l’arrivée lit les menus enregistrés PUIS les titres du catalogue', async () => {
-    const appels: string[] = [];
-    const store = createTestStore({
-      browseMenus: async () => {
-        appels.push('menus');
-        return { menus: TROIS_SEMAINES, indexInitial: 1 };
-      },
-      listRecipes: async () => {
-        appels.push('recettes');
-        return twoRecipes();
-      },
-    });
-
-    await store.dispatch(savedMenusScreenOpened());
-
-    expect(appels).toEqual(['menus', 'recettes']);
-  });
-
-  it('sans menu enregistré ni menu généré, l’arrivée ne lit pas le catalogue', async () => {
-    let lectures = 0;
-    const store = createTestStore({
-      browseMenus: browsing([], null),
-      listRecipes: async () => {
-        lectures += 1;
-        return twoRecipes();
-      },
-    });
-
-    await store.dispatch(savedMenusScreenOpened());
-
-    expect(lectures).toBe(0);
-  });
-
-  it('l’écran consulte le menu désigné : sa période, ses jours, ses créneaux et ses liens', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+  it('l’écran consulte le menu désigné : sa période, ses jours, ses créneaux et ses liens', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
     expect(consultation(store)?.days.map((jour) => jour.label)).toEqual([
@@ -141,8 +127,8 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     ]);
   });
 
-  it('le curseur recule d’un menu, et avance d’un menu', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+  it('le curseur recule d’un menu, et avance d’un menu', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
     store.dispatch(previousMenuSelected());
     expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
@@ -154,198 +140,301 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
   });
 
-  it('sur le plus ancien, seule la flèche de gauche est verrouillée', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 0);
+  it('le curseur déplacé suit SON menu quand une émission en insère un plus ancien devant', () => {
+    const store = storeEnConsultation(
+      [menuDeLaSemaine(LUNDI_31_AOUT), menuDeLaSemaine(LUNDI_7_SEPT)],
+      0,
+    );
+    store.dispatch(nextMenuSelected());
+    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
+
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 0)));
+
+    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
+  });
+
+  it('sur le plus ancien, seule la flèche de gauche est verrouillée', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 0);
 
     expect(consultation(store)?.previousDisabled).toBe(true);
     expect(consultation(store)?.nextDisabled).toBe(false);
   });
 
-  it('sur le plus récent, seule la flèche de droite est verrouillée', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 2);
+  it('sur le plus récent, seule la flèche de droite est verrouillée', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 2);
 
     expect(consultation(store)?.previousDisabled).toBe(false);
     expect(consultation(store)?.nextDisabled).toBe(true);
   });
 
-  it('entre deux menus, aucune flèche n’est verrouillée', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+  it('entre deux menus, aucune flèche n’est verrouillée', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
     expect(consultation(store)?.previousDisabled).toBe(false);
     expect(consultation(store)?.nextDisabled).toBe(false);
   });
 
-  it('un seul menu enregistré verrouille les deux flèches', async () => {
-    const store = await storeEnConsultation([menuDeLaSemaine(LUNDI_24_AOUT)], 0);
+  it('un seul menu enregistré verrouille les deux flèches', () => {
+    const store = storeEnConsultation([menuDeLaSemaine(LUNDI_24_AOUT)], 0);
 
     expect(consultation(store)?.previousDisabled).toBe(true);
     expect(consultation(store)?.nextDisabled).toBe(true);
   });
 
-  it('hors ligne, le constat l’emporte sur la consultation', async () => {
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: () => Promise.reject(RepositoryUnavailableError.create()),
+  it('hors ligne, le constat l’emporte sur la consultation', () => {
+    const store = createTestStore();
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    expect(view(store)).toEqual({
+      status: 'unavailable',
+      message: 'Aucune connexion — le menu n’a pas pu être chargé.',
+      source: 'titres',
     });
-
-    await store.dispatch(savedMenusScreenOpened());
-
-    expect(selectSavedMenus(store.getState()).status).toBe('unavailable');
-    expect(consultation(store)).toBeNull();
   });
 
-  it('une relecture des titres qui échoue ne retire pas de l’écran le menu consulté', async () => {
-    let enPanne = false;
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => {
-        if (enPanne) throw new Error('Boom firestore');
-        return twoRecipes();
-      },
+  it('des titres illisibles avant toute émission renvoient à la relance des TITRES, pas des menus', () => {
+    const store = createTestStore();
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
+
+    expect(view(store)).toEqual({
+      status: 'error',
+      message: expect.any(String),
+      source: 'titres',
     });
-    await store.dispatch(savedMenusScreenOpened());
-    expect(consultation(store)).not.toBeNull();
+  });
 
-    enPanne = true;
-    await store.dispatch(savedMenusScreenOpened());
+  it('des titres devenus illisibles ne retirent pas de l’écran le menu consulté', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
-    expect(selectSavedMenus(store.getState()).status).toBe('error');
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
+
+    expect(view(store).status).toBe('consultation');
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
     expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
   });
 
-  it('un dépôt injoignable pendant la relecture des titres ne retire pas de l’écran le menu consulté', async () => {
-    let enPanne = false;
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: async () => {
-        if (enPanne) throw RepositoryUnavailableError.create();
-        return twoRecipes();
-      },
-    });
-    await store.dispatch(savedMenusScreenOpened());
-    expect(consultation(store)).not.toBeNull();
+  it('un dépôt de titres devenu injoignable ne retire pas de l’écran le menu consulté', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
-    enPanne = true;
-    await store.dispatch(savedMenusScreenOpened());
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
 
-    expect(selectSavedMenus(store.getState()).status).toBe('unavailable');
+    expect(view(store).status).toBe('consultation');
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
     expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
   });
 
-  it('le curseur déplacé revient au menu désigné par le domaine à chaque arrivée sur l’écran', async () => {
-    const store = await storeEnConsultation(TROIS_SEMAINES, 1);
+  it('un canal de menus tombé ne retire pas de l’écran le menu consulté', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    store.dispatch(menusObservationFailed({ unavailable: true }));
+
+    expect(view(store).status).toBe('consultation');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+  });
+
+  it('le curseur déplacé revient au menu désigné par le domaine à chaque arrivée sur l’écran', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
     store.dispatch(previousMenuSelected());
-    expect(selectSavedMenus(store.getState()).index).toBe(0);
+    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
 
-    await store.dispatch(savedMenusScreenOpened());
+    store.dispatch(savedMenusOpened({ fromSave: false }));
 
-    expect(selectSavedMenus(store.getState()).index).toBe(1);
-  });
-
-  it('à l’arrivée, l’écran charge tant que les menus enregistrés ne sont pas lus', async () => {
-    const lente = deferred<MenuNavigation>();
-    const store = createTestStore({
-      browseMenus: () => lente.promise,
-      listRecipes: async () => twoRecipes(),
-    });
-
-    const arrivee = store.dispatch(savedMenusScreenOpened());
-
-    expect(selectSavedMenus(store.getState()).status).toBe('loading');
-    expect(consultation(store)).toBeNull();
-
-    lente.resolve({ menus: TROIS_SEMAINES, indexInitial: 1 });
-    await arrivee;
-
-    expect(selectSavedMenus(store.getState()).status).toBe('success');
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
   });
 
-  it('un store neuf n’a rien chargé, ne consulte rien et n’a rien à consulter', () => {
+  it('l’écran charge tant que les menus enregistrés ne sont pas émis', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+
+    expect(view(store).status).toBe('loading');
+    expect(consultation(store)).toBeNull();
+
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+
+    expect(view(store).status).toBe('consultation');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+  });
+
+  it('un store neuf n’a rien reçu, ne désigne aucun menu et n’a rien à consulter', () => {
     const store = createTestStore();
 
     expect(selectSavedMenus(store.getState())).toEqual({
-      status: 'idle',
-      hasLoadedOnce: false,
-      menus: [],
-      index: null,
-      recipes: [],
-      saved: false,
-      focusOn: null,
+      menus: null,
+      indexInitial: null,
+      failure: null,
+      attempt: 0,
+      cursor: null,
     });
     expect(consultation(store)).toBeNull();
+    expect(view(store).status).toBe('loading');
   });
 
-  it('l’arrivée dont les titres se font attendre ne consulte rien et reste en chargement', async () => {
-    const titres = deferred<Recipe[]>();
-    const store = createTestStore({
-      browseMenus: browsing(TROIS_SEMAINES, 1),
-      listRecipes: () => titres.promise,
-    });
+  it('les menus émis dont les titres se font attendre ne consultent rien et restent en chargement', () => {
+    const store = createTestStore();
 
-    const arrivee = store.dispatch(savedMenusScreenOpened());
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
 
-    expect(savedMenusViewOf(selectSavedMenus(store.getState())).status).toBe('loading');
-    expect(consultation(store)).toBeNull();
+    expect(view(store).status).toBe('loading');
 
-    titres.resolve(twoRecipes());
-    await arrivee;
+    store.dispatch(recipesObserved(twoRecipes()));
 
+    expect(view(store).status).toBe('consultation');
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
   });
 
-  it('sans aucun menu enregistré, l’écran est vide — il ne charge plus', async () => {
-    const store = await storeEnConsultation([], null);
+  it('sans aucun menu enregistré, l’écran est vide — il ne charge plus, et n’attend aucun titre', () => {
+    const store = createTestStore();
 
-    expect(savedMenusViewOf(selectSavedMenus(store.getState())).status).toBe('empty');
+    store.dispatch(menusObserved(navigation([], null)));
+
+    expect(view(store).status).toBe('empty');
   });
 
-  it('une seconde arrivée ne recouvre pas d’un chargement le menu déjà consulté', async () => {
-    const lente = deferred<MenuNavigation>();
-    let premiere = true;
-    const store = createTestStore({
-      browseMenus: () => {
-        if (!premiere) return lente.promise;
-        premiere = false;
-        return Promise.resolve({ menus: TROIS_SEMAINES, indexInitial: 1 });
-      },
-      listRecipes: async () => twoRecipes(),
-    });
-    await store.dispatch(savedMenusScreenOpened());
-    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+  it('une seconde arrivée ne recouvre pas d’un chargement le menu déjà consulté', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
 
-    void store.dispatch(savedMenusScreenOpened());
+    store.dispatch(savedMenusOpened({ fromSave: false }));
 
-    expect(savedMenusViewOf(selectSavedMenus(store.getState())).status).toBe('consultation');
+    expect(view(store).status).toBe('consultation');
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
   });
 
-  it('les menus enregistrés illisibles nomment les menus enregistrés', async () => {
-    const store = createTestStore({
-      browseMenus: () => Promise.reject(new Error('Boom firestore')),
-    });
+  it('les menus enregistrés illisibles nomment les menus enregistrés', () => {
+    const store = createTestStore();
 
-    await store.dispatch(savedMenusScreenOpened());
+    store.dispatch(menusObservationFailed({ unavailable: false }));
 
-    expect(savedMenusViewOf(selectSavedMenus(store.getState()))).toEqual({
+    expect(view(store)).toEqual({
       status: 'error',
       message: 'Impossible de charger tes menus enregistrés.',
+      source: 'menus',
     });
   });
 
-  it('le dépôt indisponible à l’arrivée porte le constat hors ligne, sans message d’échec', async () => {
-    const store = createTestStore({
-      browseMenus: () => Promise.reject(RepositoryUnavailableError.create()),
-    });
+  it('le dépôt de menus indisponible porte le constat hors ligne, sans message d’échec', () => {
+    const store = createTestStore();
 
-    await store.dispatch(savedMenusScreenOpened());
+    store.dispatch(menusObservationFailed({ unavailable: true }));
 
-    expect(savedMenusViewOf(selectSavedMenus(store.getState()))).toEqual({
+    expect(view(store)).toEqual({
       status: 'unavailable',
       message: 'Aucune connexion — le menu n’a pas pu être chargé.',
+      source: 'menus',
     });
+  });
+
+  it('la relance efface le constat et compte une tentative de plus', () => {
+    const store = createTestStore();
+    store.dispatch(menusObservationFailed({ unavailable: true }));
+    expect(selectSavedMenusAttempt(store.getState())).toBe(0);
+
+    store.dispatch(savedMenusRetried());
+
+    expect(selectSavedMenus(store.getState()).failure).toBeNull();
+    expect(selectSavedMenusAttempt(store.getState())).toBe(1);
+    expect(view(store).status).toBe('loading');
+  });
+
+  it('la session refermée jette les menus reçus, le constat et les tentatives', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+    store.dispatch(menusObservationFailed({ unavailable: true }));
+    store.dispatch(savedMenusRetried());
+
+    store.dispatch(authStateChanged(null));
+
+    expect(selectSavedMenus(store.getState())).toEqual({
+      menus: null,
+      indexInitial: null,
+      failure: null,
+      attempt: 0,
+      cursor: null,
+    });
+  });
+
+  it('une session qui s’ouvre ne jette pas ce que le canal vient d’émettre', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    store.dispatch(authStateChanged(AccountBuilder.anAccount().build()));
+
+    expect(selectSavedMenus(store.getState()).menus).toEqual(TROIS_SEMAINES);
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+  });
+});
+
+describe('observeMenus — l’abonnement branché sur le store', () => {
+  const MENUS = navigation([menuDeLaSemaine(LUNDI_24_AOUT)], 0);
+
+  it('pousse dans le store les menus émis par le use case injecté', () => {
+    const store = createTestStore({ observeMenus: MenuChannel.seededWith(MENUS).observeMenus });
+
+    store.dispatch(observeMenus());
+
+    expect(selectSavedMenus(store.getState()).menus).toEqual(MENUS.menus);
+    expect(selectSavedMenus(store.getState()).indexInitial).toBe(0);
+  });
+
+  it('pousse le constat hors-ligne quand le canal refuse pour dépôt injoignable', () => {
+    const store = createTestStore({
+      observeMenus: MenuChannel.refusingWith(RepositoryUnavailableError.create()).observeMenus,
+    });
+
+    store.dispatch(observeMenus());
+
+    expect(selectSavedMenus(store.getState()).failure).toBe('unavailable');
+  });
+
+  it('pousse le constat illisible pour toute autre panne', () => {
+    const store = createTestStore({
+      observeMenus: MenuChannel.refusingWith(new Error('Firestore down')).observeMenus,
+    });
+
+    store.dispatch(observeMenus());
+
+    expect(selectSavedMenus(store.getState()).failure).toBe('unreadable');
+  });
+
+  it('rend le désabonnement du use case, et c’est bien celui-là', () => {
+    let desabonne = false;
+    const observe: ObserveMenus = () => () => {
+      desabonne = true;
+    };
+    const store = createTestStore({ observeMenus: observe });
+
+    const unsubscribe = store.dispatch(observeMenus());
+    expect(desabonne).toBe(false);
+
+    unsubscribe();
+
+    expect(desabonne).toBe(true);
+  });
+});
+
+describe('selectSavedMenusLinkLost', () => {
+  it('un store neuf n’a pas de lien perdu : rien n’a encore été observé', () => {
+    const store = createTestStore();
+
+    expect(selectSavedMenusLinkLost(store.getState())).toBe(false);
+  });
+
+  it('une panne sans émission n’est pas un lien perdu : l’écran porte déjà le constat en pleine page', () => {
+    const store = createTestStore();
+
+    store.dispatch(menusObservationFailed({ unavailable: false }));
+
+    expect(selectSavedMenusLinkLost(store.getState())).toBe(false);
+  });
+
+  it('une panne après émission est un lien perdu : les menus restent mais plus rien ne les rafraîchira', () => {
+    const store = createTestStore();
+    store.dispatch(menusObserved(navigation([menuDeLaSemaine(LUNDI_24_AOUT)], 0)));
+
+    store.dispatch(menusObservationFailed({ unavailable: false }));
+
+    expect(selectSavedMenusLinkLost(store.getState())).toBe(true);
   });
 });
 
@@ -355,69 +444,47 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
 
   const CONSTAT_ENREGISTRE = { tone: 'success', message: 'Menu enregistré' };
 
-  function menuDeLaSemaine(dateDebut: CalendarDate): Menu {
-    return createMenu({
-      dateDebut,
-      repas: [
-        createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
-        createRepas({ jour: 6, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
-      ],
-    });
+  function arriveeApresEnregistrement(store: TestStore) {
+    store.dispatch(savedMenusOpened({ fromSave: true }));
   }
 
-  function browsing(menus: Menu[]): BrowseMenus {
-    return async () => ({ menus, indexInitial: 0 });
-  }
-
-  function consultation(store: ReturnType<typeof createTestStore>) {
-    return menuConsultationOf(selectSavedMenus(store.getState()));
-  }
-
-  async function arriveeApresEnregistrement(store: ReturnType<typeof createTestStore>) {
-    await store.dispatch(savedMenusScreenOpenedAfterSave());
-  }
-
-  async function storeApresEnregistrement(overrides?: {
-    genere?: Menu;
-    enregistres?: Menu[];
-    listRecipes?: ListRecipes;
-  }) {
+  async function storeApresEnregistrement(overrides?: { genere?: Menu; emis?: Menu[] }) {
     const genere = overrides?.genere ?? menuDeLaSemaine(LUNDI_7_SEPT);
-    const enregistres = overrides?.enregistres ?? [menuDeLaSemaine(LUNDI_24_AOUT), genere];
+    const emis = overrides?.emis ?? [menuDeLaSemaine(LUNDI_24_AOUT), genere];
     const store = createTestStore({
-      browseMenus: browsing(enregistres),
-      listRecipes: overrides?.listRecipes ?? (async () => twoRecipes()),
+      listRecipes: async () => twoRecipes(),
       generateMenu: async () => genere,
       saveMenu: async () => {},
     });
+    store.dispatch(recipesObserved(twoRecipes()));
     await store.dispatch(generateMenu(7));
     await store.dispatch(saveMenu());
+    store.dispatch(menusObserved(navigation(emis, 0)));
     return store;
   }
 
   it('l’arrivée qui suit un enregistrement consulte le menu enregistré, et non celui du jour', async () => {
     const store = await storeApresEnregistrement();
 
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
 
-    expect(selectSavedMenus(store.getState()).index).toBe(1);
     expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
   });
 
   it('l’arrivée qui suit un enregistrement porte le constat « Menu enregistré »', async () => {
     const store = await storeApresEnregistrement();
 
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
 
     expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
   });
 
   it('l’arrivée SUIVANTE n’en porte plus rien, et revient au menu désigné par le domaine', async () => {
     const store = await storeApresEnregistrement();
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
     expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
 
-    await store.dispatch(savedMenusScreenOpened());
+    store.dispatch(savedMenusOpened({ fromSave: false }));
 
     expect(consultation(store)?.saveNotice).toBeNull();
     expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
@@ -426,8 +493,8 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
   it('l’arrivée rejouée par React ne fait pas disparaître le constat d’enregistrement', async () => {
     const store = await storeApresEnregistrement();
 
-    await arriveeApresEnregistrement(store);
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
 
     expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
     expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
@@ -435,11 +502,11 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
 
   it('un menu voisin consulté renonce à la cible de l’enregistrement, qu’aucune arrivée ne retrouve', async () => {
     const store = await storeApresEnregistrement();
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
     expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
 
     store.dispatch(previousMenuSelected());
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
 
     expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
     expect(consultation(store)?.saveNotice).toBeNull();
@@ -447,7 +514,7 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
 
   it('reculer d’un menu efface le constat de l’enregistrement précédent', async () => {
     const store = await storeApresEnregistrement();
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
     expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
 
     store.dispatch(previousMenuSelected());
@@ -459,9 +526,9 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
   it('avancer d’un menu efface le constat de l’enregistrement précédent', async () => {
     const store = await storeApresEnregistrement({
       genere: menuDeLaSemaine(LUNDI_24_AOUT),
-      enregistres: [menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_31_AOUT)],
+      emis: [menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_31_AOUT)],
     });
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
     expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
 
     store.dispatch(nextMenuSelected());
@@ -470,13 +537,42 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
     expect(consultation(store)?.saveNotice).toBeNull();
   });
 
-  it('un enregistrement que la relecture ne retrouve pas consulte le menu du jour, sans constat', async () => {
+  it('un enregistrement que l’émission ne porte pas consulte le menu du jour, sans constat', async () => {
     const store = await storeApresEnregistrement({
       genere: menuDeLaSemaine(LUNDI_7_SEPT),
-      enregistres: [menuDeLaSemaine(LUNDI_24_AOUT)],
+      emis: [menuDeLaSemaine(LUNDI_24_AOUT)],
     });
 
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
+
+    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
+    expect(consultation(store)?.saveNotice).toBeNull();
+  });
+
+  it('un enregistrement refusé par le serveur, que l’émission suivante retire, efface le constat et le menu', async () => {
+    const store = await storeApresEnregistrement({
+      genere: menuDeLaSemaine(LUNDI_7_SEPT),
+      emis: [menuDeLaSemaine(LUNDI_7_SEPT)],
+    });
+    arriveeApresEnregistrement(store);
+    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
+    expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
+
+    store.dispatch(menusObserved(navigation([], null)));
+
+    expect(view(store).status).toBe('empty');
+    expect(consultation(store)).toBeNull();
+  });
+
+  it('un enregistrement refusé par le serveur laisse le menu voisin, sans constat', async () => {
+    const store = await storeApresEnregistrement({
+      genere: menuDeLaSemaine(LUNDI_7_SEPT),
+      emis: [menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_7_SEPT)],
+    });
+    arriveeApresEnregistrement(store);
+    expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
+
+    store.dispatch(menusObserved(navigation([menuDeLaSemaine(LUNDI_24_AOUT)], 0)));
 
     expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
     expect(consultation(store)?.saveNotice).toBeNull();
@@ -485,18 +581,21 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
   it('un enregistrement DÉSAVOUÉ par une génération ne désigne aucun menu et ne constate rien', async () => {
     const enVol = deferred<void>();
     const store = createTestStore({
-      browseMenus: browsing([menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_7_SEPT)]),
       listRecipes: async () => twoRecipes(),
       generateMenu: async () => menuDeLaSemaine(LUNDI_7_SEPT),
       saveMenu: () => enVol.promise,
     });
+    store.dispatch(recipesObserved(twoRecipes()));
     await store.dispatch(generateMenu(7));
     const enregistrement = store.dispatch(saveMenu());
     await store.dispatch(generateMenu(7));
     enVol.resolve();
     await enregistrement;
+    store.dispatch(
+      menusObserved(navigation([menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_7_SEPT)], 0)),
+    );
 
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
 
     expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
     expect(consultation(store)?.saveNotice).toBeNull();
@@ -505,12 +604,15 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
   it('naviguer dans la consultation pendant un enregistrement EN VOL ne le déverrouille pas', async () => {
     const enVol = deferred<void>();
     const store = createTestStore({
-      browseMenus: browsing([menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_7_SEPT)]),
       listRecipes: async () => twoRecipes(),
       generateMenu: async () => menuDeLaSemaine(LUNDI_7_SEPT),
       saveMenu: () => enVol.promise,
     });
-    await arriveeApresEnregistrement(store);
+    store.dispatch(recipesObserved(twoRecipes()));
+    store.dispatch(
+      menusObserved(navigation([menuDeLaSemaine(LUNDI_24_AOUT), menuDeLaSemaine(LUNDI_7_SEPT)], 0)),
+    );
+    arriveeApresEnregistrement(store);
     await store.dispatch(generateMenu(7));
 
     const enregistrement = store.dispatch(saveMenu());
@@ -520,7 +622,7 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
 
     enVol.resolve();
     await enregistrement;
-    await arriveeApresEnregistrement(store);
+    arriveeApresEnregistrement(store);
 
     expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
   });

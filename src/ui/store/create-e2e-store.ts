@@ -9,12 +9,12 @@ import { readE2eSeed } from '../../data/e2e/e2e-seed';
 import { SequentialIdGenerator } from '../../data/e2e/sequential-id-generator';
 import { MathRandomPicker } from '../../data/math-random-picker';
 import { addConviveUseCase } from '../../domain/use-cases/add-convive';
-import { browseMenusUseCase } from '../../domain/use-cases/browse-menus';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
 import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { newConviveIdUseCase } from '../../domain/use-cases/new-convive-id';
 import { observeConvivesUseCase } from '../../domain/use-cases/observe-convives';
+import { observeMenusUseCase } from '../../domain/use-cases/observe-menus';
 import { observeRecipesUseCase } from '../../domain/use-cases/observe-recipes';
 import { newRecipeIdUseCase } from '../../domain/use-cases/new-recipe-id';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
@@ -52,7 +52,7 @@ export function createE2eStore(host: E2eHost): AppStore {
       recipeRepository,
       randomPicker: MathRandomPicker.create(() => 0),
     }),
-    browseMenus: browseMenusUseCase({ menuRepository, clock }),
+    observeMenus: observeMenusUseCase({ menuRepository, clock }),
     nextMonday: nextMondayUseCase({ clock }),
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     observeConvives: observeConvivesUseCase({ conviveRepository }),

@@ -7,12 +7,12 @@ import { IdGeneratorCuid2 } from '../../data/id-generator-cuid2';
 import { MathRandomPicker } from '../../data/math-random-picker';
 import { SystemClock } from '../../data/system-clock';
 import { addConviveUseCase } from '../../domain/use-cases/add-convive';
-import { browseMenusUseCase } from '../../domain/use-cases/browse-menus';
 import { createRecipeUseCase } from '../../domain/use-cases/create-recipe';
 import { generateMenuUseCase } from '../../domain/use-cases/generate-menu';
 import { listRecipesUseCase } from '../../domain/use-cases/list-recipes';
 import { newConviveIdUseCase } from '../../domain/use-cases/new-convive-id';
 import { observeConvivesUseCase } from '../../domain/use-cases/observe-convives';
+import { observeMenusUseCase } from '../../domain/use-cases/observe-menus';
 import { observeRecipesUseCase } from '../../domain/use-cases/observe-recipes';
 import { newRecipeIdUseCase } from '../../domain/use-cases/new-recipe-id';
 import { nextMondayUseCase } from '../../domain/use-cases/next-monday';
@@ -41,7 +41,7 @@ export function createAppStore(): AppStore {
       recipeRepository,
       randomPicker: MathRandomPicker.create(),
     }),
-    browseMenus: browseMenusUseCase({ menuRepository, clock }),
+    observeMenus: observeMenusUseCase({ menuRepository, clock }),
     nextMonday: nextMondayUseCase({ clock }),
     saveMenu: saveMenuUseCase({ menuRepository, clock }),
     observeConvives: observeConvivesUseCase({ conviveRepository }),
