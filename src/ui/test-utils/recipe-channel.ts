@@ -50,6 +50,11 @@ export class RecipeChannel {
     this.failure = null;
   }
 
+  willStaySilent(): void {
+    this.emission = null;
+    this.failure = null;
+  }
+
   emit(recipes: Recipe[]): void {
     this.emission = recipes;
     this.failure = null;

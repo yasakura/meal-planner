@@ -14,9 +14,11 @@ import { MenuChannel } from '../../test-utils/menu-channel';
 import { deferred } from '../../test-utils/deferred';
 import { authStateChanged } from '../auth/auth-slice';
 import {
+  catalogueRetried,
   recipesObservationFailed,
   recipesObserved,
   selectCatalogue,
+  selectCatalogueLinkLost,
 } from '../catalogue/catalogue-slice';
 import { generateMenu, isSaveInFlight, saveMenu, selectMenu } from './menu-slice';
 import {
@@ -60,10 +62,7 @@ function navigation(menus: Menu[], indexInitial: number | null): MenuNavigation 
 }
 
 function consultation(store: TestStore) {
-  return menuConsultationOf(
-    selectSavedMenus(store.getState()),
-    selectCatalogue(store.getState()).recipes ?? [],
-  );
+  return menuConsultationOf(selectSavedMenus(store.getState()), selectCatalogue(store.getState()));
 }
 
 function view(store: TestStore) {
@@ -181,29 +180,95 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     expect(consultation(store)?.nextDisabled).toBe(true);
   });
 
-  it('hors ligne, le constat l’emporte sur la consultation', () => {
+  it('hors ligne, les titres manquants ne masquent plus le menu : ses jours restent, ses créneaux disent le titre indisponible, et le constat nomme les titres', () => {
     const store = createTestStore();
     store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
 
     store.dispatch(recipesObservationFailed({ unavailable: true }));
 
-    expect(view(store)).toEqual({
-      status: 'unavailable',
-      message: 'Aucune connexion — le menu n’a pas pu être chargé.',
-      source: 'titres',
+    expect(view(store).status).toBe('consultation');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+    expect(consultation(store)?.days.map((jour) => jour.label)).toEqual([
+      'lundi 31 août',
+      'dimanche 6 septembre',
+    ]);
+    expect(
+      consultation(store)?.days.flatMap((jour) => jour.slots.map((slot) => slot.title)),
+    ).toEqual(['Titre indisponible', 'Titre indisponible']);
+    expect(consultation(store)?.titlesNotice).toEqual({
+      message: 'Aucune connexion — les noms des recettes n’ont pas pu être chargés.',
+      retriable: true,
     });
   });
 
-  it('des titres illisibles avant toute émission renvoient à la relance des TITRES, pas des menus', () => {
+  it('des titres illisibles avant toute émission ne masquent plus le menu : son constat accuse les titres, et non les menus', () => {
     const store = createTestStore();
     store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
 
     store.dispatch(recipesObservationFailed({ unavailable: false }));
 
+    expect(view(store).status).toBe('consultation');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+    expect(consultation(store)?.titlesNotice).toEqual({
+      message: 'Impossible de charger les noms des recettes.',
+      retriable: true,
+    });
+  });
+
+  it('une relance des titres ne retire pas de l’écran le menu qu’on y voyait : il reste, et son constat annonce le chargement au lieu d’offrir une relance de plus', () => {
+    const store = createTestStore();
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+    expect(view(store).status).toBe('consultation');
+
+    store.dispatch(catalogueRetried());
+
+    expect(view(store).status).toBe('consultation');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+    expect(consultation(store)?.titlesNotice).toEqual({
+      message: 'Chargement des noms des recettes…',
+      retriable: false,
+    });
+  });
+
+  it('avant toute relance, les titres qui se font attendre gardent l’écran de chargement, là où la même attente APRÈS une relance montre le menu', () => {
+    const avantRelance = createTestStore();
+    avantRelance.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+
+    expect(view(avantRelance).status).toBe('loading');
+
+    const apresRelance = createTestStore();
+    apresRelance.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+    apresRelance.dispatch(catalogueRetried());
+
+    expect(view(apresRelance).status).toBe('consultation');
+  });
+
+  it('des titres bien lus ne portent aucun constat, et leurs créneaux nomment les recettes', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    expect(consultation(store)?.titlesNotice).toBeNull();
+    expect(consultation(store)?.days.at(0)?.slots.at(0)?.title).toBe('Ratatouille');
+  });
+
+  it('des titres déjà reçus puis perdus n’ajoutent aucun constat au menu : le bandeau du lien perdu s’en charge', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    store.dispatch(recipesObservationFailed({ unavailable: true }));
+
+    expect(consultation(store)?.titlesNotice).toBeNull();
+    expect(selectCatalogueLinkLost(store.getState())).toBe(true);
+  });
+
+  it('les menus ET les titres en panne portent le constat des menus, le seul qui soit vrai', () => {
+    const store = createTestStore();
+
+    store.dispatch(menusObservationFailed({ unavailable: false }));
+    store.dispatch(recipesObservationFailed({ unavailable: false }));
+
     expect(view(store)).toEqual({
       status: 'error',
-      message: expect.any(String),
-      source: 'titres',
+      message: 'Impossible de charger tes menus enregistrés.',
     });
   });
 
@@ -311,7 +376,6 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     expect(view(store)).toEqual({
       status: 'error',
       message: 'Impossible de charger tes menus enregistrés.',
-      source: 'menus',
     });
   });
 
@@ -323,7 +387,6 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     expect(view(store)).toEqual({
       status: 'unavailable',
       message: 'Aucune connexion — le menu n’a pas pu être chargé.',
-      source: 'menus',
     });
   });
 

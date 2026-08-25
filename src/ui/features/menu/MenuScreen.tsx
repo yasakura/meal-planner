@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
 import { type MenuDay, type SlotChoiceLink } from './menu-days';
-import { type MenuSaveNotice } from './menu-notice';
+import { type MenuSaveNotice, type MenuTitlesNotice } from './menu-notice';
 
 const { colors, space, fonts } = tokens;
 
@@ -19,8 +19,10 @@ export type MenuScreenProps =
       previousDisabled: boolean;
       nextDisabled: boolean;
       saveNotice: MenuSaveNotice | null;
+      titlesNotice: MenuTitlesNotice | null;
       onPrevious: () => void;
       onNext: () => void;
+      onRetryTitles: () => void;
     };
 
 const Page = styled.div`
@@ -180,6 +182,21 @@ const Note = styled.p`
   margin: ${space.sm}px 0 0;
 `;
 
+const TitlesNoticeBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: ${space.md}px;
+  margin-bottom: ${space.lg}px;
+`;
+
+const TitlesNoticeMessage = styled.p`
+  font-family: ${fonts.body};
+  font-size: 13px;
+  color: ${colors.terracotta};
+  margin: 0;
+`;
+
 const DayList = styled.div`
   display: flex;
   flex-direction: column;
@@ -322,6 +339,31 @@ export function MenuUnavailable({ message, onRetry }: { message: string; onRetry
   );
 }
 
+function MenuTitlesNoticeView({
+  notice,
+  onRetry,
+}: {
+  notice: MenuTitlesNotice | null;
+  onRetry: () => void;
+}) {
+  if (notice === null) return null;
+  if (!notice.retriable) {
+    return (
+      <TitlesNoticeBar>
+        <StateText role="status">{notice.message}</StateText>
+      </TitlesNoticeBar>
+    );
+  }
+  return (
+    <TitlesNoticeBar>
+      <TitlesNoticeMessage role="status">{notice.message}</TitlesNoticeMessage>
+      <RetryButton type="button" onClick={onRetry}>
+        Réessayer
+      </RetryButton>
+    </TitlesNoticeBar>
+  );
+}
+
 export function MenuSaveNoticeView({ notice }: { notice: MenuSaveNotice | null }) {
   if (notice === null) return null;
   return <Note role="status">{notice.message}</Note>;
@@ -368,6 +410,7 @@ function Body(props: MenuScreenProps) {
     case 'consultation':
       return (
         <>
+          <MenuTitlesNoticeView notice={props.titlesNotice} onRetry={props.onRetryTitles} />
           <PeriodBar>
             <ArrowButton
               type="button"

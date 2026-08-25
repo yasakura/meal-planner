@@ -11,7 +11,6 @@ import {
   savedMenusRetried,
   savedMenusViewOf,
   selectSavedMenus,
-  type SavedMenusSource,
 } from './saved-menus-slice';
 import { MenuScreen, type MenuScreenProps } from './MenuScreen';
 
@@ -27,9 +26,7 @@ export function MenuContainer() {
     if (apresEnregistrement.current) void navigate(MENU_SANS_PROVENANCE, { replace: true });
   }, [dispatch, navigate]);
 
-  const relancer = (source: SavedMenusSource) => () => {
-    dispatch(source === 'menus' ? savedMenusRetried() : catalogueRetried());
-  };
+  const relancerLesMenus = () => dispatch(savedMenusRetried());
 
   let props: MenuScreenProps;
   if (view.status === 'consultation') {
@@ -37,11 +34,12 @@ export function MenuContainer() {
       ...view,
       onPrevious: () => dispatch(previousMenuSelected()),
       onNext: () => dispatch(nextMenuSelected()),
+      onRetryTitles: () => dispatch(catalogueRetried()),
     };
   } else if (view.status === 'error') {
-    props = { status: 'error', message: view.message, onRetry: relancer(view.source) };
+    props = { status: 'error', message: view.message, onRetry: relancerLesMenus };
   } else if (view.status === 'unavailable') {
-    props = { status: 'unavailable', message: view.message, onRetry: relancer(view.source) };
+    props = { status: 'unavailable', message: view.message, onRetry: relancerLesMenus };
   } else {
     props = view;
   }

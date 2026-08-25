@@ -73,6 +73,24 @@ describe('menuDays', () => {
     ]);
   });
 
+  it('un catalogue qu’on n’a pas pu lire ne déclare aucune recette inconnue : ses créneaux disent le titre indisponible, là où le même créneau lu porte le titre de sa recette', () => {
+    const menu = menuOf([
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+    ]);
+
+    expect(menuDays(menu, null, FROM_MENU).at(0)?.slots).toEqual([
+      {
+        key: '0-0',
+        creneauLabel: 'Midi',
+        title: 'Titre indisponible',
+        recipe: 'unknown',
+        address: { repasIndex: 0, slotIndex: 0 },
+        choose: null,
+      },
+    ]);
+    expect(menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots.at(0)?.title).toBe('Ratatouille');
+  });
+
   it('un créneau dont la recette est absente du catalogue porte un titre de substitution et aucune destination, là où son voisin résolu porte le titre de sa recette et un lien', () => {
     const menu = menuOf([
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'disparue' })] }),
