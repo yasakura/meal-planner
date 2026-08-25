@@ -1,6 +1,7 @@
 import { type Recipe } from '../entities/recipe';
 import { type RecipeRepository } from '../ports/recipe-repository';
 import { type Unsubscribe } from '../ports/unsubscribe';
+import { seededShuffle } from '../lib/seeded-shuffle';
 
 export class InMemoryRecipeRepository implements RecipeRepository {
   public saveCount = 0;
@@ -41,7 +42,7 @@ export class InMemoryRecipeRepository implements RecipeRepository {
   }
 
   private snapshot(): Recipe[] {
-    return this.all().reverse();
+    return seededShuffle(this.all());
   }
 
   private emit(): void {

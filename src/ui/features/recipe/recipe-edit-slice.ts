@@ -3,9 +3,8 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { type UpdateRecipeInput } from '../../../domain/use-cases/update-recipe';
 import { type AppThunkApiConfig, type RootState } from '../../store/store';
-import { RECIPE_SAVE_FAILED, type RecipeFormNotice } from './recipe-slice';
 
-export type RecipeEditStatus = 'idle' | 'saving' | 'success' | 'error';
+export type RecipeEditStatus = 'idle' | 'saving' | 'success';
 
 export type RecipeEditState = {
   status: RecipeEditStatus;
@@ -41,9 +40,6 @@ const recipeEditSlice = createSlice({
       })
       .addCase(updateRecipe.fulfilled, (state) => {
         state.status = 'success';
-      })
-      .addCase(updateRecipe.rejected, (state) => {
-        state.status = 'error';
       });
   },
 });
@@ -53,8 +49,3 @@ export const { recipeEditFormOpened } = recipeEditSlice.actions;
 export const recipeEditReducer = recipeEditSlice.reducer;
 
 export const selectRecipeEdition = (state: RootState): RecipeEditState => state.recipeEdit;
-
-export function recipeEditNoticeOf(state: RecipeEditState): RecipeFormNotice | null {
-  if (state.status === 'error') return { tone: 'error', message: RECIPE_SAVE_FAILED };
-  return null;
-}

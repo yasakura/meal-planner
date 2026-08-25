@@ -1,6 +1,7 @@
 import { type Convive } from '../entities/convive';
 import { type ConviveRepository } from '../ports/convive-repository';
 import { type Unsubscribe } from '../ports/unsubscribe';
+import { seededShuffle } from '../lib/seeded-shuffle';
 
 export class InMemoryConviveRepository implements ConviveRepository {
   public saveCount = 0;
@@ -58,7 +59,7 @@ export class InMemoryConviveRepository implements ConviveRepository {
   }
 
   private snapshot(): Convive[] {
-    return this.all().reverse();
+    return seededShuffle(this.all());
   }
 
   private emit(): void {

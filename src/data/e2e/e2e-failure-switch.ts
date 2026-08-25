@@ -40,11 +40,21 @@ export class E2eFailureSwitch implements E2eControls {
     if (this.readsAreDown()) throw RepositoryUnavailableError.create();
   }
 
-  refuseAfterwards(rollback: () => void): void {
+  refuseAfterwards(annulation: () => void): void {
     if (!this.writesFail) return;
-    setTimeout(() => {
-      rollback();
+    this.afterServerVerdict(() => {
+      annulation();
       this.onWriteRejected();
-    }, E2E_SERVER_VERDICT_MS);
+    });
+  }
+
+  refuseNotFound(): void {
+    this.afterServerVerdict(() => {
+      this.onWriteRejected();
+    });
+  }
+
+  private afterServerVerdict(verdict: () => void): void {
+    setTimeout(verdict, E2E_SERVER_VERDICT_MS);
   }
 }

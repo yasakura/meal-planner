@@ -89,8 +89,6 @@ function renderOnWithLinkTo(store: TestStore, cible: string, depuis = 'r-1') {
   );
 }
 
-const CONSTAT_ECHEC = 'Impossible d’enregistrer la recette.';
-
 function capturingSpy() {
   const state: { captured: UpdateRecipeInput | undefined } = { captured: undefined };
   const fn: UpdateRecipe = async (input) => {
@@ -101,6 +99,23 @@ function capturingSpy() {
 }
 
 describe('RecipeEditContainer', () => {
+  it('ne laisse pas partir un nombre de personnes que le domaine refuserait, et laisse partir celui qu’il accepte', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderWithStore({ updateRecipe: spy.fn });
+    await screen.findByLabelText(/titre/i);
+    await user.clear(screen.getByLabelText(/personnes/i));
+
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+
+    expect(spy.state.captured).toBeUndefined();
+
+    await user.type(screen.getByLabelText(/personnes/i), '6');
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+
+    await vi.waitFor(() => expect(spy.state.captured?.convivesReference).toBe(6));
+  });
+
   it('préremplit le formulaire avec le contenu de la recette de l’URL', async () => {
     renderWithStore();
 
@@ -285,48 +300,6 @@ describe('RecipeEditContainer', () => {
     await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1'));
   });
 
-  it('reste sur le formulaire et affiche un constat sobre quand l’enregistrement échoue', async () => {
-    const user = userEvent.setup();
-    const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
-    renderWithStore({ updateRecipe: failing });
-
-    await screen.findByLabelText(/titre/i);
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Impossible d’enregistrer la recette.',
-    );
-    expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('après un échec, le second envoi efface le constat de panne avant même d’aboutir', async () => {
-    const user = userEvent.setup();
-    let resoudre: ((recipe: Recipe) => void) | undefined;
-    let appels = 0;
-    const depot: UpdateRecipe = () => {
-      appels += 1;
-      return appels === 1
-        ? Promise.reject(new Error('Firestore indisponible'))
-        : new Promise<Recipe>((resolve) => {
-            resoudre = resolve;
-          });
-    };
-    renderWithStore({ updateRecipe: depot });
-
-    await screen.findByLabelText(/titre/i);
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    expect(await screen.findByText('Impossible d’enregistrer la recette.')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-
-    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
-
-    if (!resoudre) throw new Error('le second envoi n’a pas été déclenché');
-    resoudre(RecipeBuilder.aRecipe().withId('r-1').build());
-    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1'));
-  });
-
   it('verrouille « Enregistrer » pendant que la modification est en vol', async () => {
     const user = userEvent.setup();
     const pending: UpdateRecipe = () => new Promise<Recipe>(() => {});
@@ -461,24 +434,6 @@ describe('RecipeEditContainer', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('remonté sur le MÊME store après un ÉCHEC, rouvre le formulaire sans le constat de panne', async () => {
-    const user = userEvent.setup();
-    const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
-    const { store, unmount } = renderWithStore({ updateRecipe: failing });
-
-    await screen.findByLabelText(/titre/i);
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    expect(await screen.findByText('Impossible d’enregistrer la recette.')).toBeInTheDocument();
-    expect(store.getState().recipeEdit.status).toBe('error');
-
-    unmount();
-    renderOn(store);
-
-    expect(await screen.findByLabelText(/titre/i)).toHaveValue('Gratin dauphinois');
-    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
-    expect(store.getState().recipeEdit.status).toBe('idle');
-  });
-
   it('une modification qui aboutit après le départ de l’utilisateur ne le ramène pas au détail', async () => {
     const user = userEvent.setup();
     let resoudre: ((recipe: Recipe) => void) | undefined;
@@ -504,40 +459,17 @@ describe('RecipeEditContainer', () => {
     const omelette = RecipeBuilder.aRecipe().withId('r-2').withTitle('Omelette aux herbes').build();
     const store = createTestStore({
       observeRecipes: RecipeChannel.seededWith([GRATIN, omelette]).observeRecipes,
-      updateRecipe: () => Promise.reject(new Error('Firestore indisponible')),
+      updateRecipe: async (input) => RecipeBuilder.aRecipe().withId(input.id).build(),
     });
     renderOnWithLinkTo(store, 'r-2');
 
     await screen.findByLabelText(/titre/i);
     await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    expect(await screen.findByText('Impossible d’enregistrer la recette.')).toBeInTheDocument();
-    expect(store.getState().recipeEdit.status).toBe('error');
+    await vi.waitFor(() => expect(store.getState().recipeEdit.status).toBe('success'));
 
     await user.click(screen.getByRole('link', { name: 'Autre recette' }));
 
     expect(await screen.findByDisplayValue('Omelette aux herbes')).toBeInTheDocument();
     expect(store.getState().recipeEdit.status).toBe('idle');
-    expect(screen.queryByText('Impossible d’enregistrer la recette.')).not.toBeInTheDocument();
-  });
-
-  it('une modification refusée n’est pas une impasse : le second envoi repart et le constat s’efface', async () => {
-    const user = userEvent.setup();
-    let horsLigne = true;
-    const reseau: UpdateRecipe = async (input) => {
-      if (horsLigne) throw new Error('Firestore refuse');
-      return RecipeBuilder.aRecipe().withId(input.id).build();
-    };
-    renderWithStore({ updateRecipe: reseau });
-
-    await screen.findByLabelText(/titre/i);
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-    expect(await screen.findByText(CONSTAT_ECHEC)).toBeInTheDocument();
-
-    horsLigne = false;
-    expect(screen.getByRole('button', { name: /^enregistrer$/i })).toBeEnabled();
-    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
-
-    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1'));
-    expect(screen.queryByText(CONSTAT_ECHEC)).not.toBeInTheDocument();
   });
 });

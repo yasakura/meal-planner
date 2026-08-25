@@ -14,7 +14,7 @@ describe('InMemoryConviveRepository', () => {
     await repository.save(bruno);
     await repository.save(chloe);
 
-    expect(await repository.findAll()).toEqual([chloe, bruno, alice]);
+    expect(await repository.findAll()).toEqual([chloe, alice, bruno]);
   });
 
   it('updateOnlyIfExists remplace le convive visé quand il existe', async () => {

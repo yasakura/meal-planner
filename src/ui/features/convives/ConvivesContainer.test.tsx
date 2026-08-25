@@ -82,6 +82,52 @@ function twoConvives(): Convive[] {
 }
 
 describe('ConvivesContainer', () => {
+  it('n’envoie pas un prénom que le domaine refuserait, ni au clic ni à la touche Entrée, et envoie celui qu’il accepte', async () => {
+    const user = userEvent.setup();
+    const appels: AddConviveInput[] = [];
+    const espion: AddConvive = async (input) => {
+      appels.push(input);
+      return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+    };
+    renderWithStore({ ...observing([]), addConvive: espion });
+    await screen.findByText('Personne dans le foyer pour le moment.');
+
+    await user.type(screen.getByLabelText(/prénom/i), '   {Enter}');
+    await user.click(screen.getByRole('button', { name: /ajouter/i }));
+
+    expect(appels).toEqual([]);
+
+    await user.clear(screen.getByLabelText(/prénom/i));
+    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
+    await user.click(screen.getByRole('button', { name: /ajouter/i }));
+
+    await waitFor(() => expect(appels.map((appel) => appel.name)).toEqual(['Rory']));
+  });
+
+  it('n’envoie pas un renommage que le domaine refuserait, ni au clic ni à la touche Entrée, et envoie celui qu’il accepte', async () => {
+    const user = userEvent.setup();
+    const appels: RenameConviveInput[] = [];
+    const espion: RenameConvive = async (input) => {
+      appels.push(input);
+      return ConviveBuilder.aConvive().withId(input.id).withName(input.name).build();
+    };
+    renderWithStore({ ...observing(twoConvives()), renameConvive: espion });
+    await screen.findByText('Aurélie');
+    await user.click(screen.getByRole('button', { name: 'Renommer Lionel' }));
+
+    await user.clear(screen.getByLabelText('Nouveau prénom pour Lionel'));
+    await user.type(screen.getByLabelText('Nouveau prénom pour Lionel'), '   {Enter}');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    expect(appels).toEqual([]);
+
+    await user.clear(screen.getByLabelText('Nouveau prénom pour Lionel'));
+    await user.type(screen.getByLabelText('Nouveau prénom pour Lionel'), 'Lio');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() => expect(appels.map((appel) => appel.name)).toEqual(['Lio']));
+  });
+
   it('affiche au montage les convives émis, dans l’ordre émis, sur un seul abonnement', async () => {
     const channel = ConviveChannel.seededWith([
       ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build(),
@@ -255,45 +301,6 @@ describe('ConvivesContainer', () => {
     expect(screen.getByLabelText(/prénom/i)).toHaveValue('');
   });
 
-  it('un ajout en échec conserve le prénom saisi et affiche un message sobre, sans le détail technique', async () => {
-    const user = userEvent.setup();
-    const failingAdd: AddConvive = () => Promise.reject(new Error('Firestore indisponible'));
-    renderWithStore({
-      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
-      addConvive: failingAdd,
-    });
-    await screen.findByText('Aurélie');
-
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d’ajouter le convive.');
-    expect(screen.getByLabelText(/prénom/i)).toHaveValue('Rory');
-    expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
-    const names = screen
-      .getAllByRole('listitem')
-      .map((item) => within(item).getByTestId('convive-name').textContent);
-    expect(names).toEqual(['Aurélie']);
-  });
-
-  it('après un ajout refusé, « Ajouter » se réarme et le prénom saisi est conservé', async () => {
-    const user = userEvent.setup();
-    const refuse: AddConvive = () => Promise.reject(new Error('Firestore refuse'));
-    renderWithStore({
-      ...observing([]),
-      addConvive: refuse,
-    });
-    await screen.findByText('Personne dans le foyer pour le moment.');
-
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-
-    await screen.findByText('Impossible d’ajouter le convive.');
-    expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
-    expect(screen.getByLabelText(/prénom/i)).toBeEnabled();
-    expect(screen.getByLabelText(/prénom/i)).toHaveValue('Rory');
-  });
-
   it('le champ prénom est verrouillé pendant un ajout en vol', async () => {
     const user = userEvent.setup();
     const neverResolvingAdd: AddConvive = () => new Promise<Convive>(() => {});
@@ -306,65 +313,26 @@ describe('ConvivesContainer', () => {
     expect(screen.getByLabelText(/prénom/i)).toBeDisabled();
   });
 
-  it('rouvrir la sheet efface le constat d’ajout et rend le formulaire de nouveau utilisable', async () => {
-    const user = userEvent.setup();
-    const refuse: AddConvive = () => Promise.reject(new Error('Firestore refuse'));
-    const store = createTestStore({
-      ...observing([ConviveBuilder.aConvive().withId('c-1').withName('Aurélie').build()]),
-      addConvive: refuse,
-    });
-    const sheet = renderSubscribed(store);
-    await screen.findByText('Aurélie');
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText('Impossible d’ajouter le convive.');
-
-    sheet.unmount();
-    renderWith(store);
-
-    expect(await screen.findByText('Aurélie')).toBeInTheDocument();
-    expect(screen.queryByText('Impossible d’ajouter le convive.')).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    expect(screen.getByRole('button', { name: /ajouter/i })).toBeEnabled();
-  });
-
-  it('un second appui après un ajout refusé réécrit le même convive, sans doublon', async () => {
-    const user = userEvent.setup();
-    const ids: string[] = [];
-    const refuse: AddConvive = (input) => {
-      ids.push(input.id);
-      return Promise.reject(new Error('Firestore refuse'));
-    };
-    renderWithStore({ ...observing([]), addConvive: refuse });
-    await screen.findByText('Personne dans le foyer pour le moment.');
-    await user.type(screen.getByLabelText(/prénom/i), 'Rory');
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText('Impossible d’ajouter le convive.');
-
-    await user.click(screen.getByRole('button', { name: /ajouter/i }));
-
-    await waitFor(() => expect(ids).toHaveLength(2));
-    expect(ids).toEqual(['generated-id-1', 'generated-id-1']);
-  });
-
   it('rouvrir la sheet vise un convive NEUF : la saisie suivante n’écrase pas la précédente', async () => {
     const user = userEvent.setup();
     const ids: string[] = [];
-    const refuse: AddConvive = (input) => {
+    const accepte: AddConvive = (input) => {
       ids.push(input.id);
-      return Promise.reject(new Error('Firestore refuse'));
+      return Promise.resolve(
+        ConviveBuilder.aConvive().withId(input.id).withName(input.name).build(),
+      );
     };
     let count = 0;
     const store = createTestStore({
       ...observing([]),
-      addConvive: refuse,
+      addConvive: accepte,
       newConviveId: () => `draft-${(count += 1)}`,
     });
     const sheet = renderSubscribed(store);
     await screen.findByText('Personne dans le foyer pour le moment.');
     await user.type(screen.getByLabelText(/prénom/i), 'Rory');
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
-    await screen.findByText('Impossible d’ajouter le convive.');
+    await waitFor(() => expect(ids).toEqual(['draft-2']));
 
     sheet.unmount();
     renderWith(store);
@@ -373,7 +341,7 @@ describe('ConvivesContainer', () => {
     await user.click(screen.getByRole('button', { name: /ajouter/i }));
 
     await waitFor(() => expect(ids).toHaveLength(2));
-    expect(ids).toEqual(['draft-2', 'draft-3']);
+    expect(ids).toEqual(['draft-2', 'draft-4']);
   });
 
   it('pendant un ajout en vol, « Ajouter » est désactivé : un second appui n’ajoute pas un doublon', async () => {
@@ -524,53 +492,12 @@ describe('ConvivesContainer', () => {
     expect(screen.getByText('Lionel')).toBeInTheDocument();
   });
 
-  it('un retrait refusé s’annonce comme une alerte sur sa ligne, sans détail technique', async () => {
-    const user = userEvent.setup();
-    const refuse: RemoveConvive = () => Promise.reject(new Error('Firestore indisponible'));
-    renderWithStore({
-      ...observing(twoConvives()),
-      removeConvive: refuse,
-    });
-    await screen.findByText('Aurélie');
-    await user.click(screen.getByRole('button', { name: 'Retirer Lionel' }));
-
-    await user.click(screen.getByRole('button', { name: /^Retirer$/ }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de retirer le convive.');
-    expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
-    expect(screen.getAllByRole('listitem')).toHaveLength(2);
-  });
-
-  it('un renommage refusé s’annonce comme une alerte, sans détail technique', async () => {
-    const user = userEvent.setup();
-    const failingRename: RenameConvive = () => Promise.reject(new Error('Firestore indisponible'));
-    renderWithStore({
-      ...observing(twoConvives()),
-      renameConvive: failingRename,
-    });
-    await screen.findByText('Aurélie');
-    await user.click(screen.getByRole('button', { name: 'Renommer Lionel' }));
-    await user.type(screen.getByLabelText('Nouveau prénom pour Lionel'), 'x');
-
-    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Impossible de renommer le convive.',
-    );
-    expect(screen.queryByText(/Firestore/i)).not.toBeInTheDocument();
-  });
-
   it('rouvrir la sheet ne retrouve pas la confirmation de retrait ouverte', async () => {
     const user = userEvent.setup();
-    const refuse: RemoveConvive = () => Promise.reject(new Error('Firestore refuse'));
-    const { store, unmount } = renderWithStore({
-      ...observing(twoConvives()),
-      removeConvive: refuse,
-    });
+    const { store, unmount } = renderWithStore({ ...observing(twoConvives()) });
     await screen.findByText('Aurélie');
     await user.click(screen.getByRole('button', { name: 'Retirer Lionel' }));
-    await user.click(screen.getByRole('button', { name: 'Retirer' }));
-    await screen.findByText('Retirer Lionel du foyer ?');
+    expect(screen.getByText('Retirer Lionel du foyer ?')).toBeInTheDocument();
 
     unmount();
     renderWith(store);
@@ -639,24 +566,6 @@ describe('ConvivesContainer', () => {
 
     expect(screen.getByRole('button', { name: 'Renommer Lionel' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Retirer Lionel' })).toBeDisabled();
-  });
-
-  it('le constat d’un renommage refusé ne retient plus l’utilisateur sur sa ligne', async () => {
-    const user = userEvent.setup();
-    const refuse: RenameConvive = () => Promise.reject(new Error('Firestore refuse'));
-    renderWithStore({
-      ...observing(twoConvives()),
-      renameConvive: refuse,
-    });
-    await screen.findByText('Aurélie');
-    await user.click(screen.getByRole('button', { name: 'Renommer Aurélie' }));
-    await user.type(screen.getByLabelText('Nouveau prénom pour Aurélie'), 'x');
-    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
-
-    const constat = await screen.findByText('Impossible de renommer le convive.');
-    expect(constat).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Renommer Lionel' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Retirer Lionel' })).toBeEnabled();
   });
 
   it('au repos, les actions de toutes les lignes sont disponibles', async () => {

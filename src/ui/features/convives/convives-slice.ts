@@ -17,18 +17,15 @@ import { authStateChanged } from '../auth/auth-slice';
 
 export type ConvivesFailure = 'unreadable' | 'unavailable';
 
-export type ConviveAddStatus = 'idle' | 'adding' | 'error';
+export type ConviveAddStatus = 'idle' | 'adding';
 
-export type ConviveRenameStatus = 'idle' | 'renaming' | 'error';
-export type ConviveRemoveStatus = 'idle' | 'removing' | 'error';
-
-export type RowNotice = { tone: 'error'; message: string };
+export type ConviveRenameStatus = 'idle' | 'renaming';
+export type ConviveRemoveStatus = 'idle' | 'removing';
 
 export type ConviveRow = {
   id: string;
   name: string;
   mode: 'idle' | 'editing' | 'confirming-removal';
-  notice: RowNotice | null;
   actionsDisabled: boolean;
   saveDisabled: boolean;
   editInputDisabled: boolean;
@@ -41,7 +38,6 @@ export type ConvivesState = {
   failure: ConvivesFailure | null;
   attempt: number;
   addStatus: ConviveAddStatus;
-  addError: string | null;
   draftConviveId: string | null;
   latestAddRequestId: string | null;
   renameStatus: ConviveRenameStatus;
@@ -59,7 +55,6 @@ const initialState: ConvivesState = {
   failure: null,
   attempt: 0,
   addStatus: 'idle',
-  addError: null,
   draftConviveId: null,
   latestAddRequestId: null,
   renameStatus: 'idle',
@@ -113,7 +108,6 @@ export const removeConvive = createAsyncThunk<void, RemoveConviveInput, AppThunk
 
 function restAddLifecycle(state: ConvivesState): void {
   state.addStatus = 'idle';
-  state.addError = null;
 }
 
 function restRenameLifecycle(state: ConvivesState): void {
@@ -155,7 +149,6 @@ const convivesSlice = createSlice({
     },
     conviveEditRequested(state, action: PayloadAction<string>) {
       if (state.renameStatus === 'renaming') return;
-      state.renameStatus = 'idle';
       state.editingConviveId = action.payload;
       state.renameDraft =
         state.convives.find((convive) => convive.id === action.payload)?.name ?? '';
@@ -169,7 +162,6 @@ const convivesSlice = createSlice({
     },
     conviveRemovalRequested(state, action: PayloadAction<string>) {
       if (state.removeStatus === 'removing') return;
-      state.removeStatus = 'idle';
       state.pendingRemovalId = action.payload;
     },
     conviveRemovalCancelled(state) {
@@ -195,11 +187,6 @@ const convivesSlice = createSlice({
         state.draftConviveId = action.payload.nextDraftId;
         restAddLifecycle(state);
       })
-      .addCase(addConvive.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestAddRequestId) return;
-        state.addStatus = 'error';
-        state.addError = action.error.message ?? null;
-      })
       .addCase(renameConvive.pending, (state, action) => {
         state.latestRenameRequestId = action.meta.requestId;
         state.renameStatus = 'renaming';
@@ -212,10 +199,6 @@ const convivesSlice = createSlice({
         state.convives.sort(compareConvivesByName);
         restRenameLifecycle(state);
       })
-      .addCase(renameConvive.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestRenameRequestId) return;
-        state.renameStatus = 'error';
-      })
       .addCase(removeConvive.pending, (state, action) => {
         state.latestRemoveRequestId = action.meta.requestId;
         state.removeStatus = 'removing';
@@ -224,10 +207,6 @@ const convivesSlice = createSlice({
         state.convives = state.convives.filter((convive) => convive.id !== action.meta.arg.id);
         if (action.meta.requestId !== state.latestRemoveRequestId) return;
         restRemoveLifecycle(state);
-      })
-      .addCase(removeConvive.rejected, (state, action) => {
-        if (action.meta.requestId !== state.latestRemoveRequestId) return;
-        state.removeStatus = 'error';
       });
   },
 });
@@ -290,16 +269,6 @@ export function convivesViewOf(state: ConvivesState): ConvivesView {
 export const selectIsAddInFlight = (state: RootState): boolean =>
   state.convives.addStatus === 'adding';
 
-function rowNotice(state: ConvivesState, convive: Convive): RowNotice | null {
-  if (state.editingConviveId === convive.id && state.renameStatus === 'error') {
-    return { tone: 'error', message: 'Impossible de renommer le convive.' };
-  }
-  if (state.pendingRemovalId === convive.id && state.removeStatus === 'error') {
-    return { tone: 'error', message: 'Impossible de retirer le convive.' };
-  }
-  return null;
-}
-
 export function conviveRowsOf(convives: ConvivesState): ConviveRow[] {
   const writeInFlight =
     convives.renameStatus === 'renaming' || convives.removeStatus === 'removing';
@@ -311,7 +280,6 @@ export function conviveRowsOf(convives: ConvivesState): ConviveRow[] {
       id: convive.id,
       name: convive.name,
       mode: editing ? 'editing' : confirmingRemoval ? 'confirming-removal' : 'idle',
-      notice: rowNotice(convives, convive),
       actionsDisabled: !editing && !confirmingRemoval && writeInFlight,
       saveDisabled:
         !editing || draft === '' || draft === convive.name || convives.renameStatus === 'renaming',

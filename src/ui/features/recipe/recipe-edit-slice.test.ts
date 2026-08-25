@@ -7,7 +7,6 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
 import {
   recipeEditFormOpened,
-  recipeEditNoticeOf,
   recipeEditReducer,
   selectRecipeEdition,
   updateRecipe,
@@ -46,15 +45,6 @@ describe('recipe edit slice', () => {
     expect(selectRecipeEdition(store.getState())).toEqual({ status: 'success' });
   });
 
-  it('updateRecipe en échec passe le store en error', async () => {
-    const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
-    const store = createTestStore({ updateRecipe: failing });
-
-    await store.dispatch(updateRecipe(anInput()));
-
-    expect(selectRecipeEdition(store.getState())).toEqual({ status: 'error' });
-  });
-
   it('pendant un updateRecipe en vol, le status passe à saving', () => {
     const pending: UpdateRecipe = () => new Promise<Recipe>(() => {});
     const store = createTestStore({ updateRecipe: pending });
@@ -68,12 +58,6 @@ describe('recipe edit slice', () => {
     const succeeded: RecipeEditState = { status: 'success' };
 
     expect(recipeEditReducer(succeeded, recipeEditFormOpened())).toEqual({ status: 'idle' });
-  });
-
-  it('l’ouverture d’un formulaire remet à idle une modification en échec', () => {
-    const errored: RecipeEditState = { status: 'error' };
-
-    expect(recipeEditReducer(errored, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 
   it('l’ouverture d’un formulaire ne touche pas à une modification encore en vol', () => {
@@ -94,34 +78,5 @@ describe('recipe edit slice', () => {
       draftId: 'generated-id-1',
       latestCreateRequestId: null,
     });
-  });
-  const ECHEC = { tone: 'error', message: 'Impossible d’enregistrer la recette.' };
-
-  function constat(store: ReturnType<typeof createTestStore>) {
-    return recipeEditNoticeOf(selectRecipeEdition(store.getState()));
-  }
-
-  it('un échec franc du dépôt : l’écran dit que l’enregistrement a échoué', async () => {
-    const failing: UpdateRecipe = () => Promise.reject(new Error('Firestore indisponible'));
-    const store = createTestStore({ updateRecipe: failing });
-
-    await store.dispatch(updateRecipe(anInput()));
-
-    expect(constat(store)).toEqual(ECHEC);
-  });
-
-  it('pendant la modification, l’écran ne constate rien encore', () => {
-    const pending: UpdateRecipe = () => new Promise<Recipe>(() => {});
-    const store = createTestStore({ updateRecipe: pending });
-
-    void store.dispatch(updateRecipe(anInput()));
-
-    expect(constat(store)).toBeNull();
-  });
-
-  it('l’ouverture d’un formulaire efface un constat de refus', () => {
-    const refuse: RecipeEditState = { status: 'error' };
-
-    expect(recipeEditReducer(refuse, recipeEditFormOpened())).toEqual({ status: 'idle' });
   });
 });

@@ -16,15 +16,12 @@ export type ConviveRowActions = {
   onRemoveCancel: () => void;
 };
 
-export type AddNotice = { tone: 'error'; message: string };
-
 export type ConvivesSectionProps = {
   name: string;
   onNameChange: (value: string) => void;
   onSubmit: () => void;
   submitDisabled: boolean;
   inputDisabled: boolean;
-  addNotice: AddNotice | null;
 } & (
   | { status: 'loading' }
   | { status: 'error'; message: string; onRetry: () => void }
@@ -180,14 +177,8 @@ function AddForm(props: ConvivesSectionProps) {
           Ajouter
         </SubmitButton>
       </FieldRow>
-      {props.addNotice !== null && <Note role="alert">{props.addNotice.message}</Note>}
     </Form>
   );
-}
-
-function RowNoticeView({ notice }: { notice: ConviveRow['notice'] }) {
-  if (notice === null) return null;
-  return <Note role="alert">{notice.message}</Note>;
 }
 
 function ConviveRowView({ row, actions }: { row: ConviveRow; actions: ConviveRowActions }) {
@@ -217,7 +208,6 @@ function ConviveRowView({ row, actions }: { row: ConviveRow; actions: ConviveRow
               Annuler
             </RowButton>
           </FieldRow>
-          <RowNoticeView notice={row.notice} />
         </Form>
       </Row>
     );
@@ -238,7 +228,6 @@ function ConviveRowView({ row, actions }: { row: ConviveRow; actions: ConviveRow
             Retirer
           </RowButton>
         </RowLine>
-        <RowNoticeView notice={row.notice} />
       </Row>
     );
   }
