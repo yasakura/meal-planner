@@ -26,12 +26,15 @@ const CRENEAU_LABELS: Record<Creneau, string> = {
 
 const RECETTE_INCONNUE = 'Recette inconnue';
 
+const TITRE_INDISPONIBLE = 'Titre indisponible';
+
 export function creneauLabel(creneau: Creneau): string {
   return CRENEAU_LABELS[creneau];
 }
 
-export function menuDays(menu: Menu, recipes: Recipe[], origin: Origin): MenuDay[] {
-  const titleById = new Map(recipes.map((recipe) => [recipe.id, recipe.title]));
+export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): MenuDay[] {
+  const titreManquant = recipes === null ? TITRE_INDISPONIBLE : RECETTE_INCONNUE;
+  const titleById = new Map(recipes?.map((recipe) => [recipe.id, recipe.title]));
   const byJour = new Map<number, MenuDay>();
 
   for (const [repasIndex, repas] of menu.repas.entries()) {
@@ -54,7 +57,7 @@ export function menuDays(menu: Menu, recipes: Recipe[], origin: Origin): MenuDay
       const title = titleById.get(slot.recipeId);
       day.slots.push(
         title === undefined
-          ? { ...ligne, title: RECETTE_INCONNUE, recipe: 'unknown' }
+          ? { ...ligne, title: titreManquant, recipe: 'unknown' }
           : { ...ligne, title, recipe: 'known', href: origin.recipeHref(slot.recipeId) },
       );
     }

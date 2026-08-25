@@ -235,23 +235,65 @@ describe('MenuContainer — consultation des menus enregistrés', () => {
     expect(canal.live).toBe(1);
   });
 
-  it('des titres hors ligne ne laissent pas l’écran sans sortie : « Réessayer » rouvre LEUR canal, et laisse celui des menus tranquille', async () => {
+  it('des titres hors ligne laissent le menu à l’écran, disent pourquoi ses créneaux n’ont plus de nom, et « Réessayer » rouvre LEUR canal en laissant celui des menus tranquille', async () => {
     const user = userEvent.setup();
     const recettes = RecipeChannel.refusingWith(RepositoryUnavailableError.create());
     const menus = MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1));
     renderOn(storeAbonneA(menus, recettes));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Aucune connexion — le menu n’a pas pu être chargé.',
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getAllByText('Titre indisponible')).toHaveLength(2);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Aucune connexion — les noms des recettes n’ont pas pu être chargés.',
     );
+    expect(screen.getByRole('button', { name: 'Menu précédent' })).toBeEnabled();
 
     recettes.willEmit(twoRecipes());
     await user.click(screen.getByRole('button', { name: /réessayer/i }));
 
-    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Ratatouille' })).toBeInTheDocument();
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.queryByText('Titre indisponible')).not.toBeInTheDocument();
     expect(recettes.subscriptions).toBe(2);
     expect(recettes.live).toBe(1);
     expect(menus.subscriptions).toBe(1);
+  });
+
+  it('relancer les titres ne retire pas le menu de l’écran : il reste, son constat annonce le chargement et n’offre plus de relance', async () => {
+    const user = userEvent.setup();
+    const recettes = RecipeChannel.refusingWith(RepositoryUnavailableError.create());
+    const menus = MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1));
+    renderOn(storeAbonneA(menus, recettes));
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /réessayer/i })).toBeInTheDocument();
+
+    recettes.willStaySilent();
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getAllByText('Titre indisponible')).toHaveLength(2);
+    expect(screen.getByRole('status')).toHaveTextContent('Chargement des noms des recettes…');
+    expect(screen.queryByRole('button', { name: /réessayer/i })).not.toBeInTheDocument();
+    expect(recettes.subscriptions).toBe(2);
+    expect(menus.subscriptions).toBe(1);
+  });
+
+  it('le menu survit au remontage sur le MÊME store après une relance des titres restée sans réponse', async () => {
+    const user = userEvent.setup();
+    const recettes = RecipeChannel.refusingWith(RepositoryUnavailableError.create());
+    const store = storeAbonneA(MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1)), recettes);
+    const { unmount } = renderOn(store);
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    recettes.willStaySilent();
+    await user.click(screen.getByRole('button', { name: /réessayer/i }));
+
+    unmount();
+    renderOn(store);
+    await arriveeAchevee();
+
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getAllByText('Titre indisponible')).toHaveLength(2);
+    expect(screen.getByRole('status')).toHaveTextContent('Chargement des noms des recettes…');
   });
 
   it('aucun menu enregistré : l’écran le dit et invite à en générer un', async () => {
