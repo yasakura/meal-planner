@@ -43,7 +43,7 @@ describe('menuDays', () => {
             href: '/catalogue/r1?depuis=menu',
             address: { repasIndex: 0, slotIndex: 0 },
             choose: null,
-            sortie: null,
+            presence: null,
           },
           {
             key: '0-1',
@@ -53,7 +53,7 @@ describe('menuDays', () => {
             href: '/catalogue/r2?depuis=menu',
             address: { repasIndex: 1, slotIndex: 0 },
             choose: null,
-            sortie: null,
+            presence: null,
           },
         ],
       },
@@ -69,7 +69,7 @@ describe('menuDays', () => {
             href: '/catalogue/r1?depuis=menu',
             address: { repasIndex: 2, slotIndex: 0 },
             choose: null,
-            sortie: null,
+            presence: null,
           },
         ],
       },
@@ -89,7 +89,7 @@ describe('menuDays', () => {
         recipe: 'unknown',
         address: { repasIndex: 0, slotIndex: 0 },
         choose: null,
-        sortie: null,
+        presence: null,
       },
     ]);
     expect(menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots.at(0)?.title).toBe('Ratatouille');
@@ -113,7 +113,7 @@ describe('menuDays', () => {
             recipe: 'unknown',
             address: { repasIndex: 0, slotIndex: 0 },
             choose: null,
-            sortie: null,
+            presence: null,
           },
           {
             key: '0-1',
@@ -123,7 +123,7 @@ describe('menuDays', () => {
             href: '/catalogue/r2?depuis=menu',
             address: { repasIndex: 1, slotIndex: 0 },
             choose: null,
-            sortie: null,
+            presence: null,
           },
         ],
       },
@@ -219,14 +219,14 @@ describe('menuDays', () => {
         href: '/catalogue/r1?depuis=menu-nouveau',
         address: { repasIndex: 0, slotIndex: 0 },
         choose: null,
-        sortie: null,
+        presence: null,
       },
     ]);
   });
 });
 
 describe('menuDays et les créneaux que personne ne mange', () => {
-  it('le créneau que personne ne mange porte la mention de sortie et garde le titre de sa recette, là où son voisin du même jour n’en porte aucune', () => {
+  it('le créneau que personne ne mange n’annonce plus aucun plat : sa ligne dit la sortie de la famille, là où son voisin du même jour annonce la sienne', () => {
     const menu = menuOf([
       createRepas({
         jour: 0,
@@ -240,13 +240,13 @@ describe('menuDays et les créneaux que personne ne mange', () => {
 
     const slots = menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots ?? [];
 
-    expect(slots.at(0)?.sortie).toBe('La famille est de sortie');
-    expect(slots.at(0)?.title).toBe('Ratatouille');
+    expect(slots.at(0)?.recipe).toBe('sortie');
+    expect(slots.at(0)?.title).toBe('La famille est de sortie');
+    expect(slots.at(1)?.recipe).toBe('known');
     expect(slots.at(1)?.title).toBe('Blanquette');
-    expect(slots.at(1)?.sortie).toBeNull();
   });
 
-  it('le créneau sans aucun convive du foyer mais avec des invités ne porte aucune mention de sortie, là où son voisin sans personne la porte', () => {
+  it('le créneau sans aucun convive du foyer mais avec des invités garde le plat de sa recette, là où son voisin sans personne annonce la sortie', () => {
     const menu = menuOf([
       createRepas({
         jour: 0,
@@ -266,8 +266,10 @@ describe('menuDays et les créneaux que personne ne mange', () => {
 
     const slots = menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots ?? [];
 
-    expect(slots.at(0)?.sortie).toBeNull();
-    expect(slots.at(1)?.sortie).toBe('La famille est de sortie');
+    expect(slots.map((slot) => [slot.recipe, slot.title])).toEqual([
+      ['known', 'Ratatouille'],
+      ['sortie', 'La famille est de sortie'],
+    ]);
   });
 
   it('les deux recettes d’un même créneau portent la même mention de sortie', () => {
@@ -283,9 +285,9 @@ describe('menuDays et les créneaux que personne ne mange', () => {
 
     const slots = menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots ?? [];
 
-    expect(slots.map((slot) => slot.sortie)).toEqual([
-      'La famille est de sortie',
-      'La famille est de sortie',
+    expect(slots.map((slot) => [slot.recipe, slot.title])).toEqual([
+      ['sortie', 'La famille est de sortie'],
+      ['sortie', 'La famille est de sortie'],
     ]);
   });
 });

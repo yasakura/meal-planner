@@ -16,8 +16,11 @@ import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { nextMondayUseCase, type NextMonday } from '../../../domain/use-cases/next-monday';
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { DriftingClock } from '../../../domain/test-doubles/drifting-clock';
+import { type Convive } from '../../../domain/entities/convive';
+import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
+import { convivesObserved } from '../convives/convives-slice';
 import { DataSubscription } from '../../DataSubscription';
 import { deferred } from '../../test-utils/deferred';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
@@ -930,5 +933,186 @@ describe('MenuCreateContainer', () => {
 
     expect(screen.getByText('écran de génération quitté')).toBeInTheDocument();
     expect(screen.queryByText('consultation des menus')).not.toBeInTheDocument();
+  });
+});
+
+describe('MenuCreateContainer — choisir qui mange à chaque créneau du brouillon', () => {
+  const AURELIE = ConviveBuilder.aConvive().withId('c-au').withName('Aurélie').build();
+  const LIONEL = ConviveBuilder.aConvive().withId('c-li').withName('Lionel').build();
+
+  async function brouillonAvecFoyer(convives: Convive[] = [AURELIE, LIONEL]) {
+    const user = userEvent.setup();
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+    });
+    store.dispatch(convivesObserved(convives));
+    const rendu = renderOn(store);
+    await arriveeAchevee();
+    await user.click(screen.getByRole('button', { name: /générer un menu/i }));
+    await screen.findByText('lundi 24 août');
+    return { store, user, ...rendu };
+  }
+
+  function rond(nom: string, quand: string) {
+    return screen.getByRole('button', { name: `${nom} au repas de ${quand}` });
+  }
+
+  function ligne(quand: string) {
+    return screen
+      .getByRole('button', { name: `Ajouter un invité au repas de ${quand}` })
+      .closest('li') as HTMLElement;
+  }
+
+  it('chaque créneau montre le foyer en ronds de deux lettres, tous au repas, chacun annoncé par son nom', async () => {
+    await brouillonAvecFoyer();
+
+    const premier = ligne('lundi 24 août, Midi');
+    expect(within(premier).getByText('AU')).toBeInTheDocument();
+    expect(within(premier).getByText('LI')).toBeInTheDocument();
+    expect(rond('Aurélie', 'lundi 24 août, Midi')).toHaveAttribute('aria-pressed', 'true');
+    expect(rond('Lionel', 'lundi 24 août, Soir')).toHaveAttribute('aria-pressed', 'true');
+    expect(rond('Aurélie', 'mardi 25 août, Midi')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('retirer un convive d’un créneau ne le retire pas du créneau voisin, et le remettre le ramène', async () => {
+    const { user } = await brouillonAvecFoyer();
+
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+
+    expect(rond('Aurélie', 'lundi 24 août, Midi')).toHaveAttribute('aria-pressed', 'false');
+    expect(rond('Aurélie', 'lundi 24 août, Soir')).toHaveAttribute('aria-pressed', 'true');
+    expect(rond('Lionel', 'lundi 24 août, Midi')).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+
+    expect(rond('Aurélie', 'lundi 24 août, Midi')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('le compteur d’invités monte et redescend sur le seul créneau visé', async () => {
+    const { user } = await brouillonAvecFoyer();
+    expect(within(ligne('lundi 24 août, Midi')).getByText('0 invité')).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Ajouter un invité au repas de lundi 24 août, Midi' }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Ajouter un invité au repas de lundi 24 août, Midi' }),
+    );
+
+    expect(within(ligne('lundi 24 août, Midi')).getByText('2 invités')).toBeInTheDocument();
+    expect(within(ligne('lundi 24 août, Soir')).getByText('0 invité')).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Retirer un invité au repas de lundi 24 août, Midi' }),
+    );
+
+    expect(within(ligne('lundi 24 août, Midi')).getByText('1 invité')).toBeInTheDocument();
+  });
+
+  it('le retrait d’un invité est verrouillé quand le créneau n’en compte aucun, et s’ouvre dès qu’il en compte un', async () => {
+    const { user } = await brouillonAvecFoyer();
+    const retirer = () =>
+      screen.getByRole('button', { name: 'Retirer un invité au repas de lundi 24 août, Midi' });
+    expect(retirer()).toBeDisabled();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Ajouter un invité au repas de lundi 24 août, Midi' }),
+    );
+
+    expect(retirer()).toBeEnabled();
+  });
+
+  it('le créneau que plus personne ne mange annonce la sortie de la famille, le créneau voisin non, et la mention s’efface dès qu’on y remet quelqu’un', async () => {
+    const { user } = await brouillonAvecFoyer();
+
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(
+      within(ligne('lundi 24 août, Midi')).getByText('La famille est de sortie'),
+    ).toBeInTheDocument();
+    expect(
+      within(ligne('lundi 24 août, Soir')).queryByText('La famille est de sortie'),
+    ).not.toBeInTheDocument();
+
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(
+      within(ligne('lundi 24 août, Midi')).queryByText('La famille est de sortie'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('le créneau que plus personne ne mange remplace son plat par la mention, sans lien ni crayon, et rend le plat tel quel dès qu’on y remet quelqu’un', async () => {
+    const { user } = await brouillonAvecFoyer();
+    const midi = () => ligne('lundi 24 août, Midi');
+    expect(within(midi()).getByRole('link', { name: 'Ratatouille' })).toBeInTheDocument();
+    expect(
+      within(midi()).getByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
+    ).toBeInTheDocument();
+
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(within(midi()).queryByRole('link', { name: 'Ratatouille' })).toBeNull();
+    expect(
+      within(midi()).queryByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
+    ).toBeNull();
+    expect(within(midi()).getByText('La famille est de sortie')).toBeInTheDocument();
+    expect(
+      within(ligne('mardi 25 août, Midi')).getByRole('link', { name: 'Ratatouille' }),
+    ).toBeInTheDocument();
+
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(within(midi()).getByRole('link', { name: 'Ratatouille' })).toHaveAttribute(
+      'href',
+      '/catalogue/r1?depuis=menu-nouveau',
+    );
+    expect(
+      within(midi()).getByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
+    ).toBeInTheDocument();
+  });
+
+  it('un créneau que personne ne mange mais qui reçoit un invité n’annonce aucune sortie', async () => {
+    const { user } = await brouillonAvecFoyer();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Ajouter un invité au repas de lundi 24 août, Midi' }),
+    );
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+    await user.click(rond('Lionel', 'lundi 24 août, Midi'));
+
+    expect(
+      within(ligne('lundi 24 août, Midi')).queryByText('La famille est de sortie'),
+    ).not.toBeInTheDocument();
+    expect(within(ligne('lundi 24 août, Midi')).getByText('1 invité')).toBeInTheDocument();
+  });
+
+  it('un foyer sans convive ne montre aucun rond, là où un foyer de deux en montre deux, et garde son compteur d’invités', async () => {
+    const { unmount } = await brouillonAvecFoyer([]);
+
+    const ronds = () =>
+      screen.queryAllByRole('button', {
+        name: /^(Aurélie|Lionel) au repas de lundi 24 août, Midi$/,
+      });
+    expect(ronds()).toHaveLength(0);
+    expect(within(ligne('lundi 24 août, Midi')).getByText('0 invité')).toBeInTheDocument();
+
+    unmount();
+    await brouillonAvecFoyer();
+
+    expect(ronds()).toHaveLength(2);
+  });
+
+  it('le brouillon garde la présence choisie après un remontage sur le MÊME store', async () => {
+    const { store, user, unmount } = await brouillonAvecFoyer();
+    await user.click(rond('Aurélie', 'lundi 24 août, Midi'));
+
+    unmount();
+    renderOn(store);
+    await arriveeAchevee();
+
+    expect(rond('Aurélie', 'lundi 24 août, Midi')).toHaveAttribute('aria-pressed', 'false');
   });
 });

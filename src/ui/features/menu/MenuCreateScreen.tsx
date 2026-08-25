@@ -4,7 +4,13 @@ import { Link } from 'react-router-dom';
 import { tokens } from '../../theme/tokens';
 import { type MenuDay } from './menu-days';
 import { type MenuSaveNotice } from './menu-notice';
-import { MenuDays, MenuSaveNoticeView, MenuSpinner, MenuUnavailable } from './MenuScreen';
+import {
+  MenuDays,
+  MenuSaveNoticeView,
+  MenuSpinner,
+  MenuUnavailable,
+  type PresenceActions,
+} from './MenuScreen';
 
 const { colors, space, fonts } = tokens;
 
@@ -28,6 +34,7 @@ export type MenuCreateBodyProps =
       days: MenuDay[];
       saveNotice: MenuSaveNotice | null;
       saveDisabled: boolean;
+      presenceActions: PresenceActions;
       onRegenerate: () => void;
       onSave: () => void;
     };
@@ -252,7 +259,7 @@ function Body(props: MenuCreateScreenProps) {
     case 'draft':
       return (
         <>
-          <MenuDays days={body.days} />
+          <MenuDays days={body.days} presenceActions={body.presenceActions} />
           <Reglages {...props} />
           <Actions>
             <PrimaryButton type="button" onClick={body.onRegenerate}>

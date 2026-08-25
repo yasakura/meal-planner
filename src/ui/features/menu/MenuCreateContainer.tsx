@@ -2,11 +2,15 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { selectConvives } from '../convives/convives-slice';
 import {
   generateMenu,
+  inviteAdded,
+  inviteRemoved,
   menuCreateScreenOpened,
-  menuCreationViewOf,
+  menuCreationViewWithPresence,
   menuRetried,
+  repasPresenceToggled,
   menuSaveHonored,
   menuStartDateSelected,
   menuWindowSelected,
@@ -20,7 +24,8 @@ import { MenuCreateScreen, type MenuCreateBodyProps } from './MenuCreateScreen';
 
 export function MenuCreateContainer() {
   const menuState = useAppSelector(selectMenu);
-  const view = menuCreationViewOf(menuState);
+  const foyer = useAppSelector(selectConvives).convives;
+  const view = menuCreationViewWithPresence(menuState, foyer);
   const startDateIso = useAppSelector(selectStartDateIso);
   const startDateFloorIso = useAppSelector(selectStartDateFloorIso);
   const dispatch = useAppDispatch();
@@ -48,6 +53,12 @@ export function MenuCreateContainer() {
   if (view.status === 'draft') {
     body = {
       ...view,
+      presenceActions: {
+        onToggleConvive: (repasIndex: number, conviveId: string) =>
+          dispatch(repasPresenceToggled({ repasIndex, conviveId })),
+        onAddInvite: (repasIndex: number) => dispatch(inviteAdded(repasIndex)),
+        onRemoveInvite: (repasIndex: number) => dispatch(inviteRemoved(repasIndex)),
+      },
       onRegenerate: () => dispatch(generateMenu(menuState.selectedDays)),
       onSave: handleSave,
     };

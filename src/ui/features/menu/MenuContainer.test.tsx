@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
@@ -12,8 +12,10 @@ import { type Recipe } from '../../../domain/entities/recipe';
 import { RepositoryUnavailableError } from '../../../domain/errors/repository-unavailable-error';
 import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type MenuNavigation } from '../../../domain/use-cases/observe-menus';
+import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
+import { convivesObserved } from '../convives/convives-slice';
 import { DataSubscription } from '../../DataSubscription';
 import { MenuChannel } from '../../test-utils/menu-channel';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
@@ -343,5 +345,59 @@ describe('MenuContainer — consultation des menus enregistrés', () => {
     expect(screen.queryByText('Menu enregistré')).not.toBeInTheDocument();
     expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
     expect(screen.getByText('Aucun menu enregistré')).toBeInTheDocument();
+  });
+});
+
+describe('MenuContainer — le menu consulté s’annonce sans se modifier', () => {
+  const AURELIE = ConviveBuilder.aConvive().withId('c-au').withName('Aurélie').build();
+
+  function menuAvecUnJourDeSortie(): Menu {
+    return createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({
+          jour: 0,
+          creneau: 'midi',
+          slots: [createSlot({ recipeId: 'r1' })],
+          presents: [],
+          invites: 0,
+        }),
+        createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+      ],
+    });
+  }
+
+  function consulterLeMenuDeLaSortie() {
+    const store = createTestStore({
+      observeMenus: MenuChannel.seededWith({
+        menus: [menuAvecUnJourDeSortie()],
+        indexInitial: 0,
+      }).observeMenus,
+      observeRecipes: RecipeChannel.seededWith(twoRecipes()).observeRecipes,
+    });
+    store.dispatch(convivesObserved([AURELIE]));
+    return renderOn(store);
+  }
+
+  function ligneDe(titre: string) {
+    return screen.getByRole('link', { name: titre }).closest('li') as HTMLElement;
+  }
+
+  it('le créneau enregistré que personne ne mange annonce la sortie à la place de son plat, là où son voisin du même jour montre le sien', async () => {
+    consulterLeMenuDeLaSortie();
+
+    expect(await screen.findByRole('link', { name: 'Blanquette' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Ratatouille' })).toBeNull();
+    expect(screen.getByText('La famille est de sortie')).toBeInTheDocument();
+    expect(within(ligneDe('Blanquette')).queryByText('La famille est de sortie')).toBeNull();
+  });
+
+  it('le menu consulté n’offre aucun rond de présence ni compteur d’invités : on n’y modifie pas qui mange', async () => {
+    consulterLeMenuDeLaSortie();
+
+    expect(await screen.findByRole('link', { name: 'Blanquette' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Aurélie au repas de/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Ajouter un invité au repas de/ })).toBeNull();
+    expect(screen.queryByText('0 invité')).toBeNull();
   });
 });

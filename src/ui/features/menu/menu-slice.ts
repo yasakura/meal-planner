@@ -11,7 +11,15 @@ import {
   toIsoDate,
   type CalendarDate,
 } from '../../../domain/entities/calendar-date';
-import { replaceSlotRecipe, type Menu, type SlotAddress } from '../../../domain/entities/menu';
+import { type Convive } from '../../../domain/entities/convive';
+import {
+  replaceRepasPresence,
+  replaceSlotRecipe,
+  type Menu,
+  type Presence,
+  type SlotAddress,
+} from '../../../domain/entities/menu';
+import { type Repas } from '../../../domain/entities/repas';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type Recipe } from '../../../domain/entities/recipe';
 import {
@@ -23,6 +31,7 @@ import {
 import { recipesObserved } from '../catalogue/catalogue-slice';
 import { FROM_MENU_DRAFT } from '../catalogue/recipe-detail-origin';
 import { menuDays, type MenuDay } from './menu-days';
+import { presenceAvecConviveBascule, presenceAvecInvites, withPresence } from './repas-presence';
 import { MENU_SAVED_MESSAGE, MENU_UNAVAILABLE_NOTICE, type MenuSaveNotice } from './menu-notice';
 import { withSlotChoice } from './slot-choice';
 
@@ -156,6 +165,9 @@ const menuSlice = createSlice({
     slotRecipeReplaced(state, action: PayloadAction<Menu>) {
       state.menu = action.payload as typeof state.menu;
     },
+    repasPresenceReplaced(state, action: PayloadAction<Menu>) {
+      state.menu = action.payload as typeof state.menu;
+    },
     menuOpened(state, action: PayloadAction<CalendarDate>) {
       state.startDateFloor = action.payload;
       state.startDateRefused = false;
@@ -206,7 +218,8 @@ const menuSlice = createSlice({
 
 export const { menuWindowSelected } = menuSlice.actions;
 
-const { menuOpened, slotRecipeReplaced, startDateChosen } = menuSlice.actions;
+const { menuOpened, repasPresenceReplaced, slotRecipeReplaced, startDateChosen } =
+  menuSlice.actions;
 
 type SlotChoice = { address: SlotAddress; recipeId: string };
 
@@ -215,6 +228,38 @@ export function slotRecipeChosen(choice: SlotChoice): AppThunk {
     const brouillon = displayedMenuOf(getState().menu);
     dispatch(slotRecipeReplaced(replaceSlotRecipe(brouillon, choice.address, choice.recipeId)));
   };
+}
+
+function repasPresenceChanged(
+  repasIndex: number,
+  presenceOf: (repas: Repas, foyer: Convive[]) => Presence,
+): AppThunk {
+  return (dispatch, getState) => {
+    const state = getState();
+    const brouillon = displayedMenuOf(state.menu);
+    const repas = brouillon.repas[repasIndex] as Repas;
+    dispatch(
+      repasPresenceReplaced(
+        replaceRepasPresence(brouillon, repasIndex, presenceOf(repas, state.convives.convives)),
+      ),
+    );
+  };
+}
+
+type PresenceToggle = { repasIndex: number; conviveId: string };
+
+export function repasPresenceToggled(toggle: PresenceToggle): AppThunk {
+  return repasPresenceChanged(toggle.repasIndex, (repas, foyer) =>
+    presenceAvecConviveBascule(repas, foyer, toggle.conviveId),
+  );
+}
+
+export function inviteAdded(repasIndex: number): AppThunk {
+  return repasPresenceChanged(repasIndex, (repas) => presenceAvecInvites(repas, repas.invites + 1));
+}
+
+export function inviteRemoved(repasIndex: number): AppThunk {
+  return repasPresenceChanged(repasIndex, (repas) => presenceAvecInvites(repas, repas.invites - 1));
 }
 
 export function menuStartDateSelected(iso: string): AppThunk {
@@ -280,4 +325,10 @@ export function menuCreationViewOf(state: MenuState): MenuCreationView {
   }
   if (state.status === 'error') return { status: 'error', message: menuErrorMessage(state) };
   return { status: 'form', saveNotice: menuSaveNoticeOf(state) };
+}
+
+export function menuCreationViewWithPresence(state: MenuState, foyer: Convive[]): MenuCreationView {
+  const view = menuCreationViewOf(state);
+  if (view.status !== 'draft') return view;
+  return { ...view, days: withPresence(view.days, displayedMenuOf(state), foyer) };
 }

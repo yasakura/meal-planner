@@ -10,8 +10,10 @@ import { type GenerateMenu } from '../../../domain/use-cases/generate-menu';
 import { type ListRecipes } from '../../../domain/use-cases/list-recipes';
 import { type SaveMenu } from '../../../domain/use-cases/save-menu';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
+import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { createTestStore } from '../../../test/create-test-store';
 import { recipesObserved } from '../catalogue/catalogue-slice';
+import { convivesObserved } from '../convives/convives-slice';
 import { deferred } from '../../test-utils/deferred';
 import {
   generateMenu,
@@ -26,6 +28,10 @@ import {
   menuWindowSelected,
   NO_RECIPES,
   slotRecipeChosen,
+  inviteAdded,
+  inviteRemoved,
+  menuCreationViewWithPresence,
+  repasPresenceToggled,
   saveMenu,
   isSaveInFlight,
   selectMenu,
@@ -906,5 +912,130 @@ describe('menu slice — choisir soi-même la recette d’un créneau', () => {
       montree.status === 'draft' &&
         montree.days.flatMap((jour) => jour.slots.map((slot) => slot.choose?.href)),
     ).toEqual(['/menu/nouveau/choisir/0/0', '/menu/nouveau/choisir/1/0']);
+  });
+});
+
+describe('menu slice — choisir qui mange à un créneau du brouillon', () => {
+  const AURELIE = ConviveBuilder.aConvive().withId('c-au').withName('Aurélie').build();
+  const LIONEL = ConviveBuilder.aConvive().withId('c-li').withName('Lionel').build();
+
+  async function storeAvecBrouillon() {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+    });
+    await store.dispatch(generateMenu(7));
+    store.dispatch(convivesObserved([AURELIE, LIONEL]));
+    return store;
+  }
+
+  function repasDuBrouillon(store: ReturnType<typeof createTestStore>) {
+    const menu = selectMenu(store.getState()).menu as Menu;
+    return menu.repas.map((repas) => [repas.presents, repas.invites]);
+  }
+
+  function vue(store: ReturnType<typeof createTestStore>) {
+    return menuCreationViewWithPresence(
+      selectMenu(store.getState()),
+      store.getState().convives.convives,
+    );
+  }
+
+  it('bascule le convive visé hors du repas visé, et laisse l’autre repas dire que tout le foyer y mange', async () => {
+    const store = await storeAvecBrouillon();
+    expect(repasDuBrouillon(store)).toEqual([
+      [null, 0],
+      [null, 0],
+    ]);
+
+    store.dispatch(repasPresenceToggled({ repasIndex: 1, conviveId: 'c-au' }));
+
+    expect(repasDuBrouillon(store)).toEqual([
+      [null, 0],
+      [['c-li'], 0],
+    ]);
+  });
+
+  it('rebasculé, le convive remange au repas qu’il avait quitté', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(repasPresenceToggled({ repasIndex: 0, conviveId: 'c-au' }));
+    store.dispatch(repasPresenceToggled({ repasIndex: 0, conviveId: 'c-au' }));
+
+    expect(repasDuBrouillon(store).at(0)?.at(0)).toEqual(['c-li', 'c-au']);
+  });
+
+  it('compte un invité de plus, puis un de moins, sur le seul repas visé', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(inviteAdded(1));
+    store.dispatch(inviteAdded(1));
+    expect(repasDuBrouillon(store)).toEqual([
+      [null, 0],
+      [null, 2],
+    ]);
+
+    store.dispatch(inviteRemoved(1));
+    expect(repasDuBrouillon(store)).toEqual([
+      [null, 0],
+      [null, 1],
+    ]);
+  });
+
+  it('deux changements successifs sur le même repas s’empilent, le second lisant bien le premier', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(repasPresenceToggled({ repasIndex: 0, conviveId: 'c-li' }));
+    store.dispatch(inviteAdded(0));
+
+    expect(repasDuBrouillon(store).at(0)).toEqual([['c-au'], 1]);
+  });
+
+  it('laisse intactes la date de début et les recettes du brouillon', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(repasPresenceToggled({ repasIndex: 0, conviveId: 'c-au' }));
+    store.dispatch(inviteAdded(0));
+
+    const menu = selectMenu(store.getState()).menu as Menu;
+    expect(menu.dateDebut).toEqual(LUNDI_24_AOUT);
+    expect(menu.repas.flatMap((repas) => repas.slots.map((slot) => slot.recipeId))).toEqual([
+      'r1',
+      'r2',
+    ]);
+  });
+
+  it('la vue du brouillon porte sur chaque ligne la présence de son repas, là où la vue sans brouillon n’en porte aucune', async () => {
+    const store = await storeAvecBrouillon();
+    const avantGeneration = menuCreationViewWithPresence(
+      menuInitialState(LUNDI_24_AOUT, LUNDI_24_AOUT),
+      [AURELIE, LIONEL],
+    );
+    expect(avantGeneration.status).toBe('form');
+
+    store.dispatch(repasPresenceToggled({ repasIndex: 0, conviveId: 'c-au' }));
+    const montree = vue(store);
+
+    expect(
+      montree.status === 'draft' &&
+        montree.days.flatMap((jour) =>
+          jour.slots.map((slot) => slot.presence?.chips.map((chip) => chip.present)),
+        ),
+    ).toEqual([
+      [false, true],
+      [true, true],
+    ]);
+  });
+
+  it('la vue du brouillon porte le compteur d’invités de chaque repas', async () => {
+    const store = await storeAvecBrouillon();
+
+    store.dispatch(inviteAdded(1));
+    const montree = vue(store);
+
+    expect(
+      montree.status === 'draft' &&
+        montree.days.flatMap((jour) => jour.slots.map((slot) => slot.presence?.invitesLabel)),
+    ).toEqual(['0 invité', '1 invité']);
   });
 });

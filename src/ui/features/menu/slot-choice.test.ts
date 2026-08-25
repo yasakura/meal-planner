@@ -170,6 +170,29 @@ describe('withSlotChoice — l’accès au choix depuis le brouillon', () => {
     ]);
   });
 
+  it('le créneau que personne ne mange n’ouvre aucun choix de recette, là où son voisin du même jour l’ouvre', () => {
+    const brouillon = createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({
+          jour: 0,
+          creneau: 'midi',
+          slots: [createSlot({ recipeId: 'r1' })],
+          presents: [],
+          invites: 0,
+        }),
+        createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+      ],
+    });
+
+    const jours = withSlotChoice(menuDays(brouillon, troisRecettes(), FROM_MENU_DRAFT));
+
+    expect(jours.flatMap((jour) => jour.slots.map((slot) => slot.choose?.href ?? null))).toEqual([
+      null,
+      '/menu/nouveau/choisir/1/0',
+    ]);
+  });
+
   it('n’ouvre ce choix que sur les jours décorés : les mêmes jours, nus, n’en portent aucun', () => {
     const nus = joursDuBrouillon();
 

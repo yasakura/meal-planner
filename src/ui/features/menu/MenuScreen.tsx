@@ -2,7 +2,7 @@ import { styled, keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 
 import { tokens } from '../../theme/tokens';
-import { type MenuDay, type SlotChoiceLink } from './menu-days';
+import { type MenuDay, type SlotChoiceLink, type SlotPresence } from './menu-days';
 import { type MenuSaveNotice, type MenuTitlesNotice } from './menu-notice';
 
 const { colors, space, fonts } = tokens;
@@ -221,10 +221,81 @@ const SlotList = styled.ul`
 
 const SlotItem = styled.li`
   display: flex;
-  justify-content: space-between;
-  gap: ${space.md}px;
+  flex-direction: column;
+  gap: ${space.xs}px;
   padding: ${space.sm}px 0;
   border-bottom: 1px solid ${colors.hairline};
+`;
+
+const SlotHead = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: ${space.md}px;
+`;
+
+const PresenceBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: ${space.sm}px;
+`;
+
+const Chips = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${space.xs}px;
+`;
+
+const Chip = styled.button<{ $present: boolean }>`
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: ${tokens.radii.full};
+  border: 1px solid ${(props) => (props.$present ? colors.terracotta : colors.hairline)};
+  background: ${(props) => (props.$present ? colors.terracotta : 'transparent')};
+  color: ${(props) => (props.$present ? colors.creme : colors.inkSecondary)};
+  font-family: ${fonts.body};
+  font-size: 11px;
+  letter-spacing: 0.5px;
+`;
+
+const Guests = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${space.xs}px;
+`;
+
+const GuestButton = styled.button`
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  background: none;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${tokens.radii.sm};
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 16px;
+  line-height: 1;
+
+  &:disabled {
+    opacity: 0.35;
+  }
+`;
+
+const GuestCount = styled.span`
+  font-family: ${fonts.body};
+  font-size: 12px;
+  color: ${colors.inkSecondary};
+  min-width: 58px;
+  text-align: center;
+`;
+
+const SortieNote = styled.span`
+  font-family: ${fonts.body};
+  font-size: 15px;
+  font-style: italic;
+  color: ${colors.inkSecondary};
 `;
 
 const CreneauLabel = styled.span`
@@ -284,7 +355,58 @@ function ChooseSlotLink({ choose }: { choose: SlotChoiceLink }) {
   );
 }
 
-export function MenuDays({ days }: { days: MenuDay[] }) {
+export type PresenceActions = {
+  onToggleConvive: (repasIndex: number, conviveId: string) => void;
+  onAddInvite: (repasIndex: number) => void;
+  onRemoveInvite: (repasIndex: number) => void;
+};
+
+function PresenceRow({ presence, actions }: { presence: SlotPresence; actions: PresenceActions }) {
+  return (
+    <PresenceBar>
+      <Chips>
+        {presence.chips.map((chip) => (
+          <Chip
+            key={chip.id}
+            type="button"
+            $present={chip.present}
+            aria-label={chip.label}
+            aria-pressed={chip.present}
+            onClick={() => actions.onToggleConvive(presence.repasIndex, chip.id)}
+          >
+            <span aria-hidden="true">{chip.initials}</span>
+          </Chip>
+        ))}
+      </Chips>
+      <Guests>
+        <GuestButton
+          type="button"
+          aria-label={presence.removeInviteLabel}
+          disabled={presence.removeInviteDisabled}
+          onClick={() => actions.onRemoveInvite(presence.repasIndex)}
+        >
+          −
+        </GuestButton>
+        <GuestCount>{presence.invitesLabel}</GuestCount>
+        <GuestButton
+          type="button"
+          aria-label={presence.addInviteLabel}
+          onClick={() => actions.onAddInvite(presence.repasIndex)}
+        >
+          +
+        </GuestButton>
+      </Guests>
+    </PresenceBar>
+  );
+}
+
+export function MenuDays({
+  days,
+  presenceActions,
+}: {
+  days: MenuDay[];
+  presenceActions: PresenceActions | null;
+}) {
   return (
     <DayList>
       {days.map((day) => (
@@ -293,15 +415,22 @@ export function MenuDays({ days }: { days: MenuDay[] }) {
           <SlotList>
             {day.slots.map((slot) => (
               <SlotItem key={slot.key}>
-                <CreneauLabel>{slot.creneauLabel}</CreneauLabel>
-                <SlotEnd>
-                  {slot.recipe === 'known' ? (
-                    <SlotLink to={slot.href}>{slot.title}</SlotLink>
-                  ) : (
-                    <SlotTitle>{slot.title}</SlotTitle>
-                  )}
-                  {slot.choose === null ? null : <ChooseSlotLink choose={slot.choose} />}
-                </SlotEnd>
+                <SlotHead>
+                  <CreneauLabel>{slot.creneauLabel}</CreneauLabel>
+                  <SlotEnd>
+                    {slot.recipe === 'known' ? (
+                      <SlotLink to={slot.href}>{slot.title}</SlotLink>
+                    ) : slot.recipe === 'sortie' ? (
+                      <SortieNote>{slot.title}</SortieNote>
+                    ) : (
+                      <SlotTitle>{slot.title}</SlotTitle>
+                    )}
+                    {slot.choose === null ? null : <ChooseSlotLink choose={slot.choose} />}
+                  </SlotEnd>
+                </SlotHead>
+                {presenceActions === null || slot.presence === null ? null : (
+                  <PresenceRow presence={slot.presence} actions={presenceActions} />
+                )}
               </SlotItem>
             ))}
           </SlotList>
@@ -431,7 +560,7 @@ function Body(props: MenuScreenProps) {
             </ArrowButton>
           </PeriodBar>
           <MenuSaveNoticeView notice={props.saveNotice} />
-          <MenuDays days={props.days} />
+          <MenuDays days={props.days} presenceActions={null} />
         </>
       );
   }
