@@ -7,12 +7,24 @@ import { menuDayLabel } from './menu-day-label';
 
 export type SlotChoiceLink = { href: string; label: string };
 
+export type PresenceChip = { id: string; initials: string; label: string; present: boolean };
+
+export type SlotPresence = {
+  repasIndex: number;
+  chips: PresenceChip[];
+  invitesLabel: string;
+  addInviteLabel: string;
+  removeInviteLabel: string;
+  removeInviteDisabled: boolean;
+};
+
 type SlotLine = {
   key: string;
   creneauLabel: string;
   title: string;
   address: SlotAddress;
   choose: SlotChoiceLink | null;
+  presence: SlotPresence | null;
   sortie: string | null;
 };
 
@@ -57,6 +69,7 @@ export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): 
         creneauLabel: creneauLabel(repas.creneau),
         address: { repasIndex, slotIndex },
         choose: null,
+        presence: null,
         sortie: personneNeMangeAuRepas(repas) ? FAMILLE_DE_SORTIE : null,
       };
       const title = titleById.get(slot.recipeId);

@@ -43,6 +43,7 @@ describe('menuDays', () => {
             href: '/catalogue/r1?depuis=menu',
             address: { repasIndex: 0, slotIndex: 0 },
             choose: null,
+            presence: null,
             sortie: null,
           },
           {
@@ -53,6 +54,7 @@ describe('menuDays', () => {
             href: '/catalogue/r2?depuis=menu',
             address: { repasIndex: 1, slotIndex: 0 },
             choose: null,
+            presence: null,
             sortie: null,
           },
         ],
@@ -69,6 +71,7 @@ describe('menuDays', () => {
             href: '/catalogue/r1?depuis=menu',
             address: { repasIndex: 2, slotIndex: 0 },
             choose: null,
+            presence: null,
             sortie: null,
           },
         ],
@@ -89,6 +92,7 @@ describe('menuDays', () => {
         recipe: 'unknown',
         address: { repasIndex: 0, slotIndex: 0 },
         choose: null,
+        presence: null,
         sortie: null,
       },
     ]);
@@ -113,6 +117,7 @@ describe('menuDays', () => {
             recipe: 'unknown',
             address: { repasIndex: 0, slotIndex: 0 },
             choose: null,
+            presence: null,
             sortie: null,
           },
           {
@@ -123,6 +128,7 @@ describe('menuDays', () => {
             href: '/catalogue/r2?depuis=menu',
             address: { repasIndex: 1, slotIndex: 0 },
             choose: null,
+            presence: null,
             sortie: null,
           },
         ],
@@ -219,6 +225,7 @@ describe('menuDays', () => {
         href: '/catalogue/r1?depuis=menu-nouveau',
         address: { repasIndex: 0, slotIndex: 0 },
         choose: null,
+        presence: null,
         sortie: null,
       },
     ]);
