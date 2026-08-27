@@ -147,7 +147,7 @@ describe('slotChoiceViewOf — ce que le sélecteur montre', () => {
 
 describe('withSlotChoice — l’accès au choix depuis le brouillon', () => {
   function joursDuBrouillon() {
-    return menuDays(unBrouillon(), troisRecettes(), FROM_MENU_DRAFT);
+    return menuDays(unBrouillon(), troisRecettes(), [], FROM_MENU_DRAFT);
   }
 
   it('ouvre, sur chaque ligne, le choix d’une recette pour SON créneau', () => {
@@ -185,7 +185,7 @@ describe('withSlotChoice — l’accès au choix depuis le brouillon', () => {
       ],
     });
 
-    const jours = withSlotChoice(menuDays(brouillon, troisRecettes(), FROM_MENU_DRAFT));
+    const jours = withSlotChoice(menuDays(brouillon, troisRecettes(), [], FROM_MENU_DRAFT));
 
     expect(jours.flatMap((jour) => jour.slots.map((slot) => slot.choose?.href ?? null))).toEqual([
       null,

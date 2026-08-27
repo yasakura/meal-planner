@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { catalogueRetried, selectCatalogue } from '../catalogue/catalogue-slice';
+import { selectConvives } from '../convives/convives-slice';
 import { MENU_SANS_PROVENANCE, arriveeApresEnregistrement } from './menu-return';
 import {
   nextMenuSelected,
@@ -15,7 +16,11 @@ import {
 import { MenuScreen, type MenuScreenProps } from './MenuScreen';
 
 export function MenuContainer() {
-  const view = savedMenusViewOf(useAppSelector(selectSavedMenus), useAppSelector(selectCatalogue));
+  const view = savedMenusViewOf(
+    useAppSelector(selectSavedMenus),
+    useAppSelector(selectCatalogue),
+    useAppSelector(selectConvives).convives,
+  );
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

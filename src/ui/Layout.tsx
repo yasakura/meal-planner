@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { ErrorBoundary } from 'react-error-boundary';
+import { Outlet, useLocation } from 'react-router-dom';
 import { styled } from 'styled-components';
 
 import { env } from '../config/env';
@@ -12,7 +13,7 @@ import { LinkBanner } from './LinkBanner';
 import { ConvivesContainer } from './features/convives/ConvivesContainer';
 import { tokens } from './theme/tokens';
 
-const { colors, space } = tokens;
+const { colors, space, fonts } = tokens;
 
 const Shell = styled.div`
   --topbar-h: 52px;
@@ -30,6 +31,19 @@ const Content = styled.main`
   padding-bottom: ${space.xl}px;
 `;
 
+const EcranEnPanneText = styled.p`
+  font-family: ${fonts.body};
+  font-size: 14px;
+  color: ${colors.terracotta};
+  margin: 0;
+  padding: ${space.xl}px;
+  text-align: center;
+`;
+
+function EcranEnPanne() {
+  return <EcranEnPanneText role="alert">Cet écran n’a pas pu s’afficher.</EcranEnPanneText>;
+}
+
 const StickyTabBar = styled.div`
   position: sticky;
   bottom: 0;
@@ -38,6 +52,7 @@ const StickyTabBar = styled.div`
 
 export function Layout() {
   const [isAccountOpen, setAccountOpen] = useState(false);
+  const { key } = useLocation();
 
   return (
     <Shell>
@@ -45,7 +60,9 @@ export function Layout() {
       <TopBar onAccountClick={() => setAccountOpen(true)} />
       <LinkBanner />
       <Content>
-        <Outlet />
+        <ErrorBoundary FallbackComponent={EcranEnPanne} resetKeys={[key]}>
+          <Outlet />
+        </ErrorBoundary>
       </Content>
       <StickyTabBar>
         <BottomTabBar />

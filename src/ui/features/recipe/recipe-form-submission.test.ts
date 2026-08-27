@@ -32,6 +32,16 @@ describe('isSubmitDisabled', () => {
     );
   });
 
+  it('verrouille quand la seule ligne porte une quantité au-delà du maximum sûr', () => {
+    expect(
+      isSubmitDisabled({
+        locked: false,
+        title: 'Gratin',
+        rows: [row({ name: 'Farine', quantity: '1e307', unit: 'kg' })],
+      }),
+    ).toBe(true);
+  });
+
   it('verrouille quand le formulaire ne porte aucune ligne du tout', () => {
     expect(isSubmitDisabled({ locked: false, title: 'Gratin', rows: [] })).toBe(true);
   });

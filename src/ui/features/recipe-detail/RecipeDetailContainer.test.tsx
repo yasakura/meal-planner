@@ -369,3 +369,89 @@ describe('RecipeDetailContainer', () => {
     );
   });
 });
+
+describe('RecipeDetailContainer — la fiche ouverte depuis un créneau', () => {
+  function ratatouille(): Recipe {
+    return RecipeBuilder.aRecipe()
+      .withId('r-1')
+      .withTitle('Ratatouille')
+      .withConvivesReference(4)
+      .withIngredients([
+        IngredientBuilder.anIngredient()
+          .withName('Tomates')
+          .withQuantity(200)
+          .withUnit('g')
+          .build(),
+        IngredientBuilder.anIngredient().withName('Œufs').withQuantity(3).withUnit('piece').build(),
+      ])
+      .build();
+  }
+
+  it('ouverte depuis un créneau de trois personnes, la fiche montre les quantités pour trois', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=3', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('150 g')).toBeInTheDocument();
+    expect(screen.queryByText('200 g')).not.toBeInTheDocument();
+  });
+
+  it('ouverte depuis le catalogue, la même fiche montre les quantités de référence', async () => {
+    renderAtPath('/catalogue/r-1', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('200 g')).toBeInTheDocument();
+    expect(screen.queryByText('150 g')).not.toBeInTheDocument();
+  });
+
+  it('les pièces d’une fiche mise à l’échelle sont arrondies au supérieur, jamais coupées en deux', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=2', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('2 pièce')).toBeInTheDocument();
+    expect(screen.queryByText('1.5 pièce')).not.toBeInTheDocument();
+  });
+
+  it('la fiche mise à l’échelle dit pour combien elle montre et rappelle l’effectif de la recette', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=3', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('Quantités pour 3 personnes · recette pour 4')).toBeInTheDocument();
+    expect(screen.queryByText('Pour 4 personnes')).not.toBeInTheDocument();
+  });
+
+  it('ouverte pour une seule personne, la fiche accorde le singulier', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=1', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('Quantités pour 1 personne · recette pour 4')).toBeInTheDocument();
+  });
+
+  it('un effectif tapé à la main qui n’est pas un nombre de personnes ne casse pas la fiche : elle montre la référence', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=0', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('Pour 4 personnes')).toBeInTheDocument();
+    expect(screen.getByText('200 g')).toBeInTheDocument();
+  });
+
+  it('un effectif qui n’est pas un nombre du tout ne casse pas la fiche non plus', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=trois', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('Pour 4 personnes')).toBeInTheDocument();
+    expect(screen.getByText('200 g')).toBeInTheDocument();
+  });
+
+  it('un effectif si grand que les quantités déborderaient ne casse pas la fiche : elle montre la recette telle qu’écrite, son retour et son lien Modifier sans effectif', async () => {
+    renderAtPath('/catalogue/r-1?depuis=menu&pour=9007199254740991', [ratatouille()]);
+    await screen.findByText('Ratatouille');
+
+    expect(screen.getByText('Pour 4 personnes')).toBeInTheDocument();
+    expect(screen.getByText('200 g')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '← Menu' })).toHaveAttribute('href', '/menu');
+    expect(screen.getByRole('link', { name: 'Modifier' })).toHaveAttribute(
+      'href',
+      '/catalogue/r-1/modifier?depuis=menu',
+    );
+  });
+});

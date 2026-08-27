@@ -1067,7 +1067,7 @@ describe('MenuCreateContainer — choisir qui mange à chaque créneau du brouil
 
     expect(within(midi()).getByRole('link', { name: 'Ratatouille' })).toHaveAttribute(
       'href',
-      '/catalogue/r1?depuis=menu-nouveau',
+      '/catalogue/r1?depuis=menu-nouveau&pour=1',
     );
     expect(
       within(midi()).getByRole('link', { name: 'Choisir une recette pour lundi 24 août, Midi' }),
@@ -1114,5 +1114,28 @@ describe('MenuCreateContainer — choisir qui mange à chaque créneau du brouil
     await arriveeAchevee();
 
     expect(rond('Aurélie', 'lundi 24 août, Midi')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('chaque créneau du brouillon mène à sa fiche pour l’effectif de ce créneau', async () => {
+    await brouillonAvecFoyer();
+
+    expect(
+      within(ligne('lundi 24 août, Midi')).getByRole('link', { name: 'Ratatouille' }),
+    ).toHaveAttribute('href', '/catalogue/r1?depuis=menu-nouveau&pour=2');
+  });
+
+  it('un invité ajouté à un créneau change l’effectif du lien de CE créneau, pas celui du voisin', async () => {
+    const { user } = await brouillonAvecFoyer();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Ajouter un invité au repas de lundi 24 août, Midi' }),
+    );
+
+    expect(
+      within(ligne('lundi 24 août, Midi')).getByRole('link', { name: 'Ratatouille' }),
+    ).toHaveAttribute('href', '/catalogue/r1?depuis=menu-nouveau&pour=3');
+    expect(
+      within(ligne('mardi 25 août, Midi')).getByRole('link', { name: 'Ratatouille' }),
+    ).toHaveAttribute('href', '/catalogue/r1?depuis=menu-nouveau&pour=2');
   });
 });

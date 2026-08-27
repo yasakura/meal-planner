@@ -75,6 +75,35 @@ describe('Ingredient', () => {
     ).toThrow('La quantité doit être un nombre fini');
   });
 
+  it('rejette la première quantité que le compte juste ne porte plus, et le kilo la rencontre mille fois plus tôt que le gramme', () => {
+    expect(() =>
+      IngredientBuilder.anIngredient()
+        .withQuantity(10 ** 12 + 1)
+        .withUnit('g')
+        .build(),
+    ).toThrow('La quantité ne doit pas dépasser le plafond du compte juste');
+    expect(() =>
+      IngredientBuilder.anIngredient()
+        .withQuantity(10 ** 9 + 1)
+        .withUnit('kg')
+        .build(),
+    ).toThrow('La quantité ne doit pas dépasser le plafond du compte juste');
+  });
+
+  it('accepte le plafond du compte juste lui-même, borne incluse, en grammes comme en kilos', () => {
+    const enGrammes = IngredientBuilder.anIngredient()
+      .withQuantity(10 ** 12)
+      .withUnit('g')
+      .build();
+    const enKilos = IngredientBuilder.anIngredient()
+      .withQuantity(10 ** 9)
+      .withUnit('kg')
+      .build();
+
+    expect(enGrammes.quantity).toBe(10 ** 12);
+    expect(enKilos.quantity).toBe(10 ** 9);
+  });
+
   it('rejette une unit hors des unités autorisées', () => {
     expect(() =>
       IngredientBuilder.anIngredient()

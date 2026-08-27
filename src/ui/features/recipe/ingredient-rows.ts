@@ -1,4 +1,9 @@
-import { createIngredient, type Ingredient, type Unit } from '../../../domain/entities/ingredient';
+import {
+  createIngredient,
+  isAcceptableQuantity,
+  type Ingredient,
+  type Unit,
+} from '../../../domain/entities/ingredient';
 
 export type IngredientRow = {
   name: string;
@@ -11,8 +16,7 @@ export function emptyRow(): IngredientRow {
 }
 
 export function isValidRow(row: IngredientRow): boolean {
-  const quantity = Number(row.quantity);
-  return row.name.trim() !== '' && Number.isFinite(quantity) && quantity > 0;
+  return row.name.trim() !== '' && isAcceptableQuantity(Number(row.quantity), row.unit);
 }
 
 export function validRowsOf(rows: IngredientRow[]): IngredientRow[] {

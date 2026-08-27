@@ -310,11 +310,11 @@ export type MenuCreationView =
   | { status: 'unavailable'; message: string }
   | { status: 'draft'; days: MenuDay[]; saveNotice: MenuSaveNotice | null; saveDisabled: boolean };
 
-export function menuCreationViewOf(state: MenuState): MenuCreationView {
+export function menuCreationViewOf(state: MenuState, foyer: readonly Convive[]): MenuCreationView {
   if (state.menu !== null) {
     return {
       status: 'draft',
-      days: withSlotChoice(menuDays(state.menu, recipesOf(state), FROM_MENU_DRAFT)),
+      days: withSlotChoice(menuDays(state.menu, recipesOf(state), foyer, FROM_MENU_DRAFT)),
       saveNotice: menuSaveNoticeOf(state),
       saveDisabled: isSaveInFlight(state),
     };
@@ -328,7 +328,7 @@ export function menuCreationViewOf(state: MenuState): MenuCreationView {
 }
 
 export function menuCreationViewWithPresence(state: MenuState, foyer: Convive[]): MenuCreationView {
-  const view = menuCreationViewOf(state);
+  const view = menuCreationViewOf(state, foyer);
   if (view.status !== 'draft') return view;
   return { ...view, days: withPresence(view.days, displayedMenuOf(state), foyer) };
 }

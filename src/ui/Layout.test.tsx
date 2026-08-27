@@ -27,6 +27,48 @@ function renderLayout(store = createTestStore({ authGateway: StubAuthGateway.wit
   );
 }
 
+function EcranQuiJette(): never {
+  throw new Error('rendu impossible');
+}
+
+function ecranFragile() {
+  let enPanne = true;
+  const Ecran = () => {
+    if (enPanne) throw new Error('rendu impossible');
+    return <span>contenu rétabli</span>;
+  };
+  return { Ecran, reparer: () => (enPanne = false) };
+}
+
+function renderLayoutAvec(Ecran: () => React.ReactElement) {
+  return render(
+    <Provider store={createTestStore({ authGateway: StubAuthGateway.withoutSession() })}>
+      <MemoryRouter initialEntries={['/catalogue']}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/catalogue" element={<Ecran />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </Provider>,
+  );
+}
+
+function renderLayoutAvecEcranQuiJette() {
+  return render(
+    <Provider store={createTestStore({ authGateway: StubAuthGateway.withoutSession() })}>
+      <MemoryRouter initialEntries={['/catalogue']}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/catalogue" element={<EcranQuiJette />} />
+            <Route path="/menu" element={<span>contenu du menu</span>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </Provider>,
+  );
+}
+
 describe('Layout', () => {
   it('compose le chrome : marque, accès Compte, tab bar et contenu de route', () => {
     renderLayout();
@@ -74,5 +116,37 @@ describe('Layout', () => {
     });
 
     expect(screen.getByRole('main').previousElementSibling).toHaveTextContent(LIEN_PERDU);
+  });
+
+  it('un écran qui jette pendant son rendu n’efface pas l’application : le constat s’affiche et la tab bar reste debout', () => {
+    renderLayoutAvecEcranQuiJette();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Cet écran n’a pas pu s’afficher.');
+    expect(screen.getByText('Meal Planner')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
+  });
+
+  it('retaper l’onglet où l’on se trouve déjà relance l’écran qui a jeté, là où le constat y tenait', async () => {
+    const user = userEvent.setup();
+    const { Ecran, reparer } = ecranFragile();
+    renderLayoutAvec(Ecran);
+    expect(screen.getByRole('alert')).toHaveTextContent('Cet écran n’a pas pu s’afficher.');
+    reparer();
+
+    await user.click(screen.getByRole('link', { name: /recettes/i }));
+
+    expect(screen.getByText('contenu rétabli')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('la sortie d’un écran qui a jeté mène ailleurs : le constat s’efface et l’écran suivant s’affiche', async () => {
+    const user = userEvent.setup();
+    renderLayoutAvecEcranQuiJette();
+    expect(screen.getByRole('alert')).toHaveTextContent('Cet écran n’a pas pu s’afficher.');
+
+    await user.click(screen.getByRole('link', { name: /menu/i }));
+
+    expect(screen.getByText('contenu du menu')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

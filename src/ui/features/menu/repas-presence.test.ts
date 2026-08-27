@@ -38,7 +38,7 @@ function joursAvecPresence(menu: Menu, convives: Convive[]) {
     RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
     RecipeBuilder.aRecipe().withId('r2').withTitle('Blanquette').build(),
   ];
-  return withPresence(menuDays(menu, recipes, FROM_MENU_DRAFT), menu, convives);
+  return withPresence(menuDays(menu, recipes, convives, FROM_MENU_DRAFT), menu, convives);
 }
 
 function presenceDeLaLigne(menu: Menu, convives: Convive[], rang = 0) {

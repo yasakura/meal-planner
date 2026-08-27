@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import { toIsoDate, type CalendarDate } from '../../../domain/entities/calendar-date';
+import { type Convive } from '../../../domain/entities/convive';
 import { type Menu } from '../../../domain/entities/menu';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
 import { type Unsubscribe } from '../../../domain/ports/unsubscribe';
@@ -167,13 +168,14 @@ function constatDesTitres(failure: CatalogueFailure | null): MenuTitlesNotice {
 export function menuConsultationOf(
   state: SavedMenusState,
   catalogue: CatalogueState,
+  foyer: readonly Convive[],
 ): MenuConsultation | null {
   if (state.menus === null || state.menus.length === 0) return null;
   const vise = positionDuCurseur(state);
   const cursor = positionConsultee(state);
   const consulte = menusOf(state)[cursor] as Menu;
   return {
-    days: menuDays(consulte, catalogue.recipes, FROM_MENU),
+    days: menuDays(consulte, catalogue.recipes, foyer, FROM_MENU),
     periodLabel: menuPeriodLabel(consulte),
     previousDisabled: cursor === 0,
     nextDisabled: cursor === state.menus.length - 1,
@@ -205,6 +207,7 @@ function constatDePanne(failure: SavedMenusFailure | null): SavedMenusView {
 export function savedMenusViewOf(
   state: SavedMenusState,
   catalogue: CatalogueState,
+  foyer: readonly Convive[],
 ): SavedMenusView {
   if (state.menus === null) return constatDePanne(state.failure);
   if (state.menus.length === 0) return { status: 'empty' };
@@ -213,6 +216,6 @@ export function savedMenusViewOf(
   }
   return {
     status: 'consultation',
-    ...(menuConsultationOf(state, catalogue) as MenuConsultation),
+    ...(menuConsultationOf(state, catalogue, foyer) as MenuConsultation),
   };
 }
