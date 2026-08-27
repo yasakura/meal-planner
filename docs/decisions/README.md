@@ -98,3 +98,5 @@ exempt du premier point : c'est une citation figée, pas une affirmation sur le 
 | [0036](0036-designer-un-creneau-par-sa-position.md)          | Désigner un créneau par sa position, pas par son jour                   | 2026-08-23 |
 | [0037](0037-sonder-indexeddb-avant-d-y-adosser-le-cache.md)  | `initializeFirestore` ne jette pas : sonder IndexedDB d'abord           | 2026-08-23 |
 | [0038](0038-une-ecriture-acceptee-localement-est-reussie.md) | Une écriture acceptée localement est une écriture réussie               | 2026-08-24 |
+| [0039](0039-un-seul-plafond-celui-du-compte-juste.md)        | Un seul plafond de quantité, celui du compte juste                      | 2026-08-27 |
+| [0040](0040-le-filet-de-rendu-se-rearme-sur-la-cle.md)       | Le filet de rendu se réarme sur la clé de navigation                    | 2026-08-27 |
