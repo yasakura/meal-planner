@@ -15,6 +15,7 @@
 - **La règle vaut aussi pour les instruments de MESURE.** Toute commande dont on rapporte le résultat doit avoir été confrontée à un cas dont on connaît la réponse d'avance, et **re-confrontée à chaque modification de sa configuration**.
 - **Un banc d'essai jetable se confronte comme n'importe quel instrument.** **Motif mesuré** : un banc a mesuré un arbre de travail pollué parce que `git stash --keep-index` **ne met pas de côté les fichiers non suivis** — le résultat était faux, et a failli être rapporté.
 - **Rien ne se mesure pendant qu'un agent travaille.** Ce que la section mutation exige pour Stryker vaut pour **toute** mesure rapportée : la suite lancée pendant qu'un agent travaillait a sorti un flake, et un rouge inexistant a failli être annoncé.
+- **La règle vaut enfin pour ce que l'agent AFFIRME.** Une affirmation **négative** ou de **complétude** — « je ne peux pas », « c'est couvert », « c'est fermé », « ce n'est pas atteignable », « c'est pré-existant » — ne se dit pas de mémoire ni par raisonnement : elle se mesure, ou elle s'annonce explicitement comme non vérifiée. Ce sont exactement celles qu'aucune intuition ne valide. **Motif mesuré** : sur une seule journée, six l'ont été à tort — « je ne peux pas lancer `/code-review` » alors qu'il l'avait été quatre fois dans la même session ; une borne proposée par raisonnement qu'aucune source ne soutenait ; « ce lot ferme l'issue #161 », démenti par une mesure contre le code réel. **Aucune n'a été trouvée par l'agent lui-même** : toutes par une question de l'utilisateur, un sous-agent, ou une revue.
 
 ## Flux de travail
 
@@ -51,6 +52,7 @@
 - **Quand une forme permanente existe, elle est préférable au sabotage.**
 - L'**assertion d'absence** — `toHaveCount(0)`, `queryBy… === null` — doit être adossée à l'une de ces deux formes : le **même localisateur** asserté présent (`toHaveCount(1)`) plus tôt dans le même test, avant que l'absence ne soit exigée ; ou un **scénario témoin** voisin, qui montre ce localisateur trouvant son texte là où ce texte a le droit d'exister. Une assertion d'absence qu'aucune des deux formes ne couvre n'est pas un filet.
 - Le sabotage reste le recours quand aucune forme permanente n'est possible, et la règle du nom continue de s'y appliquer.
+- **Un test dont le NOM désigne un chemin que ses DONNÉES n'empruntent pas est un garde-fou absent, pas un garde-fou faible** — et il est pire qu'absent, parce qu'il rassure. Le nom se relit contre le jeu de données : la valeur choisie franchit-elle vraiment la branche que le nom annonce, ou est-elle arrêtée plus tôt par un autre garde ? **Motif mesuré** : un test nommé « un effectif si grand que les quantités déborderaient ne casse pas la fiche » employait `1e308`, que `Number.isSafeInteger` rejetait **avant tout calcul de quantité**. Il est resté vert, et la mutation à 100 %, pendant que le débordement qu'il nommait vidait l'écran. C'est une revue qui l'a vu.
 
 ## Point de contrôle « rouge » (use-cases & logique métier)
 
