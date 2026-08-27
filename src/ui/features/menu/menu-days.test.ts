@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 
 import { createCalendarDate } from '../../../domain/entities/calendar-date';
+import { type Convive } from '../../../domain/entities/convive';
 import { createMenu, type Menu } from '../../../domain/entities/menu';
 import { createRepas } from '../../../domain/entities/repas';
 import { createSlot } from '../../../domain/entities/slot';
 import { type Recipe } from '../../../domain/entities/recipe';
+import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { FROM_MENU, FROM_MENU_DRAFT } from '../catalogue/recipe-detail-origin';
 import { menuDays } from './menu-days';
@@ -30,7 +32,7 @@ describe('menuDays', () => {
       createRepas({ jour: 1, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
     ]);
 
-    expect(menuDays(menu, twoRecipes(), FROM_MENU)).toEqual([
+    expect(menuDays(menu, twoRecipes(), [], FROM_MENU)).toEqual([
       {
         key: '0',
         label: 'lundi 24 août',
@@ -81,7 +83,7 @@ describe('menuDays', () => {
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
     ]);
 
-    expect(menuDays(menu, null, FROM_MENU).at(0)?.slots).toEqual([
+    expect(menuDays(menu, null, [], FROM_MENU).at(0)?.slots).toEqual([
       {
         key: '0-0',
         creneauLabel: 'Midi',
@@ -92,7 +94,9 @@ describe('menuDays', () => {
         presence: null,
       },
     ]);
-    expect(menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots.at(0)?.title).toBe('Ratatouille');
+    expect(menuDays(menu, twoRecipes(), [], FROM_MENU).at(0)?.slots.at(0)?.title).toBe(
+      'Ratatouille',
+    );
   });
 
   it('un créneau dont la recette est absente du catalogue porte un titre de substitution et aucune destination, là où son voisin résolu porte le titre de sa recette et un lien', () => {
@@ -101,7 +105,7 @@ describe('menuDays', () => {
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
     ]);
 
-    expect(menuDays(menu, twoRecipes(), FROM_MENU)).toEqual([
+    expect(menuDays(menu, twoRecipes(), [], FROM_MENU)).toEqual([
       {
         key: '0',
         label: 'lundi 24 août',
@@ -138,7 +142,7 @@ describe('menuDays', () => {
       }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU).at(0)?.slots ?? [];
 
     expect(slots.map((slot) => slot.title)).toEqual(['Ratatouille', 'Blanquette']);
     expect(slots.at(0)?.key).not.toEqual(slots.at(1)?.key);
@@ -150,7 +154,7 @@ describe('menuDays', () => {
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r2' })] }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU).at(0)?.slots ?? [];
 
     expect(slots.map((slot) => slot.title)).toEqual(['Ratatouille', 'Blanquette']);
     expect(slots.at(0)?.key).not.toEqual(slots.at(1)?.key);
@@ -165,7 +169,7 @@ describe('menuDays', () => {
       }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU).at(0)?.slots ?? [];
 
     expect(slots.map((slot) => slot.address)).toEqual([
       { repasIndex: 0, slotIndex: 0 },
@@ -179,7 +183,7 @@ describe('menuDays', () => {
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r2' })] }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU).at(0)?.slots ?? [];
 
     expect(slots.map((slot) => slot.address)).toEqual([
       { repasIndex: 0, slotIndex: 0 },
@@ -197,7 +201,9 @@ describe('menuDays', () => {
       createRepas({ jour: 1, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
     ];
     const keysOf = (menu: Menu) =>
-      menuDays(menu, twoRecipes(), FROM_MENU).flatMap((day) => day.slots.map((slot) => slot.key));
+      menuDays(menu, twoRecipes(), [], FROM_MENU).flatMap((day) =>
+        day.slots.map((slot) => slot.key),
+      );
 
     const premierRendu = keysOf(menuOf(repasDuMenu()));
 
@@ -210,7 +216,7 @@ describe('menuDays', () => {
       createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
     ]);
 
-    expect(menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots).toEqual([
+    expect(menuDays(menu, twoRecipes(), [], FROM_MENU_DRAFT).at(0)?.slots).toEqual([
       {
         key: '0-0',
         creneauLabel: 'Midi',
@@ -238,7 +244,7 @@ describe('menuDays et les créneaux que personne ne mange', () => {
       createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU_DRAFT).at(0)?.slots ?? [];
 
     expect(slots.at(0)?.recipe).toBe('sortie');
     expect(slots.at(0)?.title).toBe('La famille est de sortie');
@@ -264,7 +270,7 @@ describe('menuDays et les créneaux que personne ne mange', () => {
       }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU_DRAFT).at(0)?.slots ?? [];
 
     expect(slots.map((slot) => [slot.recipe, slot.title])).toEqual([
       ['known', 'Ratatouille'],
@@ -283,11 +289,91 @@ describe('menuDays et les créneaux que personne ne mange', () => {
       }),
     ]);
 
-    const slots = menuDays(menu, twoRecipes(), FROM_MENU_DRAFT).at(0)?.slots ?? [];
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU_DRAFT).at(0)?.slots ?? [];
 
     expect(slots.map((slot) => [slot.recipe, slot.title])).toEqual([
       ['sortie', 'La famille est de sortie'],
       ['sortie', 'La famille est de sortie'],
+    ]);
+  });
+});
+
+describe('menuDays et l’effectif de chaque créneau', () => {
+  const AURELIE = ConviveBuilder.aConvive().withId('c-au').withName('Aurélie').build();
+  const LIONEL = ConviveBuilder.aConvive().withId('c-li').withName('Lionel').build();
+
+  it('le lien d’un créneau où mangent deux convives et un invité demande la fiche pour trois', () => {
+    const menu = menuOf([
+      createRepas({
+        jour: 0,
+        creneau: 'midi',
+        slots: [createSlot({ recipeId: 'r1' })],
+        invites: 1,
+      }),
+    ]);
+
+    const slots = menuDays(menu, twoRecipes(), [AURELIE, LIONEL], FROM_MENU).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => (slot.recipe === 'known' ? slot.href : null))).toEqual([
+      '/catalogue/r1?depuis=menu&pour=3',
+    ]);
+  });
+
+  it('deux créneaux du même jour portent chacun l’effectif du leur', () => {
+    const menu = menuOf([
+      createRepas({
+        jour: 0,
+        creneau: 'midi',
+        slots: [createSlot({ recipeId: 'r1' })],
+        presents: ['c-li'],
+      }),
+      createRepas({ jour: 0, creneau: 'soir', slots: [createSlot({ recipeId: 'r2' })] }),
+    ]);
+
+    const slots =
+      menuDays(menu, twoRecipes(), [AURELIE, LIONEL], FROM_MENU_DRAFT).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => (slot.recipe === 'known' ? slot.href : null))).toEqual([
+      '/catalogue/r1?depuis=menu-nouveau&pour=1',
+      '/catalogue/r2?depuis=menu-nouveau&pour=2',
+    ]);
+  });
+
+  it('un foyer pas encore arrivé ne fait compter personne : le créneau qui reçoit trois invités ne demande aucun prorata, là où le compte des quatre part dès qu’un convive est là', () => {
+    const menu = menuOf([
+      createRepas({
+        jour: 0,
+        creneau: 'midi',
+        slots: [createSlot({ recipeId: 'r1' })],
+        invites: 3,
+      }),
+    ]);
+    const liensDuJour = (foyer: Convive[]) =>
+      (menuDays(menu, twoRecipes(), foyer, FROM_MENU).at(0)?.slots ?? []).map((slot) =>
+        slot.recipe === 'known' ? slot.href : null,
+      );
+
+    expect(liensDuJour([])).toEqual(['/catalogue/r1?depuis=menu']);
+    expect(liensDuJour([AURELIE])).toEqual(['/catalogue/r1?depuis=menu&pour=4']);
+  });
+
+  it('foyer pas encore arrivé, aucun créneau ne demande de prorata : ni celui que personne ne mange, ni son voisin qui reçoit trois invités', () => {
+    const menu = menuOf([
+      createRepas({ jour: 0, creneau: 'midi', slots: [createSlot({ recipeId: 'r1' })] }),
+      createRepas({
+        jour: 0,
+        creneau: 'soir',
+        slots: [createSlot({ recipeId: 'r2' })],
+        presents: [],
+        invites: 3,
+      }),
+    ]);
+
+    const slots = menuDays(menu, twoRecipes(), [], FROM_MENU).at(0)?.slots ?? [];
+
+    expect(slots.map((slot) => (slot.recipe === 'known' ? slot.href : null))).toEqual([
+      '/catalogue/r1?depuis=menu',
+      '/catalogue/r2?depuis=menu',
     ]);
   });
 });

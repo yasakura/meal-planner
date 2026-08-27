@@ -460,7 +460,7 @@ test.describe('Du menu à la fiche recette', () => {
     const premierJour = page.locator('main section').first().locator('li');
     await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
 
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau&pour=4');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Omelette aux herbes' }),
     ).toBeVisible();
@@ -512,19 +512,21 @@ test.describe('Du menu à la fiche recette', () => {
 
     const premierJour = page.locator('main section').first().locator('li');
     await premierJour.nth(0).getByRole('link', { name: 'Omelette aux herbes' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau&pour=4');
 
     await page.getByRole('link', { name: 'Modifier' }).click();
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes/modifier?depuis=menu-nouveau');
+    await expect(page).toHaveURL(
+      '/catalogue/recipe-omelette-herbes/modifier?depuis=menu-nouveau&pour=4',
+    );
     await expect(page.getByRole('link', { name: '← Recette', exact: true })).toHaveAttribute(
       'href',
-      '/catalogue/recipe-omelette-herbes?depuis=menu-nouveau',
+      '/catalogue/recipe-omelette-herbes?depuis=menu-nouveau&pour=4',
     );
 
     await page.getByLabel('Titre').fill('Omelette aux fines herbes');
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau');
+    await expect(page).toHaveURL('/catalogue/recipe-omelette-herbes?depuis=menu-nouveau&pour=4');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Omelette aux fines herbes' }),
     ).toBeVisible();

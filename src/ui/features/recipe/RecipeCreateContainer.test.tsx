@@ -365,6 +365,22 @@ describe('RecipeCreateContainer', () => {
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
   });
 
+  it('garde « Enregistrer » désactivé si la quantité dépasse le maximum sûr', async () => {
+    const user = userEvent.setup();
+    renderWithStore();
+
+    await user.type(screen.getByLabelText(/titre/i), 'Poulet rôti');
+    await user.type(screen.getByLabelText(/nom/i), 'Farine');
+    await user.type(screen.getByLabelText(/quantité/i), '500');
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeEnabled();
+
+    await user.clear(screen.getByLabelText(/quantité/i));
+    await user.type(screen.getByLabelText(/quantité/i), '1e307');
+
+    expect(screen.getByLabelText(/quantité/i)).toHaveValue(1e307);
+    expect(screen.getByRole('button', { name: /enregistrer/i })).toBeDisabled();
+  });
+
   it('garde « Enregistrer » désactivé si le titre ne contient que des espaces', async () => {
     const user = userEvent.setup();
     renderWithStore();

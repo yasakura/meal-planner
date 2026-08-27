@@ -1,7 +1,9 @@
+import { type Convive } from '../../../domain/entities/convive';
 import { type Creneau } from '../../../domain/entities/creneau';
 import { type Menu, type SlotAddress } from '../../../domain/entities/menu';
 import { personneNeMangeAuRepas } from '../../../domain/entities/repas';
 import { type Recipe } from '../../../domain/entities/recipe';
+import { effectifDuRepas } from '../../../domain/use-cases/effectif-du-repas';
 import { type Origin } from '../catalogue/recipe-detail-origin';
 import { menuDayLabel } from './menu-day-label';
 
@@ -49,7 +51,12 @@ export function creneauLabel(creneau: Creneau): string {
   return CRENEAU_LABELS[creneau];
 }
 
-export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): MenuDay[] {
+export function menuDays(
+  menu: Menu,
+  recipes: Recipe[] | null,
+  foyer: readonly Convive[],
+  origin: Origin,
+): MenuDay[] {
   const titreManquant = recipes === null ? TITRE_INDISPONIBLE : RECETTE_INCONNUE;
   const titleById = new Map(recipes?.map((recipe) => [recipe.id, recipe.title]));
   const byJour = new Map<number, MenuDay>();
@@ -64,6 +71,7 @@ export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): 
       };
       byJour.set(repas.jour, day);
     }
+    const provenance = foyer.length === 0 ? origin : origin.pour(effectifDuRepas(repas, foyer));
     for (const [slotIndex, slot] of repas.slots.entries()) {
       const ligne = {
         key: `${repas.jour}-${day.slots.length}`,
@@ -78,7 +86,12 @@ export function menuDays(menu: Menu, recipes: Recipe[] | null, origin: Origin): 
           ? { ...ligne, title: FAMILLE_DE_SORTIE, recipe: 'sortie' }
           : title === undefined
             ? { ...ligne, title: titreManquant, recipe: 'unknown' }
-            : { ...ligne, title, recipe: 'known', href: origin.recipeHref(slot.recipeId) },
+            : {
+                ...ligne,
+                title,
+                recipe: 'known',
+                href: provenance.recipeHref(slot.recipeId),
+              },
       );
     }
   }

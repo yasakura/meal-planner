@@ -8,19 +8,21 @@ const { colors, space, fonts } = tokens;
 
 export type RecipeDetailIngredient = { name: string; quantity: string };
 
+export type RecipeDetailLoadedProps = {
+  status: 'loaded';
+  title: string;
+  convivesLabel: string;
+  ingredients: RecipeDetailIngredient[];
+  instructions: string | null;
+  editHref: string;
+};
+
 export type RecipeDetailScreenProps =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'unavailable'; message: string }
   | { status: 'notFound' }
-  | {
-      status: 'loaded';
-      title: string;
-      convivesLabel: string;
-      ingredients: RecipeDetailIngredient[];
-      instructions: string | null;
-      editHref: string;
-    };
+  | RecipeDetailLoadedProps;
 
 const Page = styled.div`
   flex: 1;

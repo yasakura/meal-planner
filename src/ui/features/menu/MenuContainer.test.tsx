@@ -17,6 +17,7 @@ import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
 import { convivesObserved } from '../convives/convives-slice';
 import { DataSubscription } from '../../DataSubscription';
+import { ConviveChannel } from '../../test-utils/convive-channel';
 import { MenuChannel } from '../../test-utils/menu-channel';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { generateMenu, saveMenu } from './menu-slice';
@@ -399,5 +400,49 @@ describe('MenuContainer — le menu consulté s’annonce sans se modifier', () 
     expect(screen.queryByRole('button', { name: /^Aurélie au repas de/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Ajouter un invité au repas de/ })).toBeNull();
     expect(screen.queryByText('0 invité')).toBeNull();
+  });
+});
+
+describe('MenuContainer — le menu enregistré mène à des fiches pour l’effectif de chaque créneau', () => {
+  const AURELIE = ConviveBuilder.aConvive().withId('c-au').withName('Aurélie').build();
+  const LIONEL = ConviveBuilder.aConvive().withId('c-li').withName('Lionel').build();
+
+  function menuDeDeuxCreneaux(): Menu {
+    return createMenu({
+      dateDebut: LUNDI_24_AOUT,
+      repas: [
+        createRepas({
+          jour: 0,
+          creneau: 'midi',
+          slots: [createSlot({ recipeId: 'r1' })],
+          invites: 1,
+        }),
+        createRepas({
+          jour: 0,
+          creneau: 'soir',
+          slots: [createSlot({ recipeId: 'r2' })],
+          presents: ['c-li'],
+        }),
+      ],
+    });
+  }
+
+  it('le lien d’un créneau enregistré demande la fiche pour l’effectif de ce créneau, et son voisin pour le sien', async () => {
+    const store = createTestStore({
+      observeMenus: MenuChannel.seededWith({ menus: [menuDeDeuxCreneaux()], indexInitial: 0 })
+        .observeMenus,
+      observeRecipes: RecipeChannel.seededWith(twoRecipes()).observeRecipes,
+      observeConvives: ConviveChannel.seededWith([AURELIE, LIONEL]).observeConvives,
+    });
+    renderOn(store);
+
+    expect(await screen.findByRole('link', { name: 'Ratatouille' })).toHaveAttribute(
+      'href',
+      '/catalogue/r1?depuis=menu&pour=3',
+    );
+    expect(screen.getByRole('link', { name: 'Blanquette' })).toHaveAttribute(
+      'href',
+      '/catalogue/r2?depuis=menu&pour=1',
+    );
   });
 });

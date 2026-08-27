@@ -119,3 +119,82 @@ describe('l’aller-retour entre ce qui écrit la provenance et ce qui la relit'
     expect(ficheDeRetour.backLink).toEqual({ href: '/catalogue', label: '← Recettes' });
   });
 });
+
+describe('l’effectif d’un créneau voyage dans l’adresse', () => {
+  it('venue d’un créneau de trois personnes, l’adresse d’une fiche demande les quantités pour trois', () => {
+    expect(FROM_MENU.pour(3).recipeHref('r1')).toBe('/catalogue/r1?depuis=menu&pour=3');
+  });
+
+  it('venue d’un créneau du brouillon, l’adresse emporte l’effectif de CE créneau et cette provenance', () => {
+    expect(FROM_MENU_DRAFT.pour(2).recipeHref('r1')).toBe(
+      '/catalogue/r1?depuis=menu-nouveau&pour=2',
+    );
+  });
+
+  it('l’effectif inscrit dans l’adresse est relu tel quel', () => {
+    expect(originOf(paramsOf('/catalogue/r1?depuis=menu&pour=3')).convives).toBe(3);
+  });
+
+  it('une adresse sans effectif ne réclame aucun prorata, là où la même adresse qui en porte un le réclame', () => {
+    expect(originOf(paramsOf('/catalogue/r1?depuis=menu')).convives).toBeNull();
+    expect(originOf(paramsOf('/catalogue/r1?depuis=menu&pour=3')).convives).toBe(3);
+  });
+
+  it('un créneau sans personne n’inscrit aucun effectif dans l’adresse, là où un créneau de trois l’inscrit', () => {
+    expect(FROM_MENU.pour(0).recipeHref('r1')).toBe('/catalogue/r1?depuis=menu');
+    expect(FROM_MENU.pour(3).recipeHref('r1')).toBe('/catalogue/r1?depuis=menu&pour=3');
+  });
+
+  it('un effectif tapé à la main qui n’est pas un nombre de personnes est refusé, là où trois est retenu', () => {
+    const effectifDe = (query: string) =>
+      originOf(paramsOf(`/catalogue/r1?depuis=menu&pour=${query}`)).convives;
+
+    expect(effectifDe('abc')).toBeNull();
+    expect(effectifDe('0')).toBeNull();
+    expect(effectifDe('-2')).toBeNull();
+    expect(effectifDe('2.5')).toBeNull();
+    expect(effectifDe('')).toBeNull();
+    expect(effectifDe('3')).toBe(3);
+  });
+
+  it('un effectif trop grand pour être compté exactement est refusé, là où le plus grand effectif exact est retenu', () => {
+    const effectifDe = (query: string) =>
+      originOf(paramsOf(`/catalogue/r1?depuis=menu&pour=${query}`)).convives;
+
+    expect(effectifDe('1e308')).toBeNull();
+    expect(effectifDe('1e21')).toBeNull();
+    expect(effectifDe('9007199254740992')).toBeNull();
+    expect(effectifDe('9007199254740991')).toBe(9007199254740991);
+  });
+
+  it('l’adresse du formulaire garde l’effectif pour savoir à quelle fiche revenir', () => {
+    expect(FROM_MENU.pour(3).recipeEditHref('r1')).toBe(
+      '/catalogue/r1/modifier?depuis=menu&pour=3',
+    );
+    expect(FROM_MENU.pour(3).backToRecipe('r1')).toEqual({
+      href: '/catalogue/r1?depuis=menu&pour=3',
+      label: '← Recette',
+    });
+  });
+
+  it('une provenance qui renonce à l’effectif ne l’inscrit plus dans aucune adresse, là où elle l’inscrivait, et garde son retour', () => {
+    const renoncee = FROM_MENU.pour(3).sansEffectif();
+
+    expect(renoncee.convives).toBeNull();
+    expect(renoncee.recipeHref('r1')).toBe('/catalogue/r1?depuis=menu');
+    expect(renoncee.recipeEditHref('r1')).toBe('/catalogue/r1/modifier?depuis=menu');
+    expect(renoncee.backLink).toEqual({ href: '/menu', label: '← Menu' });
+    expect(FROM_MENU.pour(3).recipeEditHref('r1')).toBe(
+      '/catalogue/r1/modifier?depuis=menu&pour=3',
+    );
+  });
+
+  it('l’effectif survit à la boucle créneau → fiche → formulaire → fiche', () => {
+    const fiche = originOf(paramsOf(FROM_MENU.pour(3).recipeHref('r1')));
+    const formulaire = originOf(paramsOf(fiche.recipeEditHref('r1')));
+    const ficheDeRetour = originOf(paramsOf(formulaire.backToRecipe('r1').href));
+
+    expect(ficheDeRetour.convives).toBe(3);
+    expect(ficheDeRetour.backLink).toEqual({ href: '/menu', label: '← Menu' });
+  });
+});

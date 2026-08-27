@@ -36,6 +36,23 @@ describe('isValidRow', () => {
   it('refuse une quantité nulle', () => {
     expect(isValidRow(row({ name: 'Crème', quantity: '0', unit: 'ml' }))).toBe(false);
   });
+
+  it('refuse une quantité au-delà du maximum sûr, qu’aucune mise à l’échelle ne pourra multiplier', () => {
+    expect(isValidRow(row({ name: 'Farine', quantity: '1e307', unit: 'kg' }))).toBe(false);
+  });
+
+  it('refuse la ligne dont le kilo dépasse le plafond du compte juste, là où le même nombre de grammes passe', () => {
+    expect(isValidRow(row({ name: 'Farine', quantity: '1000000001', unit: 'kg' }))).toBe(false);
+    expect(isValidRow(row({ name: 'Farine', quantity: '1000000001', unit: 'g' }))).toBe(true);
+  });
+
+  it('accepte le plafond du compte juste lui-même, borne incluse', () => {
+    expect(isValidRow(row({ name: 'Farine', quantity: '1000000000000', unit: 'g' }))).toBe(true);
+  });
+
+  it('accepte une quantité de cuisine à quatre chiffres', () => {
+    expect(isValidRow(row({ name: 'Farine', quantity: '12345', unit: 'g' }))).toBe(true);
+  });
 });
 
 describe('validRowsOf', () => {
@@ -86,6 +103,10 @@ describe('hasIncompleteRow', () => {
 
   it('signale une ligne nommée dont la quantité est nulle', () => {
     expect(hasIncompleteRow([row({ name: 'Crème', quantity: '0', unit: 'ml' })])).toBe(true);
+  });
+
+  it('signale une ligne nommée dont la quantité dépasse le maximum sûr', () => {
+    expect(hasIncompleteRow([row({ name: 'Farine', quantity: '1e307', unit: 'kg' })])).toBe(true);
   });
 
   it('signale une quantité saisie sans nom', () => {

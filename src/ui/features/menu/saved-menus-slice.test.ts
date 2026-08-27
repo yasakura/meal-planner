@@ -62,11 +62,19 @@ function navigation(menus: Menu[], indexInitial: number | null): MenuNavigation 
 }
 
 function consultation(store: TestStore) {
-  return menuConsultationOf(selectSavedMenus(store.getState()), selectCatalogue(store.getState()));
+  return menuConsultationOf(
+    selectSavedMenus(store.getState()),
+    selectCatalogue(store.getState()),
+    [],
+  );
 }
 
 function view(store: TestStore) {
-  return savedMenusViewOf(selectSavedMenus(store.getState()), selectCatalogue(store.getState()));
+  return savedMenusViewOf(
+    selectSavedMenus(store.getState()),
+    selectCatalogue(store.getState()),
+    [],
+  );
 }
 
 describe('saved menus slice — consultation des menus enregistrés', () => {

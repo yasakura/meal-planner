@@ -324,6 +324,27 @@ describe('RecipeEditContainer', () => {
     expect(screen.getByRole('button', { name: /^enregistrer$/i })).toBeDisabled();
   });
 
+  it('verrouille « Enregistrer » si la seule quantité restante dépasse le maximum sûr', async () => {
+    const user = userEvent.setup();
+    renderWithStore();
+
+    await screen.findByLabelText(/titre/i);
+    const [premiereQuantite] = screen.getAllByLabelText(/quantité/i);
+    if (!premiereQuantite) throw new Error('champ « Quantité » introuvable');
+    const [retirerSecond] = screen
+      .getAllByRole('button', { name: /retirer l'ingrédient/i })
+      .slice(1);
+    if (!retirerSecond) throw new Error('bouton « Retirer » introuvable');
+    await user.click(retirerSecond);
+    expect(screen.getByRole('button', { name: /^enregistrer$/i })).toBeEnabled();
+
+    await user.clear(premiereQuantite);
+    await user.type(premiereQuantite, '1e307');
+
+    expect(premiereQuantite).toHaveValue(1e307);
+    expect(screen.getByRole('button', { name: /^enregistrer$/i })).toBeDisabled();
+  });
+
   it('verrouille « Enregistrer » si le dernier ingrédient est retiré', async () => {
     const user = userEvent.setup();
     renderWithStore();
@@ -471,5 +492,29 @@ describe('RecipeEditContainer', () => {
 
     expect(await screen.findByDisplayValue('Omelette aux herbes')).toBeInTheDocument();
     expect(store.getState().recipeEdit.status).toBe('idle');
+  });
+});
+
+describe('RecipeEditContainer — le formulaire ne modifie jamais qu’une recette de référence', () => {
+  it('ouvert depuis un créneau de trois personnes, le formulaire montre les quantités de RÉFÉRENCE et l’effectif de référence', async () => {
+    renderAtPath('/catalogue/r-1/modifier?depuis=menu&pour=3');
+    await screen.findByLabelText(/titre/i);
+
+    expect(screen.getByLabelText(/personnes/i)).toHaveValue(6);
+    expect(screen.getAllByLabelText(/quantité/i)[0]).toHaveValue(1);
+    expect(screen.getAllByLabelText(/quantité/i)[1]).toHaveValue(500);
+  });
+
+  it('ouvert depuis un créneau, un enregistrement rend la fiche du même créneau', async () => {
+    const user = userEvent.setup();
+    const spy = capturingSpy();
+    renderAtPath('/catalogue/r-1/modifier?depuis=menu&pour=3', { updateRecipe: spy.fn });
+
+    await screen.findByLabelText(/titre/i);
+    await user.click(screen.getByRole('button', { name: /^enregistrer$/i }));
+
+    await vi.waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/catalogue/r-1?depuis=menu&pour=3'),
+    );
   });
 });

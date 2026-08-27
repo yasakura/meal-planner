@@ -747,7 +747,7 @@ describe('menu slice — ce que la vue de génération montre', () => {
   }
 
   function vue(store: ReturnType<typeof createTestStore>) {
-    return menuCreationViewOf(selectMenu(store.getState()));
+    return menuCreationViewOf(selectMenu(store.getState()), []);
   }
 
   it('un store neuf montre le formulaire, sans constat', () => {
@@ -844,7 +844,7 @@ describe('menu slice — le sort du brouillon enregistré', () => {
     expect(menuSaveHonored(issue)).toBe(true);
     expect(selectMenu(store.getState()).menu).toBeNull();
     expect(selectMenu(store.getState()).recipes).toBeNull();
-    expect(menuCreationViewOf(selectMenu(store.getState())).status).toBe('form');
+    expect(menuCreationViewOf(selectMenu(store.getState()), []).status).toBe('form');
   });
 
   it('un enregistrement DÉSAVOUÉ par une génération ne rend aucun menu et laisse le brouillon', async () => {
@@ -859,7 +859,7 @@ describe('menu slice — le sort du brouillon enregistré', () => {
     expect(issue.payload).toBeNull();
     expect(menuSaveHonored(issue)).toBe(false);
     expect(selectMenu(store.getState()).menu).toEqual(aMenu());
-    expect(menuCreationViewOf(selectMenu(store.getState())).status).toBe('draft');
+    expect(menuCreationViewOf(selectMenu(store.getState()), []).status).toBe('draft');
   });
 });
 
@@ -906,7 +906,7 @@ describe('menu slice — choisir soi-même la recette d’un créneau', () => {
   it('ouvre, sur chaque ligne du brouillon, le choix d’une recette pour son créneau', async () => {
     const store = await storeAvecBrouillon();
 
-    const montree = menuCreationViewOf(selectMenu(store.getState()));
+    const montree = menuCreationViewOf(selectMenu(store.getState()), []);
 
     expect(
       montree.status === 'draft' &&
