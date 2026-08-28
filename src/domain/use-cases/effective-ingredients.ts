@@ -1,6 +1,5 @@
 import {
   BASES_PAR_GRANDE_UNITE,
-  CHIFFRES_SIGNIFICATIFS_FIABLES,
   LIMITE_DU_COMPTE_JUSTE,
   UNITE_DE_BASE,
   createIngredient,
@@ -10,17 +9,9 @@ import {
   type Unit,
 } from '../entities/ingredient';
 import { type Recipe } from '../entities/recipe';
+import { arrondiAuSuperieur } from '../lib/arrondi';
 
 const DECIMALES_DE_LA_GRANDE_UNITE = 2;
-
-function sansBruitFlottant(valeur: number): number {
-  return Number(valeur.toPrecision(CHIFFRES_SIGNIFICATIFS_FIABLES));
-}
-
-function arrondiAuSuperieur(valeur: number, decimales: number): number {
-  const echelle = 10 ** decimales;
-  return Math.ceil(sansBruitFlottant(valeur * echelle)) / echelle;
-}
 
 function besoinEnUniteDeBase(ingredient: Ingredient, facteur: number): number | null {
   const besoin = enUniteDeBase(ingredient.quantity, ingredient.unit) * facteur;

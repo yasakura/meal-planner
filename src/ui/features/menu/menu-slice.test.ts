@@ -26,6 +26,7 @@ import {
   menuCreateScreenOpened,
   menuStartDateSelected,
   menuWindowSelected,
+  NO_CONVIVES,
   NO_RECIPES,
   slotRecipeChosen,
   inviteAdded,
@@ -731,6 +732,12 @@ describe('menu slice — ce que l’écran dit quand ça échoue', () => {
     );
   });
 
+  it('le foyer vide invite à ajouter un convive', () => {
+    expect(menuErrorMessage(etatEnErreur(NO_CONVIVES))).toBe(
+      "Ajoute d'abord un convive pour générer un menu.",
+    );
+  });
+
   it('tout autre échec reste sur le message générique de génération', () => {
     expect(menuErrorMessage(etatEnErreur('Boom firestore'))).toBe('Impossible de générer le menu.');
   });
@@ -797,6 +804,52 @@ describe('menu slice — ce que la vue de génération montre', () => {
       generateMenu: async () => aMenu(),
       listRecipes: async () => [],
     });
+
+    await store.dispatch(generateMenu(7));
+
+    expect(vue(store)).toEqual({
+      status: 'error',
+      message: "Ajoute d'abord des recettes pour générer un menu.",
+    });
+  });
+
+  it('un foyer reçu et vide refuse la génération, là où le même appel avec un convive rend un brouillon', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+    });
+    store.dispatch(convivesObserved([]));
+
+    await store.dispatch(generateMenu(7));
+
+    expect(vue(store)).toEqual({
+      status: 'error',
+      message: "Ajoute d'abord un convive pour générer un menu.",
+    });
+
+    store.dispatch(convivesObserved([ConviveBuilder.aConvive().build()]));
+    await store.dispatch(generateMenu(7));
+
+    expect(vue(store).status).toBe('draft');
+  });
+
+  it('un foyer qui n’est pas encore arrivé ne fait refuser aucune génération : on n’affirme pas qu’il est vide sans l’avoir reçu', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => twoRecipes(),
+    });
+
+    await store.dispatch(generateMenu(7));
+
+    expect(vue(store).status).toBe('draft');
+  });
+
+  it('le catalogue vide prime sur le foyer vide : l’écran nomme la recette manquante, pas le convive', async () => {
+    const store = createTestStore({
+      generateMenu: async () => aMenu(),
+      listRecipes: async () => [],
+    });
+    store.dispatch(convivesObserved([]));
 
     await store.dispatch(generateMenu(7));
 

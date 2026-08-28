@@ -4,10 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { catalogueRetried, selectCatalogue } from '../catalogue/catalogue-slice';
 import { selectConvives } from '../convives/convives-slice';
-import { MENU_SANS_PROVENANCE, arriveeApresEnregistrement } from './menu-return';
+import { MENU_SANS_PROVENANCE, arriveeApresEnregistrement, semaineConsultee } from './menu-return';
 import {
   nextMenuSelected,
   previousMenuSelected,
+  savedMenuRevisited,
   savedMenusOpened,
   savedMenusRetried,
   savedMenusViewOf,
@@ -25,11 +26,13 @@ export function MenuContainer() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const apresEnregistrement = useRef(arriveeApresEnregistrement(searchParams));
+  const semaine = semaineConsultee(searchParams);
 
   useEffect(() => {
     dispatch(savedMenusOpened({ fromSave: apresEnregistrement.current }));
+    if (semaine !== null) dispatch(savedMenuRevisited(semaine));
     if (apresEnregistrement.current) void navigate(MENU_SANS_PROVENANCE, { replace: true });
-  }, [dispatch, navigate]);
+  }, [dispatch, navigate, semaine]);
 
   const relancerLesMenus = () => dispatch(savedMenusRetried());
 

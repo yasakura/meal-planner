@@ -97,6 +97,8 @@ function choisiOuRien(iso: string): CalendarDate | null {
 
 export const NO_RECIPES = 'no-recipes';
 
+export const NO_CONVIVES = 'no-convives';
+
 export const generateMenu = createAsyncThunk<
   { menu: Menu; recipes: Recipe[] },
   number,
@@ -108,6 +110,10 @@ export const generateMenu = createAsyncThunk<
     const recipes = await thunkApi.extra.listRecipes();
     if (recipes.length === 0) {
       return thunkApi.rejectWithValue(NO_RECIPES);
+    }
+    const foyer = thunkApi.getState().convives;
+    if (foyer.received && foyer.convives.length === 0) {
+      return thunkApi.rejectWithValue(NO_CONVIVES);
     }
     const dateDebut = startDateOf(thunkApi.getState().menu);
     const menu = await thunkApi.extra.generateMenu({ days, dateDebut });
@@ -300,6 +306,7 @@ export function isSaveInFlight(state: MenuState): boolean {
 
 export function menuErrorMessage(state: MenuState): string {
   if (state.error === NO_RECIPES) return "Ajoute d'abord des recettes pour générer un menu.";
+  if (state.error === NO_CONVIVES) return "Ajoute d'abord un convive pour générer un menu.";
   return 'Impossible de générer le menu.';
 }
 

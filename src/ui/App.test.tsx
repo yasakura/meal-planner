@@ -9,6 +9,7 @@ import { createCalendarDate } from '../domain/entities/calendar-date';
 import { createMenu, type Menu } from '../domain/entities/menu';
 import { createRepas } from '../domain/entities/repas';
 import { createSlot } from '../domain/entities/slot';
+import { ConviveBuilder } from '../domain/test-builders/convive.builder';
 import { RecipeBuilder } from '../domain/test-builders/recipe.builder';
 import { StubAuthGateway } from '../domain/test-doubles/stub-auth-gateway';
 import { App } from './App';
@@ -17,6 +18,7 @@ import { generateMenu, saveMenu } from './features/menu/menu-slice';
 import { MENU_APRES_ENREGISTREMENT } from './features/menu/menu-return';
 import { type AppDependencies } from './store/store';
 import { createTestStore } from '../test/create-test-store';
+import { ConviveChannel } from './test-utils/convive-channel';
 import { emitting } from './test-utils/recipe-channel';
 import { emittingMenus } from './test-utils/menu-channel';
 
@@ -173,6 +175,8 @@ describe('App', () => {
       observeRecipes: emitting([
         RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
       ]),
+      observeConvives: ConviveChannel.seededWith([ConviveBuilder.aConvive().build()])
+        .observeConvives,
     };
   }
 
@@ -258,7 +262,7 @@ describe('App', () => {
     const lignes = screen.getAllByRole('link', { name: 'Ratatouille' });
     expect(lignes).toHaveLength(2);
     for (const ligne of lignes) {
-      expect(ligne).toHaveAttribute('href', '/catalogue/r1?depuis=menu');
+      expect(ligne).toHaveAttribute('href', '/catalogue/r1?depuis=menu&pour=1');
     }
     expect(screen.queryByRole('button', { name: /régénérer/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
@@ -275,12 +279,86 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /enregistrer/i })).toBeInTheDocument();
   });
 
+  it('l’adresse d’une liste de courses se décrit seule : rechargée telle quelle, elle retombe sur la liste de SON menu, et non sur celle du menu où pointe l’état', async () => {
+    renderAppAt('/menu/2026-08-31/courses', {
+      observeMenus: emittingMenus({
+        menus: [menuDeLaSemaine(), menuDatedOn(LUNDI_31_AOUT)],
+        indexInitial: 0,
+      }),
+      observeRecipes: emitting([
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ]),
+      observeConvives: ConviveChannel.seededWith([ConviveBuilder.aConvive().build()])
+        .observeConvives,
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Liste de courses' })).toBeInTheDocument();
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.getByText('Tomates')).toBeInTheDocument();
+    expect(screen.getByText('250 g')).toBeInTheDocument();
+    expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
+  });
+
+  it('ouvrir la liste de courses d’une semaine puis revenir ramène SUR cette semaine, et non sur celle où le curseur repart', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu', {
+      observeMenus: emittingMenus({
+        menus: [menuDeLaSemaine(), menuDatedOn(LUNDI_31_AOUT)],
+        indexInitial: 1,
+      }),
+      observeRecipes: emitting([
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ]),
+      observeConvives: ConviveChannel.seededWith([ConviveBuilder.aConvive().build()])
+        .observeConvives,
+    });
+
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Menu précédent' }));
+
+    expect(screen.getByText('24 – 30 août')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Liste de courses' }));
+
+    expect(await screen.findByRole('heading', { name: 'Liste de courses' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: '← Menu' }));
+
+    expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
+    expect(screen.queryByText('31 août – 6 sept.')).not.toBeInTheDocument();
+  });
+
+  it('revenir au menu par l’onglet du bas, depuis l’adresse d’une semaine, repart de la semaine initiale', async () => {
+    const user = userEvent.setup();
+    renderAppAt('/menu?semaine=2026-08-24', {
+      observeMenus: emittingMenus({
+        menus: [menuDeLaSemaine(), menuDatedOn(LUNDI_31_AOUT)],
+        indexInitial: 1,
+      }),
+      observeRecipes: emitting([
+        RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
+      ]),
+      observeConvives: ConviveChannel.seededWith([ConviveBuilder.aConvive().build()])
+        .observeConvives,
+    });
+
+    expect(await screen.findByText('24 – 30 août')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Menu' }));
+
+    expect(await screen.findByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
+  });
+
   it('le constat d’enregistrement ne suit pas le menu voisin', async () => {
     const user = userEvent.setup();
     renderAppAt('/menu/nouveau', {
       listRecipes: async () => [
         RecipeBuilder.aRecipe().withId('r1').withTitle('Ratatouille').build(),
       ],
+      observeConvives: ConviveChannel.seededWith([ConviveBuilder.aConvive().build()])
+        .observeConvives,
       generateMenu: async () => menuDatedOn(LUNDI_31_AOUT),
       observeMenus: emittingMenus({
         menus: [menuDeLaSemaine(), menuDatedOn(LUNDI_31_AOUT)],

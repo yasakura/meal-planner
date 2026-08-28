@@ -1,6 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-import { toIsoDate, type CalendarDate } from '../../../domain/entities/calendar-date';
+import { toIsoDate } from '../../../domain/entities/calendar-date';
 import { type Convive } from '../../../domain/entities/convive';
 import { type Menu } from '../../../domain/entities/menu';
 import { isRepositoryUnavailable } from '../../../domain/errors/repository-unavailable-error';
@@ -10,6 +10,7 @@ import { type AppDependencies, type AppDispatch, type RootState } from '../../st
 import { authStateChanged } from '../auth/auth-slice';
 import { type CatalogueFailure, type CatalogueState } from '../catalogue/catalogue-slice';
 import { FROM_MENU } from '../catalogue/recipe-detail-origin';
+import { listeDeCoursesHref } from './liste-de-courses-route';
 import { menuDays, type MenuDay } from './menu-days';
 import {
   MENU_SAVED_MESSAGE,
@@ -23,7 +24,7 @@ import { saveMenu } from './menu-slice';
 export type SavedMenusFailure = 'unreadable' | 'unavailable';
 
 export type SavedMenusCursor = {
-  dateDebut: CalendarDate;
+  dateDebut: string;
   fromSave: boolean;
 };
 
@@ -60,7 +61,7 @@ function menusOf(state: SavedMenusState): Menu[] {
 
 function positionDuCurseur(state: SavedMenusState): number {
   if (state.cursor === null) return MENU_ABSENT;
-  const cible = toIsoDate(state.cursor.dateDebut);
+  const cible = state.cursor.dateDebut;
   return menusOf(state).findIndex((menu) => toIsoDate(menu.dateDebut) === cible);
 }
 
@@ -71,7 +72,7 @@ function positionConsultee(state: SavedMenusState): number {
 
 function deplacerLeCurseur(state: SavedMenusState, pas: number): void {
   const voisin = menusOf(state)[positionConsultee(state) + pas] as Menu;
-  state.cursor = { dateDebut: voisin.dateDebut, fromSave: false };
+  state.cursor = { dateDebut: toIsoDate(voisin.dateDebut), fromSave: false };
 }
 
 // Stryker disable next-line ObjectLiteral : vider la config de createSlice est un mutant
@@ -96,6 +97,9 @@ const savedMenusSlice = createSlice({
       if (action.payload.fromSave) return;
       state.cursor = null;
     },
+    savedMenuRevisited(state, action: PayloadAction<string>) {
+      state.cursor = { dateDebut: action.payload, fromSave: false };
+    },
     previousMenuSelected(state) {
       deplacerLeCurseur(state, -1);
     },
@@ -115,7 +119,7 @@ const savedMenusSlice = createSlice({
       })
       .addCase(saveMenu.fulfilled, (state, action) => {
         if (action.payload === null) return;
-        state.cursor = { dateDebut: action.payload.dateDebut, fromSave: true };
+        state.cursor = { dateDebut: toIsoDate(action.payload.dateDebut), fromSave: true };
       });
   },
 });
@@ -124,6 +128,7 @@ export const {
   menusObserved,
   menusObservationFailed,
   savedMenusRetried,
+  savedMenuRevisited,
   savedMenusOpened,
   previousMenuSelected,
   nextMenuSelected,
@@ -149,6 +154,7 @@ export const selectSavedMenusLinkLost = (state: RootState): boolean =>
 export type MenuConsultation = {
   days: MenuDay[];
   periodLabel: string;
+  coursesHref: string;
   previousDisabled: boolean;
   nextDisabled: boolean;
   saveNotice: MenuSaveNotice | null;
@@ -177,6 +183,7 @@ export function menuConsultationOf(
   return {
     days: menuDays(consulte, catalogue.recipes, foyer, FROM_MENU),
     periodLabel: menuPeriodLabel(consulte),
+    coursesHref: listeDeCoursesHref(consulte),
     previousDisabled: cursor === 0,
     nextDisabled: cursor === state.menus.length - 1,
     saveNotice:

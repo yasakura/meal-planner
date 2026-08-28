@@ -20,6 +20,7 @@ export type MenuScreenProps =
       nextDisabled: boolean;
       saveNotice: MenuSaveNotice | null;
       titlesNotice: MenuTitlesNotice | null;
+      coursesHref: string;
       onPrevious: () => void;
       onNext: () => void;
       onRetryTitles: () => void;
@@ -173,6 +174,19 @@ const ArrowButton = styled.button`
   &:disabled {
     opacity: 0.35;
   }
+`;
+
+const CoursesLink = styled(Link)`
+  align-self: flex-start;
+  background: none;
+  border: 1px solid ${colors.hairline};
+  border-radius: ${tokens.radii.sm};
+  color: ${colors.ink};
+  font-family: ${fonts.body};
+  font-size: 14px;
+  text-decoration: none;
+  padding: ${space.sm}px ${space.md}px;
+  margin-bottom: ${space.lg}px;
 `;
 
 const Note = styled.p`
@@ -560,6 +574,7 @@ function Body(props: MenuScreenProps) {
             </ArrowButton>
           </PeriodBar>
           <MenuSaveNoticeView notice={props.saveNotice} />
+          <CoursesLink to={props.coursesHref}>Liste de courses</CoursesLink>
           <MenuDays days={props.days} presenceActions={null} />
         </>
       );

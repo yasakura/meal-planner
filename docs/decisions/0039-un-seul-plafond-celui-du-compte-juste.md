@@ -3,7 +3,7 @@
 - **Statut** : en vigueur
 - **Date** : 2026-08-27 (branche `iter-63-prorata`)
 - **Portée** : `src/domain/entities/ingredient.ts`, `src/domain/use-cases/effective-ingredients.ts`,
-  `src/ui/features/recipe/ingredient-rows.ts`
+  `src/domain/lib/arrondi.ts`, `src/ui/features/recipe/ingredient-rows.ts`
 - **Issues** : [#152](https://github.com/yasakura/meal-planner/issues/152), et
   [#161](https://github.com/yasakura/meal-planner/issues/161), que cette décision rétrécit sans la
   fermer
@@ -126,6 +126,6 @@ geste « aller voir dehors » qui a démoli une recommandation formulée dix min
   mesuré (`1 234 567 890 122 g`) est désormais refusé à la saisie. L'écart, lui, survit sous le
   plafond : mesuré à la rédaction contre le code de cette branche, `999 999 999 999 g` pour 4 → 3
   pers. rend `749 999 999 999 g` là où il en faut `750 000 000 000` — **un gramme de moins que
-  nécessaire**. `src/domain/use-cases/effective-ingredients.ts#sansBruitFlottant` tronque encore une
+  nécessaire**. `src/domain/lib/arrondi.ts#sansBruitFlottant` tronque encore une
   valeur avant que `Math.ceil` ne s'y applique ; le plafond fait passer l'écart de −4 g à −1 g, il ne
   le supprime pas.

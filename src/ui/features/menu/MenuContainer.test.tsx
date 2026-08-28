@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { describe, it, expect } from 'vitest';
 
@@ -21,7 +21,7 @@ import { ConviveChannel } from '../../test-utils/convive-channel';
 import { MenuChannel } from '../../test-utils/menu-channel';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
 import { generateMenu, saveMenu } from './menu-slice';
-import { MENU_APRES_ENREGISTREMENT } from './menu-return';
+import { MENU_APRES_ENREGISTREMENT, MENU_SANS_PROVENANCE, menuDeLaSemaine } from './menu-return';
 import { MenuContainer } from './MenuContainer';
 
 const LUNDI_24_AOUT = createCalendarDate({ year: 2026, month: 8, day: 24 });
@@ -45,6 +45,19 @@ function renderOn(store: TestStore) {
       <MemoryRouter>
         <DataSubscription>
           <MenuContainer />
+        </DataSubscription>
+      </MemoryRouter>
+    </Provider>,
+  );
+}
+
+function renderSurLaSemaine(store: TestStore, semaine: string) {
+  return render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={[menuDeLaSemaine(semaine)]}>
+        <DataSubscription>
+          <MenuContainer />
+          <Link to={MENU_SANS_PROVENANCE}>Onglet Menu</Link>
         </DataSubscription>
       </MemoryRouter>
     </Provider>,
@@ -113,6 +126,60 @@ describe('MenuContainer — consultation des menus enregistrés', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
     expect(screen.queryByRole('button', { name: /générer un menu/i })).not.toBeInTheDocument();
+  });
+
+  it('l’adresse d’une semaine chargée à FROID retrouve SA semaine quand les menus arrivent, et non celle où le curseur repart', () => {
+    const canal = MenuChannel.silent();
+    renderSurLaSemaine(storeAbonneA(canal), '2026-08-24');
+
+    expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
+
+    act(() => {
+      canal.emit(navigation(TROIS_SEMAINES, 1));
+    });
+
+    expect(screen.getByText('24 – 30 août')).toBeInTheDocument();
+    expect(screen.queryByText('31 août – 6 sept.')).not.toBeInTheDocument();
+  });
+
+  it('revenir au menu tout court depuis l’adresse d’une semaine repart de la semaine initiale, SANS qu’aucun démontage n’ait lieu : la route ne change pas, seule l’adresse change', async () => {
+    const user = userEvent.setup();
+    renderSurLaSemaine(
+      storeAbonneA(MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1))),
+      '2026-08-24',
+    );
+
+    expect(screen.getByText('24 – 30 août')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Liste de courses' })).toHaveAttribute(
+      'href',
+      '/menu/2026-08-24/courses',
+    );
+
+    await user.click(screen.getByRole('link', { name: 'Onglet Menu' }));
+
+    expect(screen.getByText('31 août – 6 sept.')).toBeInTheDocument();
+    expect(screen.queryByText('24 – 30 août')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Liste de courses' })).toHaveAttribute(
+      'href',
+      '/menu/2026-08-31/courses',
+    );
+  });
+
+  it('le menu consulté mène à la liste de courses de CE menu, et suivre les flèches change l’adresse', async () => {
+    const user = userEvent.setup();
+    renderOn(storeAbonneA(MenuChannel.seededWith(navigation(TROIS_SEMAINES, 1))));
+
+    expect(screen.getByRole('link', { name: 'Liste de courses' })).toHaveAttribute(
+      'href',
+      '/menu/2026-08-31/courses',
+    );
+
+    await user.click(flecheGauche());
+
+    expect(screen.getByRole('link', { name: 'Liste de courses' })).toHaveAttribute(
+      'href',
+      '/menu/2026-08-24/courses',
+    );
   });
 
   it('les flèches font défiler les menus enregistrés et se verrouillent à chaque borne', async () => {
