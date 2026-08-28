@@ -28,6 +28,7 @@ import {
   nextMenuSelected,
   observeMenus,
   previousMenuSelected,
+  savedMenuRevisited,
   savedMenusOpened,
   savedMenusRetried,
   savedMenusViewOf,
@@ -93,6 +94,48 @@ describe('saved menus slice — consultation des menus enregistrés', () => {
     store.dispatch(recipesObserved(twoRecipes()));
     return store;
   }
+
+  it('revenir sur une semaine enregistrée y repose le curseur, là où l’ouverture de l’onglet continue de le remettre à zéro', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    store.dispatch(savedMenusOpened({ fromSave: false }));
+    store.dispatch(savedMenuRevisited('2026-08-24'));
+
+    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
+
+    store.dispatch(savedMenusOpened({ fromSave: false }));
+
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+  });
+
+  it('viser une période qu’aucun menu livré ne couvre laisse consulter le menu initial, sans lever ni bloquer l’écran', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    store.dispatch(savedMenuRevisited('2026-12-25'));
+
+    expect(view(store).status).toBe('consultation');
+    expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+  });
+
+  it('une semaine visée AVANT l’arrivée des menus est retrouvée quand ils arrivent, au lieu d’être perdue', () => {
+    const store = createTestStore();
+    store.dispatch(recipesObserved(twoRecipes()));
+
+    store.dispatch(savedMenuRevisited('2026-08-24'));
+    store.dispatch(menusObserved(navigation(TROIS_SEMAINES, 1)));
+
+    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
+  });
+
+  it('la consultation porte l’adresse de la liste de courses du menu consulté, et non celle d’un voisin', () => {
+    const store = storeEnConsultation(TROIS_SEMAINES, 1);
+
+    expect(consultation(store)?.coursesHref).toBe('/menu/2026-08-31/courses');
+
+    store.dispatch(previousMenuSelected());
+
+    expect(consultation(store)?.coursesHref).toBe('/menu/2026-08-24/courses');
+  });
 
   it('un menu enregistré n’ouvre le choix d’aucune de ses recettes, là où ses lignes mènent bien aux fiches', () => {
     const store = storeEnConsultation(TROIS_SEMAINES, 1);
@@ -606,6 +649,18 @@ describe('saved menus slice — ce qu’un enregistrement laisse à la consultat
     store.dispatch(nextMenuSelected());
 
     expect(consultation(store)?.periodLabel).toBe('31 août – 6 sept.');
+    expect(consultation(store)?.saveNotice).toBeNull();
+  });
+
+  it('revisiter une semaine par son adresse ne se fait pas passer pour un enregistrement : le constat que l’enregistrement a posé ne la suit pas', async () => {
+    const store = await storeApresEnregistrement();
+    arriveeApresEnregistrement(store);
+    expect(consultation(store)?.periodLabel).toBe('7 – 13 sept.');
+    expect(consultation(store)?.saveNotice).toEqual(CONSTAT_ENREGISTRE);
+
+    store.dispatch(savedMenuRevisited('2026-08-24'));
+
+    expect(consultation(store)?.periodLabel).toBe('24 – 30 août');
     expect(consultation(store)?.saveNotice).toBeNull();
   });
 

@@ -100,3 +100,4 @@ exempt du premier point : c'est une citation figée, pas une affirmation sur le 
 | [0038](0038-une-ecriture-acceptee-localement-est-reussie.md) | Une écriture acceptée localement est une écriture réussie               | 2026-08-24 |
 | [0039](0039-un-seul-plafond-celui-du-compte-juste.md)        | Un seul plafond de quantité, celui du compte juste                      | 2026-08-27 |
 | [0040](0040-le-filet-de-rendu-se-rearme-sur-la-cle.md)       | Le filet de rendu se réarme sur la clé de navigation                    | 2026-08-27 |
+| [0041](0041-une-liste-de-courses-par-menu.md)                | Une liste de courses par menu, et l'abandon de la liste secondaire      | 2026-08-28 |

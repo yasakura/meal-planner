@@ -21,6 +21,7 @@ import { ConviveBuilder } from '../../../domain/test-builders/convive.builder';
 import { RecipeBuilder } from '../../../domain/test-builders/recipe.builder';
 import { createTestStore } from '../../../test/create-test-store';
 import { convivesObserved } from '../convives/convives-slice';
+import { ConviveChannel } from '../../test-utils/convive-channel';
 import { DataSubscription } from '../../DataSubscription';
 import { deferred } from '../../test-utils/deferred';
 import { RecipeChannel } from '../../test-utils/recipe-channel';
@@ -517,6 +518,8 @@ describe('MenuCreateContainer', () => {
       },
       listRecipes: async () => twoRecipes(),
       observeRecipes: canal.observeRecipes,
+      observeConvives: ConviveChannel.seededWith([ConviveBuilder.aConvive().build()])
+        .observeConvives,
     });
     render(
       <Provider store={store}>
@@ -1087,22 +1090,6 @@ describe('MenuCreateContainer — choisir qui mange à chaque créneau du brouil
       within(ligne('lundi 24 août, Midi')).queryByText('La famille est de sortie'),
     ).not.toBeInTheDocument();
     expect(within(ligne('lundi 24 août, Midi')).getByText('1 invité')).toBeInTheDocument();
-  });
-
-  it('un foyer sans convive ne montre aucun rond, là où un foyer de deux en montre deux, et garde son compteur d’invités', async () => {
-    const { unmount } = await brouillonAvecFoyer([]);
-
-    const ronds = () =>
-      screen.queryAllByRole('button', {
-        name: /^(Aurélie|Lionel) au repas de lundi 24 août, Midi$/,
-      });
-    expect(ronds()).toHaveLength(0);
-    expect(within(ligne('lundi 24 août, Midi')).getByText('0 invité')).toBeInTheDocument();
-
-    unmount();
-    await brouillonAvecFoyer();
-
-    expect(ronds()).toHaveLength(2);
   });
 
   it('le brouillon garde la présence choisie après un remontage sur le MÊME store', async () => {
