@@ -93,7 +93,7 @@ test.describe('Catalogue', () => {
     const ingredients = page.locator('main ul li');
     await expect(ingredients).toHaveCount(2);
     await expect(ingredients.nth(0)).toContainText('Poireaux');
-    await expect(ingredients.nth(0)).toContainText('3 pièce');
+    await expect(ingredients.nth(0)).toContainText('3 pièces');
     await expect(ingredients.nth(1)).toContainText('Crème');
     await expect(ingredients.nth(1)).toContainText('200 ml');
   });

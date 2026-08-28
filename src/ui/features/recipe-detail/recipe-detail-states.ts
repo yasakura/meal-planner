@@ -1,8 +1,9 @@
-import { type Ingredient, type Unit } from '../../../domain/entities/ingredient';
+import { type Ingredient } from '../../../domain/entities/ingredient';
 import { type Recipe } from '../../../domain/entities/recipe';
 import { effectiveIngredients } from '../../../domain/use-cases/effective-ingredients';
 import { type CatalogueState } from '../catalogue/catalogue-slice';
 import { type Origin } from '../catalogue/recipe-detail-origin';
+import { quantiteAffichee } from '../quantites/quantite-affichee';
 import { type RecipeDetailLoadedProps, type RecipeDetailScreenProps } from './RecipeDetailScreen';
 
 export function recipeOfRoute(catalogue: CatalogueState, id: string | undefined): Recipe | null {
@@ -25,10 +26,6 @@ export function toPropsWithoutRecipe(
     return { status: 'error', message: 'Impossible de charger la recette.' };
   }
   return { status: 'loading' };
-}
-
-function unitLabel(unit: Unit): string {
-  return unit === 'piece' ? 'pièce' : unit;
 }
 
 function personnes(convives: number): string {
@@ -57,7 +54,7 @@ export function toLoadedProps(recipe: Recipe, origin: Origin): RecipeDetailLoade
     convivesLabel: convivesLabel(recipe, echelle.convives),
     ingredients: echelle.ingredients.map((ingredient) => ({
       name: ingredient.name,
-      quantity: `${ingredient.quantity} ${unitLabel(ingredient.unit)}`,
+      quantity: quantiteAffichee(ingredient.quantity, ingredient.unit),
     })),
     instructions: recipe.instructions ?? null,
     editHref: provenance.recipeEditHref(recipe.id),

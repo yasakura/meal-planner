@@ -91,7 +91,7 @@ describe('RecipeDetailContainer', () => {
     expect(screen.getByText('Tomates')).toBeInTheDocument();
     expect(screen.getByText('200 g')).toBeInTheDocument();
     expect(screen.getByText('Œufs')).toBeInTheDocument();
-    expect(screen.getByText('3 pièce')).toBeInTheDocument();
+    expect(screen.getByText('3 pièces')).toBeInTheDocument();
   });
 
   it('accorde « personne » au singulier pour une recette à 1 personne', async () => {
@@ -407,8 +407,8 @@ describe('RecipeDetailContainer — la fiche ouverte depuis un créneau', () => 
     renderAtPath('/catalogue/r-1?depuis=menu&pour=2', [ratatouille()]);
     await screen.findByText('Ratatouille');
 
-    expect(screen.getByText('2 pièce')).toBeInTheDocument();
-    expect(screen.queryByText('1.5 pièce')).not.toBeInTheDocument();
+    expect(screen.getByText('2 pièces')).toBeInTheDocument();
+    expect(screen.queryByText('1,5 pièce')).not.toBeInTheDocument();
   });
 
   it('la fiche mise à l’échelle dit pour combien elle montre et rappelle l’effectif de la recette', async () => {

@@ -88,7 +88,7 @@ describe('toLoadedProps', () => {
       convivesLabel: 'Pour 4 personnes',
       ingredients: [
         { name: 'Tomates', quantity: '200 g' },
-        { name: 'Œufs', quantity: '3 pièce' },
+        { name: 'Œufs', quantity: '3 pièces' },
       ],
       instructions: 'Émincer puis mijoter.',
       editHref: '/catalogue/r-1/modifier',
@@ -102,7 +102,7 @@ describe('toLoadedProps', () => {
       convivesLabel: 'Quantités pour 3 personnes · recette pour 4',
       ingredients: [
         { name: 'Tomates', quantity: '150 g' },
-        { name: 'Œufs', quantity: '3 pièce' },
+        { name: 'Œufs', quantity: '3 pièces' },
       ],
       instructions: 'Émincer puis mijoter.',
       editHref: '/catalogue/r-1/modifier?depuis=menu&pour=3',
@@ -113,9 +113,27 @@ describe('toLoadedProps', () => {
     expect(toLoadedProps(RATATOUILLE, FROM_MENU.pour(2))).toMatchObject({
       ingredients: [
         { name: 'Tomates', quantity: '100 g' },
-        { name: 'Œufs', quantity: '2 pièce' },
+        { name: 'Œufs', quantity: '2 pièces' },
       ],
     });
+  });
+
+  it('une mise à l’échelle qui tombe sur des décimales les écrit à la française sur la fiche', () => {
+    const pourQuatre = RecipeBuilder.aRecipe()
+      .withId('r-4')
+      .withConvivesReference(4)
+      .withIngredients([
+        IngredientBuilder.anIngredient()
+          .withName('Pommes de terre')
+          .withQuantity(1)
+          .withUnit('kg')
+          .build(),
+      ])
+      .build();
+
+    expect(toLoadedProps(pourQuatre, FROM_MENU.pour(6)).ingredients).toEqual([
+      { name: 'Pommes de terre', quantity: '1,5 kg' },
+    ]);
   });
 
   it('accorde le singulier pour une personne, des deux côtés du libellé', () => {

@@ -85,7 +85,7 @@ test.describe('Modifier une recette', () => {
 
     await expect(ingredientsDuDetail(page)).toHaveCount(1);
     await expect(ingredientsDuDetail(page).nth(0)).toContainText('Aubergines');
-    await expect(ingredientsDuDetail(page).nth(0)).toContainText('4 pièce');
+    await expect(ingredientsDuDetail(page).nth(0)).toContainText('4 pièces');
     await expect(page.getByText('Farcir, enfourner 40 min.')).toBeVisible();
 
     await expect(page.getByText('Crème')).toHaveCount(0);
