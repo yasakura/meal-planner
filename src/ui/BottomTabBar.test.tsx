@@ -25,6 +25,14 @@ describe('BottomTabBar', () => {
     expect(screen.getByRole('link', { name: /menu/i })).toHaveAttribute('href', '/menu');
   });
 
+  it('place l’onglet Menu avant l’onglet Recettes', () => {
+    renderAt('/menu');
+
+    const onglets = screen.getAllByRole('link');
+
+    expect(onglets.map((onglet) => onglet.getAttribute('href'))).toEqual(['/menu', '/catalogue']);
+  });
+
   it('marque l’onglet actif via aria-current', () => {
     renderAt('/menu');
 
