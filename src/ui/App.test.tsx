@@ -134,10 +134,11 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /compte/i })).toBeInTheDocument();
   });
 
-  it('redirige la racine / vers /catalogue', () => {
+  it('redirige la racine / vers /menu', async () => {
     renderAppAt('/');
 
-    expect(screen.getByRole('heading', { name: 'Recettes' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Menu' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Recettes' })).not.toBeInTheDocument();
   });
 
   it('rend l’écran Menu sur la route /menu', async () => {
@@ -147,7 +148,7 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'Créer un menu' })).toBeInTheDocument();
   });
 
-  it('affiche la navigation Recettes / Menu dans le chrome partagé', () => {
+  it('le chrome partagé lie l’onglet Menu à /menu et l’onglet Recettes à /catalogue', () => {
     renderApp();
 
     expect(screen.getByRole('link', { name: /recettes/i })).toHaveAttribute('href', '/catalogue');

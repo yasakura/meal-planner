@@ -76,13 +76,13 @@ const MenuIcon = (
 export function BottomTabBar() {
   return (
     <Bar>
-      <Tab to="/catalogue">
-        {CatalogueIcon}
-        <span>Recettes</span>
-      </Tab>
       <Tab to="/menu">
         {MenuIcon}
         <span>Menu</span>
+      </Tab>
+      <Tab to="/catalogue">
+        {CatalogueIcon}
+        <span>Recettes</span>
       </Tab>
     </Bar>
   );

@@ -24,7 +24,7 @@ export function App() {
         <Route path="/menu/nouveau" element={<MenuCreateContainer />} />
         <Route path={SLOT_CHOICE_ROUTE} element={<SlotChoiceContainer />} />
         <Route path={LISTE_DE_COURSES_ROUTE} element={<ListeDeCoursesContainer />} />
-        <Route path="/" element={<Navigate to="/catalogue" replace />} />
+        <Route path="/" element={<Navigate to="/menu" replace />} />
       </Route>
     </Routes>
   );
