@@ -102,3 +102,8 @@ exempt du premier point : c'est une citation figée, pas une affirmation sur le 
 | [0040](0040-le-filet-de-rendu-se-rearme-sur-la-cle.md)       | Le filet de rendu se réarme sur la clé de navigation                    | 2026-08-27 |
 | [0041](0041-une-liste-de-courses-par-menu.md)                | Une liste de courses par menu, et l'abandon de la liste secondaire      | 2026-08-28 |
 | [0042](0042-la-concurrence-de-stryker-est-declaree.md)       | La concurrence de Stryker est déclarée, pas subie                       | 2026-09-10 |
+| [0043](0043-inventaire-des-garde-fous.md)                    | Ce que chaque garde-fou attrape, mesuré                                 | 2026-09-09 |
+| [0044](0044-ce-qu-un-agent-affirme-se-mesure.md)             | Ce qu'un agent affirme se mesure, et son banc d'essai aussi             | 2026-08-27 |
+| [0045](0045-une-delegation-brief-le-probleme.md)             | Une délégation brief le problème, pas la solution                       | 2026-08-25 |
+| [0046](0046-le-nom-d-un-test-se-relit-contre-ses-donnees.md) | Le nom d'un test se relit contre ses données                            | 2026-08-27 |
+| [0047](0047-un-classement-de-finding-se-perime.md)           | Un classement de finding se périme                                      | 2026-08-25 |
