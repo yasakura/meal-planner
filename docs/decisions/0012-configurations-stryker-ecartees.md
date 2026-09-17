@@ -1,6 +1,9 @@
 # ADR 0012 — Configurations Stryker mesurées et écartées
 
-- **Statut** : en vigueur — **ne pas retenter les pistes ci-dessous**
+- **Statut** : en vigueur, **sauf sa décision 1 — remplacée par
+  [ADR 0042](0042-la-concurrence-de-stryker-est-declaree.md)**. La concurrence est désormais
+  déclarée : l'essai de 2026-08-13 qui la condamnait faisait varier `timeoutMS` en même temps, et
+  c'est la borne qui portait le coût. Les autres pistes ci-dessous ne se retentent pas.
 - **Date** : mesures du 2026-08-13 et du 2026-08-17 ; run isolé corrigé le 2026-08-18 (`6d1639d`)
 - **Portée** : `stryker.conf.mjs`, `package.json`
 

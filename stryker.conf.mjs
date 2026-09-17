@@ -13,6 +13,7 @@ export default {
     '!src/data/e2e/**',
   ],
   thresholds: { high: 90, low: 80, break: 80 },
+  concurrency: 4,
   timeoutMS: 10000,
   incremental: true,
   vitest: {

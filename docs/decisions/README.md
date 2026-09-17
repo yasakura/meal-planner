@@ -71,7 +71,7 @@ exempt du premier point : c'est une citation figée, pas une affirmation sur le 
 | [0009](0009-garde-de-fraicheur-par-requestid.md)             | Discriminer les réponses de thunks par `requestId`                      | 2026-08-13 |
 | [0010](0010-le-non-garde-de-generate-menu-fulfilled.md)      | Le non-garde de `generateMenu.fulfilled` tient à une seule ligne        | 2026-08-18 |
 | [0011](0011-les-decisions-vivent-dans-des-fichiers-mutes.md) | Une décision vit dans un `.ts` muté, pas dans un `.tsx`                 | 2026-08-19 |
-| [0012](0012-configurations-stryker-ecartees.md)              | Configurations Stryker mesurées et écartées                             | 2026-08-13 |
+| [0012](0012-configurations-stryker-ecartees.md)              | Configurations Stryker mesurées et écartées (décision 1 remplacée)      | 2026-08-13 |
 | [0013](0013-fuseau-du-runner-fige-a-utc.md)                  | Fuseau du runner figé à UTC, au niveau du processus                     | 2026-08-19 |
 | [0014](0014-pas-d-emulateur-firestore.md)                    | Pas d'émulateur Firestore : humble object et garde statique             | 2026-07-14 |
 | [0015](0015-frontieres-de-couches-inertes.md)                | Les frontières de couches étaient déclarées et inertes                  | 2026-08-17 |
@@ -101,3 +101,9 @@ exempt du premier point : c'est une citation figée, pas une affirmation sur le 
 | [0039](0039-un-seul-plafond-celui-du-compte-juste.md)        | Un seul plafond de quantité, celui du compte juste                      | 2026-08-27 |
 | [0040](0040-le-filet-de-rendu-se-rearme-sur-la-cle.md)       | Le filet de rendu se réarme sur la clé de navigation                    | 2026-08-27 |
 | [0041](0041-une-liste-de-courses-par-menu.md)                | Une liste de courses par menu, et l'abandon de la liste secondaire      | 2026-08-28 |
+| [0042](0042-la-concurrence-de-stryker-est-declaree.md)       | La concurrence de Stryker est déclarée, pas subie                       | 2026-09-10 |
+| [0043](0043-inventaire-des-garde-fous.md)                    | Ce que chaque garde-fou attrape, mesuré                                 | 2026-09-09 |
+| [0044](0044-ce-qu-un-agent-affirme-se-mesure.md)             | Ce qu'un agent affirme se mesure, et son banc d'essai aussi             | 2026-08-27 |
+| [0045](0045-une-delegation-brief-le-probleme.md)             | Une délégation brief le problème, pas la solution                       | 2026-08-25 |
+| [0046](0046-le-nom-d-un-test-se-relit-contre-ses-donnees.md) | Le nom d'un test se relit contre ses données                            | 2026-08-27 |
+| [0047](0047-un-classement-de-finding-se-perime.md)           | Un classement de finding se périme                                      | 2026-08-25 |
